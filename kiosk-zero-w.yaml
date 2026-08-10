@@ -68,7 +68,7 @@ local_conf_header:
   parallel: |
     BB_NUMBER_THREADS = "6"
     PARALLEL_MAKE = "-j6"
-    PARALLEL_MAKE:pn-webkitgtk3 = "-j4"
+    PARALLEL_MAKE:pn-webkitgtk3 = "-j6"
     BB_PRESSURE_MAX_MEMORY = "20000"
 
   diskmonitoring: |
