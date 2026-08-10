@@ -1,0 +1,18 @@
+[Unit]
+Description=Kiosk browser: surf on bare Xorg, no display manager, no window manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/kiosk.conf
+# -s 0 -dpms -nocursor live on the X server command line, not in a config file.
+# On the Raspbian kiosk these were supplied by lightdm; dropping the display
+# manager drops them with it, and the failure shows up days later as a screen
+# that blanks when nobody is watching.
+ExecStart=/usr/bin/xinit /usr/bin/kiosk-launch -- :0 vt1 -s 0 -dpms -nocursor
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

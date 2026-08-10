@@ -1,0 +1,12 @@
+#!/bin/sh
+# Run by xinit, so DISPLAY is already set.
+#
+# Replaces the `while true; do surf; sleep 10; done` loop from the Raspbian
+# kiosk -- systemd Restart=always does that job now.
+export SURF_OVERRIDE_REDIRECT=1
+export SURF_MILESTONES=1
+export GDK_GL=disable
+
+# Milestones go to BOTH the journal and a file: measure-surf.sh reads the file,
+# and the journal is what makes a first boot debuggable over SSH.
+exec surf -K "$KIOSK_URL" 2>&1 | tee /var/log/surf-milestones.log
