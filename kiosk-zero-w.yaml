@@ -66,10 +66,10 @@ local_conf_header:
   # launching new tasks when the kernel reports memory stall above the threshold
   # (microseconds of stall per second; 1000000 would never trigger).
   parallel: |
-    BB_NUMBER_THREADS = "4"
-    PARALLEL_MAKE = "-j4"
-    PARALLEL_MAKE:pn-webkitgtk3 = "-j2"
-    BB_PRESSURE_MAX_MEMORY = "10000"
+    BB_NUMBER_THREADS = "6"
+    PARALLEL_MAKE = "-j6"
+    PARALLEL_MAKE:pn-webkitgtk3 = "-j4"
+    BB_PRESSURE_MAX_MEMORY = "20000"
 
   diskmonitoring: |
     BB_DISKMON_DIRS ??= "\
