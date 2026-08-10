@@ -1,3 +1,22 @@
+> ## Attribution
+>
+> **This repository is a copy of [jsmith212/meta-autonomos](https://github.com/jsmith212/meta-autonomos), not a GitHub fork.**
+> The original author's commit history is preserved in full, and the original is configured as the
+> `upstream` remote:
+>
+> ```sh
+> git remote add upstream https://github.com/jsmith212/meta-autonomos.git
+> git fetch upstream && git log upstream/main..main   # everything added here
+> ```
+>
+> The upstream repository carries **no license file**, so all rights in the original work remain with
+> its author. Nothing here is offered under any license on their behalf.
+>
+> **Why the copy exists:** to add a Raspberry Pi Zero W (BCM2835, ARMv6) kiosk target, which upstream
+> does not support — its Raspberry Pi targets are the Pi 5 and Pi Zero 2 W, both ARMv7/v8. Upstream's
+> own identifiers (the `autonomos` distro, `AUTONOMOS_FEATURES`, the `meta-autonomos-*` layer
+> directories) are deliberately left unrenamed so that `git merge upstream/main` stays clean.
+
 # AutonomOS
 
 AutonomOS is a robust Yocto-based Linux distribution designed for embedded systems with full OTA (Over-The-Air) update capability. It provides a minimal, secure environment with modular feature groups and A/B partition updates via RAUC.
