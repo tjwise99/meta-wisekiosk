@@ -11,6 +11,23 @@ header:
     - includes/platforms/raspberrypi-zero-w.yaml
     - secrets.yaml
 
+##################
+# REPOS & LAYERS #
+##################
+# base.yaml fetches these three over git://, which git.openembedded.org and
+# git.yoctoproject.org no longer serve -- both now resolve to Cloudflare, which
+# fronts HTTP/HTTPS only and refuses port 9418. Branch pins from base.yaml are
+# inherited; only the URL changes here.
+repos:
+  meta-openembedded:
+    url: "https://git.openembedded.org/meta-openembedded"
+
+  meta-arm:
+    url: "https://git.yoctoproject.org/meta-arm"
+
+  meta-virtualization:
+    url: "https://git.yoctoproject.org/meta-virtualization"
+
 ##########
 # TARGET #
 ##########
