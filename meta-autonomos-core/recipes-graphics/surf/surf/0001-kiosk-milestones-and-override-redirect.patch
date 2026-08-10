@@ -1,0 +1,219 @@
+--- a/surf.c
++++ b/surf.c
+@@ -192,6 +192,7 @@
+ static gboolean winevent(GtkWidget *w, GdkEvent *e, Client *c);
+ static gboolean readsock(GIOChannel *s, GIOCondition ioc, gpointer unused);
+ static void showview(WebKitWebView *v, Client *c);
++static void placeoverrideredirect(Client *c);
+ static GtkWidget *createwindow(Client *c);
+ static gboolean loadfailedtls(WebKitWebView *v, gchar *uri,
+                               GTlsCertificate *cert,
+@@ -304,6 +305,18 @@
+ 	ParameterLast
+ };
+ 
++/* Kiosk startup instrumentation and WM-independent placement.
++ * Both are opt-in via the environment so one binary serves every arm of a
++ * measurement without a rebuild:
++ *   SURF_MILESTONES=1        emit "SURFMS <name> <seconds-since-exec>" on stderr
++ *   SURF_OVERRIDE_REDIRECT=1 map the window override-redirect, bypassing the WM
++ *   SURF_GEOMETRY=WxH        override the monitor size used for that placement
++ */
++static int milestones;
++static int overrideredirect;
++static gint64 surfstart_us;
++static void milestone(const char *name);
++
+ /* configuration, allows nested code to access above variables */
+ #include "config.h"
+ 
+@@ -348,6 +361,7 @@
+ 	atoms[AtomUTF8] = XInternAtom(dpy, "UTF8_STRING", False);
+ 
+ 	gtk_init(NULL, NULL);
++	milestone("gtk_init_done");
+ 
+ 	gdpy = gdk_display_get_default();
+ 
+@@ -1148,6 +1162,23 @@
+ 		useragent = webkit_settings_get_user_agent(settings);
+ 
+ 		contentmanager = webkit_user_content_manager_new();
++		/* The globalThis/queueMicrotask shims are inert on WebKit 2.44 --
++		 * both are native since 2.22 -- and cost ~100 bytes, so they stay:
++		 * the same binary then also works against the old engine. The title
++		 * instrumentation is NOT optional; measure-surf.sh reads it. */
++		webkit_user_content_manager_add_script(contentmanager,
++		    webkit_user_script_new(
++		    "if(typeof globalThis==='undefined'){window.globalThis=window;}"
++		    "if(typeof queueMicrotask==='undefined'){window.queueMicrotask="
++		    "function(cb){Promise.resolve().then(cb);};}"
++		    "var __t=setInterval(function(){var m=document.querySelectorAll('.module');"
++		    "var n=0;for(var i=0;i<m.length;i++){if(m[i].innerText.trim().length>0)n++;}"
++		    "var w=document.querySelectorAll('.wi').length;"
++		    "if(n>0&&w>0){document.title='T '+performance.timing.navigationStart+' '"
++		    "+Math.round(performance.now());clearInterval(__t);}},200);",
++		    WEBKIT_USER_CONTENT_INJECT_TOP_FRAME,
++		    WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_START, NULL, NULL));
++		milestone("contentmanager_done");
+ 
+ 		if (curconfig[Ephemeral].val.i) {
+ 			context = webkit_web_context_new_ephemeral();
+@@ -1158,7 +1189,9 @@
+ 			          "base-data-directory", cachedir,
+ 			          NULL));
+ 		}
+-
++		/* After the if/else: 2.1 added an Ephemeral branch, so this sits
++		 * below the whole block rather than after a single call. */
++		milestone("webcontext_done");
+ 
+ 		cookiemanager = webkit_web_context_get_cookie_manager(context);
+ 
+@@ -1384,6 +1417,43 @@
+ }
+ 
+ void
++placeoverrideredirect(Client *c)
++{
++	GdkRectangle geo = { 0, 0, 0, 0 };
++	GdkDisplay *d;
++	GdkMonitor *mon;
++	const char *env;
++	int w = 0, h = 0;
++
++	if ((env = getenv("SURF_GEOMETRY")) && sscanf(env, "%dx%d", &w, &h) == 2
++	    && w > 0 && h > 0) {
++		geo.width = w;
++		geo.height = h;
++	} else if ((d = gdk_display_get_default())
++	           && (mon = gdk_display_get_monitor(d, 0))) {
++		gdk_monitor_get_geometry(mon, &geo);
++	}
++
++	/* Fail back to the window manager rather than guess. A zero-sized
++	 * override-redirect window is an invisible kiosk, indistinguishable
++	 * from a crashed one. */
++	if (geo.width <= 0 || geo.height <= 0) {
++		fprintf(stderr, "surf: no usable monitor geometry, "
++		        "leaving the window manager in charge\n");
++		overrideredirect = 0;
++		return;
++	}
++
++	gtk_window_set_decorated(GTK_WINDOW(c->win), FALSE);
++	gtk_window_set_default_size(GTK_WINDOW(c->win), geo.width, geo.height);
++	gtk_widget_realize(c->win);
++	gdk_window_set_override_redirect(gtk_widget_get_window(c->win), TRUE);
++	gtk_window_move(GTK_WINDOW(c->win), geo.x, geo.y);
++	gtk_window_resize(GTK_WINDOW(c->win), geo.width, geo.height);
++	milestone("override_redirect_placed");
++}
++
++void
+ showview(WebKitWebView *v, Client *c)
+ {
+ 	GdkRGBA bgcolor = { 0 };
+@@ -1396,6 +1466,8 @@
+ 	c->win = createwindow(c);
+ 
+ 	gtk_container_add(GTK_CONTAINER(c->win), GTK_WIDGET(c->view));
++	if (overrideredirect)
++		placeoverrideredirect(c);
+ 	gtk_widget_show_all(c->win);
+ 	gtk_widget_grab_focus(GTK_WIDGET(c->view));
+ 
+@@ -1416,7 +1488,11 @@
+ 		gdk_window_add_filter(gwin, processx, c);
+ 	}
+ 
+-	if (curconfig[RunInFullscreen].val.i)
++	/* Fullscreen is a request to the window manager; with override-redirect
++	 * there is none, and the geometry is already exact. NOTE: surf 2.1 uses
++	 * .val.i here where 2.0 used .val.b -- that rename is why the original
++	 * patch hunk failed rather than applying wrongly. */
++	if (curconfig[RunInFullscreen].val.i && !overrideredirect)
+ 		togglefullscreen(c, NULL);
+ 
+ 	if (curconfig[ZoomLevel].val.f != 1.0)
+@@ -1519,6 +1595,7 @@
+ 
+ 	switch (e) {
+ 	case WEBKIT_LOAD_STARTED:
++		milestone("load_started");
+ 		setatom(c, AtomUri, uri);
+ 		c->title = uri;
+ 		c->https = c->insecure = 0;
+@@ -1534,6 +1611,7 @@
+ 		seturiparameters(c, uri, loadtransient);
+ 		break;
+ 	case WEBKIT_LOAD_COMMITTED:
++		milestone("load_committed");
+ 		setatom(c, AtomUri, uri);
+ 		c->title = uri;
+ 		seturiparameters(c, uri, loadcommitted);
+@@ -1541,6 +1619,7 @@
+ 		                                        &c->tlserr);
+ 		break;
+ 	case WEBKIT_LOAD_FINISHED:
++		milestone("load_finished");
+ 		seturiparameters(c, uri, loadfinished);
+ 		/* Disabled until we write some WebKitWebExtension for
+ 		 * manipulating the DOM directly.
+@@ -2021,11 +2100,38 @@
+ 	spawn(c, &arg);
+ }
+ 
++void
++milestone(const char *name)
++{
++	if (!milestones)
++		return;
++	fprintf(stderr, "SURFMS %s %.3f\n", name,
++	        (g_get_monotonic_time() - surfstart_us) / 1000000.0);
++	fflush(stderr);
++}
++
+ int
+ main(int argc, char *argv[])
+ {
+ 	Arg arg;
+ 	Client *c;
++	char ubuf[64];
++	FILE *uf;
++
++	surfstart_us = g_get_monotonic_time();
++	milestones = getenv("SURF_MILESTONES") != NULL;
++	overrideredirect = getenv("SURF_OVERRIDE_REDIRECT") != NULL;
++	if (milestones) {
++		/* Anchor the deltas to boot, so the log stands alone. */
++		ubuf[0] = '\0';
++		if ((uf = fopen("/proc/uptime", "r"))) {
++			if (!fgets(ubuf, sizeof(ubuf), uf))
++				ubuf[0] = '\0';
++			fclose(uf);
++		}
++		fprintf(stderr, "SURFMS uptime_at_exec %s", ubuf);
++	}
++	milestone("main_entry");
+ 
+ 	memset(&arg, 0, sizeof(arg));
+ 
+@@ -2156,12 +2262,17 @@
+ 		arg.v = "about:blank";
+ 
+ 	setup();
++	milestone("setup_done");
+ 	c = newclient(NULL);
++	milestone("newclient_done");
+ 	showview(NULL, c);
++	milestone("showview_done");
+ 
+ 	loaduri(c, &arg);
++	milestone("loaduri_done");
+ 	updatetitle(c);
+ 
++	milestone("gtk_main_enter");
+ 	gtk_main();
+ 	cleanup();
+ 
