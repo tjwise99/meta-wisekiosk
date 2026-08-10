@@ -51,14 +51,25 @@ local_conf_header:
   kiosk: |
     AUTONOMOS_FEATURES = "graphics"
     PACKAGECONFIG:remove:pn-webkitgtk3 = "jit gtk4"
+    PACKAGECONFIG:append:pn-webkitgtk3 = " reduce-size"
     IMAGE_INSTALL:append = " surf packagegroup-core-x11 xwininfo xprop ttf-roboto fbgrab"
 
+  # Nothing here runs a Wayland compositor, VC4 has no Vulkan, and ptest builds
+  # test suites for a board that will never run them. Removing them is free
+  # before the first build and costs a rebuild after it.
+  trim: |
+    DISTRO_FEATURES:remove = " wayland vulkan ptest"
+
   # WebKit's link step wants several GB per linker process. The host has ~7.7GB,
-  # so cpu_count() parallelism OOMs hours into the build.
+  # so cpu_count() parallelism OOMs hours into the build. The fixed caps are a
+  # floor; BB_PRESSURE_MAX_MEMORY is the part that adapts -- bitbake stops
+  # launching new tasks when the kernel reports memory stall above the threshold
+  # (microseconds of stall per second; 1000000 would never trigger).
   parallel: |
     BB_NUMBER_THREADS = "4"
     PARALLEL_MAKE = "-j4"
     PARALLEL_MAKE:pn-webkitgtk3 = "-j2"
+    BB_PRESSURE_MAX_MEMORY = "10000"
 
   diskmonitoring: |
     BB_DISKMON_DIRS ??= "\
