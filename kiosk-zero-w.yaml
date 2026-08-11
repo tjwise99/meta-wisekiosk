@@ -55,11 +55,26 @@ local_conf_header:
     EXTRA_IMAGE_FEATURES ?= "debug-tweaks ssh-server-openssh"
     IMAGE_FEATURES:remove = "splash"
 
+  # The live kiosk runs the legacy fbdev path, not vc4 KMS -- gldriver_test.sh
+  # installs 99-fbturbo.conf there because v3d is not "okay" on this board. KMS
+  # would also ignore the firmware HDMI settings above, replacing a display path
+  # that demonstrably works with one that is untested. Nothing here needs GL:
+  # the launcher sets GDK_GL=disable, as the Raspbian kiosk does.
+  display: |
+    DISABLE_VC4GRAPHICS = "1"
+
+    # With no USB-serial adapter on hand, the panel IS the console. Upstream
+    # only sets console=serial0 when ENABLE_UART=1, so kernel output would go
+    # somewhere unreadable and a failed boot would show as a black rectangle.
+    # The Raspbian kiosk carries both; so do we. Last console= wins /dev/console,
+    # both still receive kernel messages.
+    CMDLINE_SERIAL = "console=serial0,115200 console=tty1"
+
   kiosk: |
     AUTONOMOS_FEATURES = "graphics"
     PACKAGECONFIG:remove:pn-webkitgtk3 = "jit gtk4"
     PACKAGECONFIG:append:pn-webkitgtk3 = " reduce-size"
-    IMAGE_INSTALL:append = " surf kiosk-session packagegroup-core-x11 xwininfo xprop ttf-roboto fbgrab"
+    IMAGE_INSTALL:append = " surf kiosk-session zram packagegroup-core-x11 xwininfo xprop ttf-roboto fbgrab"
     hostname:pn-base-files = "${KIOSK_HOSTNAME}"
 
   # Nothing here runs a Wayland compositor, VC4 has no Vulkan, and ptest builds

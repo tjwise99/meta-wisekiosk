@@ -1,0 +1,21 @@
+# Compressed in-memory swap for a 432MB board.
+#
+# WHY zram and not a swap file: the Raspbian kiosk swaps to the SD card, which
+# makes memory pressure and I/O pressure the same problem -- the browser is
+# competing with its own swap for the one slow card. zram costs RAM instead of
+# I/O, and costs the card nothing.
+#
+# WHY 50 and not the recipe's default of 100: the zram device size is the
+# UNCOMPRESSED capacity. At a typical 2:1 ratio a 100% device can consume half
+# of physical RAM, which on 432MB leaves ~216MB for everything else. 50% gives
+# roughly a 216MB device costing ~108MB when full -- a safety net rather than a
+# second memory manager. The live kiosk's equivalent is a 99MB swap file that
+# currently sits at 0 used.
+ZRAM_SIZE_PERCENT=50
+
+# WHY lzo-rle and not the recipe's default of lz4: this kernel has
+# CONFIG_CRYPTO_LZO=y and CONFIG_ZRAM_DEF_COMP="lzo-rle" built in, while
+# CONFIG_CRYPTO_LZ4=m. Asking zramctl for an algorithm behind a module that has
+# not been loaded fails, and the failure is quiet -- the unit still looks
+# healthy while there is no swap at all.
+ZRAM_ALGORITHM=lzo-rle

@@ -25,7 +25,9 @@ do_install() {
     install -m 0644 ${WORKDIR}/kiosk.service ${D}${systemd_system_unitdir}/kiosk.service
 
     install -d ${D}${sysconfdir}
-    printf 'KIOSK_URL=%s\n' "${KIOSK_URL}" > ${D}${sysconfdir}/kiosk.conf
+    # KIOSK_INSPECTOR is written explicitly rather than left undefined, so the
+    # switch is discoverable by reading the file on the device.
+    printf 'KIOSK_URL=%s\nKIOSK_INSPECTOR=0\n' "${KIOSK_URL}" > ${D}${sysconfdir}/kiosk.conf
 }
 
 FILES:${PN} += "${systemd_system_unitdir}/kiosk.service ${sysconfdir}/kiosk.conf"

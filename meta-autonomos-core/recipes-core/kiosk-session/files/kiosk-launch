@@ -7,6 +7,23 @@ export SURF_OVERRIDE_REDIRECT=1
 export SURF_MILESTONES=1
 export GDK_GL=disable
 
+# Remote Web Inspector. OFF by default for two reasons: it must not perturb a
+# complete-display measurement, and it should not listen unless asked. Turn it
+# on over SSH with no rebuild and no trip to the device:
+#
+#   sed -i 's/^KIOSK_INSPECTOR=0/KIOSK_INSPECTOR=1/' /etc/kiosk.conf
+#   systemctl restart kiosk
+#   # then from the workstation:  ssh -L 2999:127.0.0.1:2999 root@<kiosk>
+#
+# Bound to loopback, reached through a tunnel -- the same shape the Chromium
+# arm used with --remote-debugging-port=9222. This is the replacement for CDP:
+# different protocol, same capability.
+INSPECT=""
+if [ "${KIOSK_INSPECTOR:-0}" = "1" ]; then
+	export WEBKIT_INSPECTOR_SERVER="${KIOSK_INSPECTOR_BIND:-127.0.0.1:2999}"
+	INSPECT="-N"
+fi
+
 # Milestones go to BOTH the journal and a file: measure-surf.sh reads the file,
 # and the journal is what makes a first boot debuggable over SSH.
-exec surf -K "$KIOSK_URL" 2>&1 | tee /var/log/surf-milestones.log
+exec surf -K $INSPECT "$KIOSK_URL" 2>&1 | tee /var/log/surf-milestones.log
