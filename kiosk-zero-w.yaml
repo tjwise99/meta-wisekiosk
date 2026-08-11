@@ -80,6 +80,11 @@ local_conf_header:
     # the kiosk clock was four hours out. A runtime fix does not survive an OTA
     # update -- A/B replaces the whole rootfs slot -- so it belongs here.
     DEFAULT_TIMEZONE = "America/New_York"
+
+    # Volatile journald meant the one boot that failed left no evidence behind.
+    # A kiosk that is only reachable over the network it failed to bring up is
+    # exactly the case where the previous boot's log is the whole diagnosis.
+    VOLATILE_LOG_DIR = "no"
     hostname:pn-base-files = "${KIOSK_HOSTNAME}"
 
   # Nothing here runs a Wayland compositor, VC4 has no Vulkan, and ptest builds
