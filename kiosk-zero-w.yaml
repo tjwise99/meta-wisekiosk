@@ -74,7 +74,7 @@ local_conf_header:
     AUTONOMOS_FEATURES = "graphics"
     PACKAGECONFIG:remove:pn-webkitgtk3 = "jit gtk4"
     PACKAGECONFIG:append:pn-webkitgtk3 = " reduce-size"
-    IMAGE_INSTALL:append = " surf kiosk-session zram packagegroup-core-x11 xwininfo xprop ttf-roboto fbgrab"
+    IMAGE_INSTALL:append = " surf kiosk-session zram wpa-supplicant-service packagegroup-core-x11 xwininfo xprop ttf-roboto fbgrab"
     hostname:pn-base-files = "${KIOSK_HOSTNAME}"
 
   # Nothing here runs a Wayland compositor, VC4 has no Vulkan, and ptest builds
