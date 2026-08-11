@@ -48,6 +48,66 @@ behaviour identical while letting a graphical target opt in, and matches how the
 **Also worth a message, not a patch:** this repository is public and carries no license file, so
 rights remain with the author — see the attribution note above.
 
+## Status: Raspberry Pi Zero W kiosk
+
+**Working.** Boots, joins WiFi, renders the kiosk page correctly on the real hardware.
+Verified 2026-08-11 on a Pi Zero W (BCM2835, ARMv6, 512MB).
+
+| | |
+|---|---|
+| Engine | WebKitGTK 2.44.3, `ENABLE_JIT=OFF`, `MinSizeRel` — genuine ARMv6 (`Tag_CPU_arch: v6KZ`) |
+| Browser | `surf` 2.1 + the kiosk patch (milestones, override-redirect, shims) |
+| Display | bare Xorg, `xf86-video-fbdev`, no display manager, no window manager |
+| Update | RAUC A/B over U-Boot — both slots visible, **rollback never exercised** |
+| Complete display | **57.08 s** (n=3) vs **47.53 s** for the Raspbian config it replaces — **slower**, see below |
+| Memory | 87 MB used of 428; zram present and never touched |
+
+**It is ~9.5 s slower than the configuration it replaces, and the gap is boot, not the browser.**
+`surf` does not exec until ~41 s, against ~34 s on Raspbian. **No systemd unit in this image has ever
+been trimmed**, while the Raspbian setup went through five rounds of removals. That is the first
+place to look, not WebKit.
+
+### Build and flash
+
+```sh
+curl -L -o ~/bin/kas-container https://raw.githubusercontent.com/siemens/kas/5.4/kas-container
+chmod +x ~/bin/kas-container
+
+cp secrets.yaml.tmpl secrets.yaml     # fill in; gitignored, and it must stay that way
+kas-container build kiosk-zero-w.yaml
+
+# writes to build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/*.wic.bz2
+bzcat <image>.wic.bz2 | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
+```
+
+A full build including WebKit takes **~4.5 h** on 8 cores / 11 GB. Anything that changes
+`DISTRO_FEATURES`, `MACHINE_FEATURES` or webkit's `PACKAGECONFIG` **invalidates WebKit and costs that
+again** — make those decisions before starting, not after. `config.txt`-only knobs (`GPU_MEM`, HDMI,
+overscan, UART) are free to change.
+
+### Configuration
+
+Everything device-specific lives in the gitignored `secrets.yaml`: WiFi SSID and PSK hash, kiosk URL,
+hostname, mirror host. The tracked template carries names with empty values only.
+
+**kas merges `local_conf_header` by block name and the top-level file wins**, so a block named the
+same as one in `kiosk-zero-w.yaml` is discarded silently — no warning, no error, variables that never
+reach bitbake. Keep the keys unique.
+
+### Known gaps
+
+- **Rollback has never been exercised.** RAUC reports healthy slots; that is not the same as proving
+  a bad update rolls back, or that a slow-but-healthy boot does *not* trigger one. A first boot takes
+  ~57 s to render, which a naive health-check timeout would fail.
+- **Signing keys are the development keys** shipped upstream. Production needs its own, and the
+  decision is one-way: a device trusts only the keyring baked into its rootfs.
+- **The soak sampler is not a recipe** — it is installed at runtime and will not survive a reflash.
+  Its log lives on `/data` and does survive an A/B update.
+- **Config is build-time.** `KIOSK_URL` is baked; the runtime `/data/kiosk.conf` override is designed
+  but not implemented, so a URL change is currently a rebuild.
+- **Screen blanking over a long idle is unverified.** `-s 0 -dpms -nocursor` moved from lightdm into
+  the kiosk unit; that failure only appears after ~20 minutes.
+
 # AutonomOS
 
 AutonomOS is a robust Yocto-based Linux distribution designed for embedded systems with full OTA (Over-The-Air) update capability. It provides a minimal, secure environment with modular feature groups and A/B partition updates via RAUC.
