@@ -17,6 +17,37 @@
 > own identifiers (the `autonomos` distro, `AUTONOMOS_FEATURES`, the `meta-autonomos-*` layer
 > directories) are deliberately left unrenamed so that `git merge upstream/main` stays clean.
 
+## TODO: fixes to send upstream
+
+Three defects found while bringing up the Zero W target. **None is specific to this board** — each
+affects anyone building the upstream layer today — so they are worth offering back rather than
+keeping as local divergence. Commits are on `zero-w-port`.
+
+**1. `git://` repo URLs no longer resolve — a fresh checkout cannot fetch at all.** Highest priority;
+it breaks the project for every new user. `git.openembedded.org` and `git.yoctoproject.org` both sit
+behind Cloudflare now, which fronts HTTP/HTTPS only and refuses port 9418, so `meta-openembedded`,
+`meta-arm` and `meta-virtualization` all fail with `ECONNREFUSED`. Verified it is upstream and not a
+local firewall: `git://git.kernel.org` succeeds from the same host. Fix is three URLs to `https://`
+in `includes/base.yaml`. Invisible to anyone whose layers were fetched before the move.
+
+**2. `wpa_supplicant.service` gives a coin-flip boot on slow WiFi firmware.** The unit has no
+ordering and no `Restart`, and is `Type=forking`. If it fires before the driver has created `wlan0`
+it exits immediately and never retries — that boot has no network, and on a board reachable only
+over WiFi, no way in. Observed here: one boot in three came up with the browser running and the
+network unreachable. Fix is a drop-in with `After=sys-subsystem-net-devices-wlan0.device` and
+`Restart=on-failure`. **Also**: `ExecStart=wpa_supplicant …` is a relative path, which systemd
+rejects outright — same end state.
+
+**3. `DISTRO_FEATURES:remove = " x11 wayland"` in `autonomos.conf` cannot be undone downstream.**
+bitbake applies `:remove` after every append, so no image or `local.conf` can put x11 back; the
+symptom is a recipe failing its `REQUIRED_DISTRO_FEATURES` check for a feature you can point at in
+your own config. Making the removal conditional on an `AUTONOMOS_FEATURES` flag keeps the default
+behaviour identical while letting a graphical target opt in, and matches how the distro already gates
+`virtualization`, `k3s` and `read-only-rootfs`.
+
+**Also worth a message, not a patch:** this repository is public and carries no license file, so
+rights remain with the author — see the attribution note above.
+
 # AutonomOS
 
 AutonomOS is a robust Yocto-based Linux distribution designed for embedded systems with full OTA (Over-The-Air) update capability. It provides a minimal, secure environment with modular feature groups and A/B partition updates via RAUC.
