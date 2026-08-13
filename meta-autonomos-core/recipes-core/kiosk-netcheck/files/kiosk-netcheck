@@ -1,0 +1,70 @@
+#!/bin/sh
+# Withhold RAUC good-marking when a boot comes up without a usable LAN.
+#
+# Ordered Before=boot-complete.target, which rauc-mark-good.service Requires. A
+# non-zero exit here leaves boot-complete.target unreached, so mark-good never
+# runs, the U-Boot boot counter is not reset, and three such boots drop this
+# slot from BOOT_ORDER. That converts "boots fine, unreachable" -- the one
+# failure class the A/B slots do not cover -- into the fallback that does work.
+#
+# It only ever WITHHOLDS. It never marks a slot bad: withholding is recoverable
+# from the other slot, marking bad is not.
+
+set -u
+
+DEADLINE=120
+IFACE=wlan0
+TARGET=
+
+# Test and site overrides. /data survives both an OTA and a slot reflash.
+CONF=/data/kiosk-netcheck.conf
+if [ -r "$CONF" ]; then
+    . "$CONF"
+fi
+
+log() { echo "kiosk-netcheck: $*"; }
+now() { cut -d. -f1 /proc/uptime; }   # monotonic: the wall clock jumps mid-boot
+
+deadline=$(( $(now) + DEADLINE ))
+
+while :; do
+    gw=$TARGET
+    if [ -z "$gw" ]; then
+        gw=$(ip route show default dev "$IFACE" | awk '/^default/ { print $3; exit }')
+    fi
+
+    if [ -n "$gw" ] && ping -c 1 -W 2 "$gw" > /dev/null; then
+        log "LAN reachable via $gw at $(now)s uptime"
+        exit 0
+    fi
+
+    if [ "$(now)" -ge "$deadline" ]; then
+        break
+    fi
+    sleep 2
+done
+
+log "NO LAN after ${DEADLINE}s (gateway='${gw:-none}', iface=$IFACE)"
+log "$(fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT | tr '\n' ' ')"
+
+# Never strand the board. Withhold only when there is a good slot to fall back
+# to; a kiosk nobody can reach still beats a card with no bootable slot, which
+# is the one failure that costs a person standing at the device.
+eval "$(rauc status --output-format=shell)"
+
+fallback=
+for i in $RAUC_SLOTS; do
+    eval "state=\$RAUC_SLOT_STATE_$i"
+    eval "status=\$RAUC_SLOT_BOOT_STATUS_$i"
+    eval "bootname=\$RAUC_SLOT_BOOTNAME_$i"
+    [ "$state" = "booted" ] && continue
+    [ "$status" = "good" ] && fallback="$bootname"
+done
+
+if [ -n "$fallback" ]; then
+    log "WITHHOLDING good-marking; slot $fallback is good and is the fallback"
+    exit 1
+fi
+
+log "WITHHOLDING SUPPRESSED: no good fallback slot, marking good anyway"
+exit 0

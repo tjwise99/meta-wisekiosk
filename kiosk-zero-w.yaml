@@ -91,7 +91,7 @@ local_conf_header:
     AUTONOMOS_FEATURES = "graphics"
     PACKAGECONFIG:remove:pn-webkitgtk3 = "jit gtk4"
     PACKAGECONFIG:append:pn-webkitgtk3 = " reduce-size"
-    IMAGE_INSTALL:append = " surf kiosk-session kiosk-soak kiosk-journal kiosk-hardware kiosk-bootprof zram wpa-supplicant-service packagegroup-core-x11 xwininfo xprop ttf-roboto imagemagick tzdata"
+    IMAGE_INSTALL:append = " surf kiosk-session kiosk-soak kiosk-journal kiosk-hardware kiosk-netcheck kiosk-bootprof zram wpa-supplicant-service packagegroup-core-x11 xwininfo xprop ttf-roboto imagemagick tzdata"
 
     # serial-getty is a login prompt on a port with nothing attached, started at
     # 25.4s -- before the wlan0 gate.
