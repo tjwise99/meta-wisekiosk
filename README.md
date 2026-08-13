@@ -19,7 +19,7 @@
 
 ## TODO: fixes to send upstream
 
-Three defects found while bringing up the Zero W target. **None is specific to this board** — each
+Three 1. juss found while bringing up the Zero W target. **None is specific to this board** — each
 affects anyone building the upstream layer today — so they are worth offering back rather than
 keeping as local divergence. Commits are on `zero-w-port`.
 

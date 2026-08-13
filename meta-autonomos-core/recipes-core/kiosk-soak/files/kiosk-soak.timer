@@ -1,0 +1,14 @@
+[Unit]
+Description=Sample kiosk soak metrics every 5 minutes
+
+[Timer]
+# Not until the kiosk has had a chance to come up, or the first samples record a
+# startup transient as if it were steady state.
+OnBootSec=5min
+OnUnitActiveSec=5min
+# Even spacing matters more here than timer coalescing: the log is a time series
+# and systemd's default 1-minute accuracy would smear a 5-minute interval by 20%.
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

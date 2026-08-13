@@ -1,0 +1,6 @@
+[Unit]
+Description=Take one kiosk soak sample
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/kiosk-soak.sh

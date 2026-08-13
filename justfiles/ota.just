@@ -121,3 +121,75 @@ casync-stats store:
     SIZE=$(du -sh {{store}} 2>/dev/null | cut -f1)
     echo "Chunks: $CHUNKS"
     echo "Size: $SIZE"
+
+# === Tier 1 delivery: plain .raucb, chunked ===
+#
+# This board wedges on sustained SDIO traffic in EITHER direction, and a plain
+# scp of the 133MB bundle hangs it in ~11s having moved 0 bytes. These recipes
+# encode the delivery shape that works; see the kiosk-reference project,
+# docs/experiment-log.md, for the measurements behind it.
+
+# NOT covered by `just build`, which makes core-image-base only -- shipping a
+# stale .raucb silently reinstalls the previous image.
+#
+# kconfig, not the root Justfile's `config`: that defaults to reference.yaml, a
+# DIFFERENT product. Building the bundle against it fails on a missing include,
+# which is the good case; silently building the wrong image would be the bad one.
+# Comments must sit ABOVE the attributes -- just rejects one between them.
+[group('ota')]
+[doc("Build the RAUC update bundle")]
+kiosk-bundle kconfig="kiosk-zero-w.yaml":
+    kas-container shell {{kconfig}} -c "bitbake update-bundle"
+
+# Separates the receive burst from the sync: combining them is what hangs it.
+[group('ota')]
+[script('bash')]
+[doc("Deliver a bundle in chunked bursts, verified end to end")]
+kiosk-send bundle="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host="root@192.168.1.6" chunk_mb="2" rx_pause="4" sync_pause="3":
+    KIOSK_HOST={{host}} tools/send-bundle-chunked.sh {{bundle}} {{chunk_mb}} {{rx_pause}} {{sync_pause}}
+
+# Does NOT reboot -- inspect `rauc status` first, then `just kiosk-reboot`.
+[group('ota')]
+[script('bash')]
+[doc("Install a staged bundle and show slot state")]
+kiosk-install host="root@192.168.1.6":
+    SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
+    echo "== before"
+    $SSH {{host}} 'fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT; rauc status 2>&1 | grep -E "Booted|Activated|boot status"'
+    echo "== verifying bundle signature against the device keyring"
+    $SSH {{host}} 'rauc info /data/update.raucb' || { echo "bundle did not verify -- refusing to install"; exit 1; }
+    echo "== installing"
+    $SSH {{host}} 'rauc install /data/update.raucb'
+    echo "== after"
+    $SSH {{host}} 'fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT; rauc status 2>&1 | grep -E "Booted|Activated|boot status"'
+    echo "Now: just kiosk-reboot   (fallback slot stays bootable if it fails)"
+
+# Reboot and wait for the kiosk to answer again.
+[group('ota')]
+[script('bash')]
+kiosk-reboot host="root@192.168.1.6":
+    SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
+    BEFORE=$($SSH {{host}} 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null)
+    $SSH {{host}} 'systemctl reboot' >/dev/null 2>&1 || true
+    T0=$(date +%s)
+    while :; do
+        NOW=$($SSH {{host}} 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null || true)
+        [ -n "$NOW" ] && [ "$NOW" != "$BEFORE" ] && break
+        [ $(( $(date +%s) - T0 )) -gt 300 ] && { echo "did not come back in 300s"; exit 1; }
+        sleep 5
+    done
+    echo "back after $(( $(date +%s) - T0 ))s, boot_id $NOW"
+    $SSH {{host}} 'rauc status 2>&1 | grep -E "Booted|boot status"; systemctl is-active kiosk; fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT'
+
+# Full Tier 1 OTA. Builds the bundle FIRST so a stale .raucb cannot be shipped.
+[group('ota')]
+kiosk-ota host="root@192.168.1.6" kconfig="kiosk-zero-w.yaml": (kiosk-bundle kconfig) (kiosk-send "build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host) (kiosk-install host)
+    @echo "Delivered and installed. Verify, then: just kiosk-reboot {{host}}"
+
+# Roll back to the other slot.
+[group('ota')]
+[script('bash')]
+kiosk-rollback host="root@192.168.1.6":
+    SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
+    $SSH {{host}} 'rauc status mark-bad booted; fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT'
+    echo "Marked booted slot bad. Now: just kiosk-reboot {{host}}"

@@ -1,0 +1,18 @@
+[Unit]
+Description=Flush the journal to /data once tmpfiles has made the symlink
+# Deliberately a NEW unit rather than a drop-in on systemd-journal-flush.
+# Adding After=systemd-tmpfiles-setup.service to that unit creates an ordering
+# cycle; systemd breaks the cycle by deleting the tmpfiles-setup job, which
+# leaves /var/volatile/log uncreated, /var/log dangling and the kiosk dead.
+# Verified on hardware: that exact drop-in took the board down.
+After=systemd-tmpfiles-setup.service systemd-journald.service
+Wants=systemd-journald.service
+RequiresMountsFor=/data
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/journalctl --flush
+
+[Install]
+WantedBy=multi-user.target
