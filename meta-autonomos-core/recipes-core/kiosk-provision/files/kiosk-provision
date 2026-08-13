@@ -1,0 +1,53 @@
+#!/bin/sh
+# Apply the per-device configuration that cannot be read from /data in place,
+# and report provisioning state.
+#
+# The image carries NO site configuration. wpa_supplicant reads
+# /data/config/wpa_supplicant.conf directly, kiosk.service reads
+# /data/config/kiosk.conf directly, and /etc/resolv.conf is a symlink into
+# /data/config. Those need nothing from this script.
+#
+# Two things cannot work that way and are handled here or by the RAUC hook:
+#   hostname   -- must be set into the kernel, it is not a file anyone reads
+#   machine-id -- journald reads it at ~8.2s, before /data is mounted, so it has
+#                 to be in the rootfs; the RAUC slot-post-install hook puts it
+#                 there. This script only seeds /data on a device that has one
+#                 and has never been provisioned.
+#
+# It never fails the boot. An unprovisioned device has no network and needs a
+# USB keyboard on tty1 -- which the image keeps `keyboard` and `usbhost` for --
+# so the useful thing this can do is say so, loudly, in the journal.
+
+set -u
+CFG=/data/config
+log() { echo "kiosk-provision: $*"; }
+
+missing=0
+for f in wpa_supplicant.conf kiosk.conf resolv.conf; do
+    if [ -s "$CFG/$f" ]; then
+        log "ok      $CFG/$f"
+    else
+        log "MISSING $CFG/$f"
+        missing=$((missing + 1))
+    fi
+done
+[ "$missing" -gt 0 ] && log "UNPROVISIONED: $missing file(s) absent -- expect no network and no kiosk"
+
+if [ -s "$CFG/hostname" ]; then
+    h=$(head -n 1 "$CFG/hostname" | tr -d '[:space:]')
+    if [ -n "$h" ]; then
+        printf '%s\n' "$h" > /etc/hostname
+        hostname "$h" 2>/dev/null
+        log "hostname $h"
+    fi
+fi
+
+# Seed /data with this rootfs's machine-id if it has one and /data does not, so
+# the RAUC hook has something to carry forward on the next update.
+if [ ! -s /data/etc/machine-id ] && [ -s /etc/machine-id ]; then
+    mkdir -p /data/etc
+    cp /etc/machine-id /data/etc/machine-id
+    log "seeded /data/etc/machine-id"
+fi
+
+exit 0
