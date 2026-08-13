@@ -33,6 +33,13 @@ do_install() {
     install -d ${D}${sysconfdir}/systemd/system
     ln -sf /dev/null ${D}${sysconfdir}/systemd/system/zram.service
 
+    # systemd-resolved answers zero queries here -- resolvectl reports Total
+    # Transactions 0 on a normal boot. It costs ~729ms starting at 19.96s, before
+    # the gate, to write one file. Masking it with a static /etc/resolv.conf
+    # (kiosk-static-resolv.bbclass) measured -1.03s at basic.target, n=3, ranges
+    # not overlapping. DNS still resolves; timesyncd is the only consumer.
+    ln -sf /dev/null ${D}${sysconfdir}/systemd/system/systemd-resolved.service
+
     # udev evaluates every rule file against all 345 device uevents. This board
     # has no sound card (/sys/class/sound empty), no V4L (/sys/class/video4linux
     # absent), no DRM card, and only the aggregate 'mice' input node -- yet the
@@ -66,5 +73,6 @@ FILES:${PN} = " \
     ${sysconfdir}/systemd/system.conf.d/watchdog.conf \
     ${sysconfdir}/sysctl.d/60-kiosk-panic.conf \
     ${sysconfdir}/systemd/system/zram.service \
+    ${sysconfdir}/systemd/system/systemd-resolved.service \
     ${sysconfdir}/udev/rules.d \
 "

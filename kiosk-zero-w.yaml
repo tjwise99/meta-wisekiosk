@@ -127,6 +127,13 @@ local_conf_header:
     # bundle. KIOSK_MACHINE_ID is per-unit and lives in secrets.yaml.
     INHERIT += "kiosk-machine-id"
 
+    # systemd-resolved answered zero queries and cost ~729ms before the gate, to
+    # write one file. Masked in kiosk-hardware; this writes the static
+    # /etc/resolv.conf that replaces it. Measured -1.03s at basic.target, n=3,
+    # ranges not overlapping, with DNS still resolving. KIOSK_NAMESERVER is a
+    # site value and lives in secrets.yaml.
+    INHERIT += "kiosk-static-resolv"
+
   # update-bundle.bb packages whichever image RAUC_SLOT_rootfs names, and its
   # default is autonomos-devel -- a different image, with no surf and no kiosk
   # unit. Installing that bundle would replace the slot and report success.
