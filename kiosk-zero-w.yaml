@@ -103,6 +103,32 @@ local_conf_header:
     # is core-image-base, and that .inc is only included by autonomos-base.bb,
     # which is not built. The first attempt went there and silently shipped nothing.
     IMAGE_INSTALL:append = " iproute2-tc"
+
+    # kiosk-cpufreq: caps scaling_max_freq below this board's unstable top OPP.
+    # THE fix for the crash diagnosed 2026-08-13 -- 1000 MHz corrupts memory
+    # under sustained SDIO + network load (2/2 deaths pinned there; 8/8
+    # survivals at every OPP below, with the governor still switching). It ships
+    # in the image specifically so it arrives by OTA: the config.txt
+    # over_voltage route that upstream reports use lives on the shared FAT
+    # partition and can never be delivered to a wall-mounted unit remotely.
+    IMAGE_INSTALL:append = " kiosk-cpufreq"
+
+    # ramoops: persistent RAM store, so a kernel panic survives the reset. This
+    # is what finally captured the root cause. A userspace witness cannot see a
+    # panic by construction -- after one, no userspace is ever scheduled again --
+    # so no amount of fsync could ever have caught it.
+    #
+    # Both halves are needed and neither is a default: the overlay is absent
+    # from meta-raspberrypi's 70-entry whitelist, and the stock overlay ships
+    # console-size=0, which disables the one zone that carries the log tail.
+    #
+    # NOTE: this reaches the device only on a CARD REFLASH. config.txt and the
+    # overlays live on the shared FAT partition, which RAUC never touches
+    # (RAUC_BUNDLE_SLOTS = "rootfs"). The running unit already has both, hand
+    # installed 2026-08-13; this exists so a rebuilt card is not silently worse
+    # than the unit in the field.
+    RPI_KERNEL_DEVICETREE_OVERLAYS:append = " overlays/ramoops.dtbo"
+    RPI_EXTRA_CONFIG:append = "\ndtoverlay=ramoops,total-size=0x40000,record-size=0x8000,console-size=0x20000\n"
     PACKAGECONFIG:append:pn-webkitgtk3 = " reduce-size"
     IMAGE_INSTALL:append = " surf kiosk-session kiosk-soak kiosk-journal kiosk-hardware kiosk-netcheck kiosk-bootprof zram wpa-supplicant-service packagegroup-core-x11 xwininfo xprop ttf-roboto imagemagick tzdata-core tzdata-americas"
 
