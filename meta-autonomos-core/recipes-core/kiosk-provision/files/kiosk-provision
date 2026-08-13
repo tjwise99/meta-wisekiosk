@@ -1,0 +1,63 @@
+#!/bin/sh
+# Apply per-site configuration from /data over the values baked into the image.
+#
+# The image bakes WIFI_SSID, WIFI_PSK_HASH, KIOSK_URL, KIOSK_HOSTNAME and the
+# nameserver at build time, so one image serves exactly one site -- which blocks
+# a shared fleet artifact and puts the site's wireless credentials inside every
+# bundle.
+#
+# This is the first half of the fix and it is deliberately NON-BREAKING: each
+# value is applied only if /data/config supplies it, otherwise the baked value
+# stands. A device with no /data/config behaves exactly as before. Removing the
+# baked values is a separate step, and must not happen until provisioning is
+# proven on hardware.
+#
+# /data survives both an A/B update and a slot reflash, which is what makes it
+# the right home.
+
+set -u
+CFG=/data/config
+log() { echo "kiosk-provision: $*"; }
+
+[ -d "$CFG" ] || { log "no $CFG, keeping baked configuration"; exit 0; }
+
+# --- wifi ---------------------------------------------------------------
+# Validated before it is installed. A malformed wpa_supplicant.conf costs the
+# network, and this device's fallback slot would read the SAME /data -- so the
+# A/B fallback does not rescue a provisioning error. Refusing to apply a broken
+# file is the only protection available here.
+if [ -f "$CFG/wpa_supplicant.conf" ]; then
+    if grep -q '^[[:space:]]*ssid=' "$CFG/wpa_supplicant.conf"; then
+        cp /etc/wpa_supplicant.conf /run/wpa_supplicant.conf.baked 2>/dev/null
+        cp "$CFG/wpa_supplicant.conf" /etc/wpa_supplicant.conf.tmp
+        chmod 0600 /etc/wpa_supplicant.conf.tmp
+        mv /etc/wpa_supplicant.conf.tmp /etc/wpa_supplicant.conf
+        log "applied wifi config from $CFG"
+    else
+        log "REFUSED $CFG/wpa_supplicant.conf -- no ssid= line; keeping baked config"
+    fi
+fi
+
+# --- kiosk URL ----------------------------------------------------------
+if [ -f "$CFG/kiosk.conf" ]; then
+    cp "$CFG/kiosk.conf" /etc/kiosk.conf.tmp && mv /etc/kiosk.conf.tmp /etc/kiosk.conf
+    log "applied kiosk.conf from $CFG"
+fi
+
+# --- resolver -----------------------------------------------------------
+if [ -f "$CFG/resolv.conf" ]; then
+    cp "$CFG/resolv.conf" /etc/resolv.conf.tmp && mv /etc/resolv.conf.tmp /etc/resolv.conf
+    log "applied resolv.conf from $CFG"
+fi
+
+# --- hostname -----------------------------------------------------------
+if [ -f "$CFG/hostname" ]; then
+    h=$(head -n 1 "$CFG/hostname" | tr -d '[:space:]')
+    if [ -n "$h" ]; then
+        printf '%s\n' "$h" > /etc/hostname
+        hostname "$h" 2>/dev/null
+        log "applied hostname $h"
+    fi
+fi
+
+exit 0
