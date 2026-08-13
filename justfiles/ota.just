@@ -141,6 +141,52 @@ casync-stats store:
 kiosk-bundle kconfig="kiosk-zero-w.yaml":
     kas-container shell {{kconfig}} -c "bitbake update-bundle"
 
+# Every check here catches a failure that otherwise surfaces AFTER the 25-minute
+# transfer, or does not surface at all.
+[group('ota')]
+[script('bash')]
+[doc("Refuse a delivery that cannot work: slot size, stale bundle, /data space")]
+kiosk-preflight image="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/core-image-base-raspberrypi0-wifi.rootfs.ext4" bundle="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host="root@192.168.1.6":
+    set -euo pipefail
+    SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
+
+    test -f "{{image}}"  || { echo "no rootfs image at {{image}}"; exit 1; }
+    test -f "{{bundle}}" || { echo "no bundle at {{bundle}}"; exit 1; }
+    IMAGE_B=$(stat -Lc %s "{{image}}")
+    BUNDLE_B=$(stat -Lc %s "{{bundle}}")
+
+    # Nothing ties the image inside the bundle to the slot that receives it. The
+    # two agree only because both derive from AUTONOMOS_ROOTFS_SIZE in the same
+    # build; a bundle built after that value changes cannot install on a device
+    # flashed with the old layout, and it fails on the DEVICE mid-install rather
+    # than in the build that produced it. Sector count is 512-byte units.
+    A_BYTES=$(( $($SSH {{host}} 'cat /sys/class/block/mmcblk0p2/size') * 512 ))
+    B_BYTES=$(( $($SSH {{host}} 'cat /sys/class/block/mmcblk0p3/size') * 512 ))
+    echo "rootfs image  : $IMAGE_B"
+    echo "slot A / B    : $A_BYTES / $B_BYTES"
+    for slot in "$A_BYTES" "$B_BYTES"; do
+        if [ "$IMAGE_B" -gt "$slot" ]; then
+            echo "REFUSING: the image does not fit a $slot-byte slot"
+            exit 1
+        fi
+    done
+
+    # A leftover destination LARGER than the new bundle satisfies the sender's
+    # resume condition immediately -- it reports a complete transfer having moved
+    # zero bytes, and the install then reinstalls the PREVIOUS image. The
+    # end-to-end md5 does catch it, 25 minutes later. Removing it also returns
+    # ~130MB of the partition the bundle stages on.
+    $SSH {{host}} 'rm -f /data/update.raucb; sync'
+
+    FREE_KB=$($SSH {{host}} 'df -k /data | tail -n 1' | awk '{print $4}')
+    NEED_KB=$(( BUNDLE_B / 1024 + 8192 ))
+    echo "/data free    : ${FREE_KB}KB, need ${NEED_KB}KB"
+    if [ "$FREE_KB" -lt "$NEED_KB" ]; then
+        echo "REFUSING: not enough room on /data for the bundle"
+        exit 1
+    fi
+    echo "preflight OK"
+
 # Separates the receive burst from the sync: combining them is what hangs it.
 [group('ota')]
 [script('bash')]
@@ -183,7 +229,7 @@ kiosk-reboot host="root@192.168.1.6":
 
 # Full Tier 1 OTA. Builds the bundle FIRST so a stale .raucb cannot be shipped.
 [group('ota')]
-kiosk-ota host="root@192.168.1.6" kconfig="kiosk-zero-w.yaml": (kiosk-bundle kconfig) (kiosk-send "build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host) (kiosk-install host)
+kiosk-ota host="root@192.168.1.6" kconfig="kiosk-zero-w.yaml": (kiosk-bundle kconfig) (kiosk-preflight "build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/core-image-base-raspberrypi0-wifi.rootfs.ext4" "build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host) (kiosk-send "build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host) (kiosk-install host)
     @echo "Delivered and installed. Verify, then: just kiosk-reboot {{host}}"
 
 # Roll back to the other slot.

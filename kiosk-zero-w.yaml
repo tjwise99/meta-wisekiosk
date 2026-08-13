@@ -91,7 +91,7 @@ local_conf_header:
     AUTONOMOS_FEATURES = "graphics"
     PACKAGECONFIG:remove:pn-webkitgtk3 = "jit gtk4"
     PACKAGECONFIG:append:pn-webkitgtk3 = " reduce-size"
-    IMAGE_INSTALL:append = " surf kiosk-session kiosk-soak kiosk-journal kiosk-hardware kiosk-netcheck kiosk-bootprof zram wpa-supplicant-service packagegroup-core-x11 xwininfo xprop ttf-roboto imagemagick tzdata"
+    IMAGE_INSTALL:append = " surf kiosk-session kiosk-soak kiosk-journal kiosk-hardware kiosk-netcheck kiosk-bootprof zram wpa-supplicant-service packagegroup-core-x11 xwininfo xprop ttf-roboto imagemagick tzdata-core tzdata-americas"
 
     # serial-getty is a login prompt on a port with nothing attached, started at
     # 25.4s -- before the wlan0 gate.
@@ -119,6 +119,13 @@ local_conf_header:
     # rebuild. It also puts the journal on the rootfs slot, which an A/B update
     # replaces -- destroying the logs of the boot that failed.
     hostname:pn-base-files = "${KIOSK_HOSTNAME}"
+
+    # Every OTA otherwise mints a new machine-id on the new slot's first boot,
+    # so journald opens a fresh /var/log/journal/<id> and orphans the old one.
+    # SystemMaxUse is enforced per machine-id and never bounds the total: four
+    # namespaces reached 136.6MB on a 479MB /data that also stages the ~130MB
+    # bundle. KIOSK_MACHINE_ID is per-unit and lives in secrets.yaml.
+    INHERIT += "kiosk-machine-id"
 
   # update-bundle.bb packages whichever image RAUC_SLOT_rootfs names, and its
   # default is autonomos-devel -- a different image, with no surf and no kiosk
@@ -188,6 +195,28 @@ local_conf_header:
     # the feature drops bluez5 and pi-bluetooth but leaves BCM43430A1.hcd behind.
     # Inert once hciuart and bluez are gone, but it is bytes for nothing.
     MACHINE_EXTRA_RRECOMMENDS:remove = "bluez-firmware-rpidistro-bcm43430a1-hcd"
+
+    # A hardware database for matching peripherals, on a board that has none:
+    # /sys/class/sound empty, no video4linux, no DRM card, no input devices, no
+    # USB devices. hwdb.bin alone is 10.9MB of a 20MB /usr/lib/udev, measured on
+    # the device.
+    #
+    # Bytes only -- do NOT expect boot time. An earlier draft put udevd's cost at
+    # 7.88s of "walking the module set"; measured cold, a hwdb query is ~30ms
+    # above the process floor, because it is an mmap'd trie and a lookup touches
+    # a few pages. udevd's real cost is rule processing over device events.
+    #
+    # It arrives as an RRECOMMENDS of systemd, so BAD_RECOMMENDATIONS is the
+    # lever -- no bbappend, and therefore no systemd re-hash.
+    BAD_RECOMMENDATIONS += "udev-hwdb"
+
+    # tzdata is a metapackage RDEPENDing on every region; tzdata-americas does
+    # NOT pull tzdata-core, so both are named above. /usr/share/zoneinfo is 7.4MB
+    # on the device for one fixed site that reads only America/New_York.
+    #
+    # This kiosk renders one language. 22 locale packages ship, including
+    # en-gb, for 2.9MB of /usr/lib/locale.
+    IMAGE_LINGUAS = "en-us"
 
   # WebKit's link step wants several GB per linker process. The host has ~7.7GB,
   # so cpu_count() parallelism OOMs hours into the build. The fixed caps are a
