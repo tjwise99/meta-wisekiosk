@@ -1,0 +1,36 @@
+name: guards
+
+# A Yocto build is hours and cannot gate a commit. What CAN gate a commit is
+# whether this public repository is about to publish something it should not,
+# and whether the files a build reads still parse.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks detect scans history, not the worktree. A shallow clone
+          # would scan almost nothing and pass for the wrong reason.
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          VER=8.30.1
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VER}/gitleaks_${VER}_linux_x64.tar.gz" -o /tmp/gitleaks.tgz
+          sudo tar -xzf /tmp/gitleaks.tgz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet pyyaml
+
+      - name: Run repository guards
+        run: tools/ci-guards.sh

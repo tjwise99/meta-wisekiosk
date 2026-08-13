@@ -64,3 +64,19 @@ clean:
 spotless: clean
     rm -rf build/
     rm -rf sources/
+
+# === Repository guards ===
+
+# Run the same checks CI runs. Fast, needs no build.
+[group('guards')]
+[doc("Run repository guards: secrets, template, shell syntax, YAML, gitleaks")]
+guards:
+    tools/ci-guards.sh
+
+# Point git at .githooks so pre-commit runs the guards. Hooks are not carried by
+# a clone, so this is per-checkout and has to be run once by hand.
+[group('guards')]
+[doc("Install the pre-commit hook for this checkout")]
+install-hooks:
+    git config core.hooksPath .githooks
+    @echo "core.hooksPath -> .githooks (pre-commit runs tools/ci-guards.sh)"

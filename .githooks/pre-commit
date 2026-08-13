@@ -1,0 +1,4 @@
+#!/bin/sh
+# Same guards CI runs, so a commit cannot pass here and fail there.
+# Install with: just install-hooks
+exec tools/ci-guards.sh
