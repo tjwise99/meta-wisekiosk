@@ -55,6 +55,14 @@ local_conf_header:
     EXTRA_IMAGE_FEATURES ?= "debug-tweaks ssh-server-openssh"
     IMAGE_FEATURES:remove = "splash"
 
+  # A kernel panic at 4.0s inside mmc_rescan was observed 2026-08-12 and hung the
+  # board indefinitely. Nothing in userspace can reach a panic that early: systemd
+  # arms the hardware watchdog at 5.2s, and kernel.panic via sysctl applies at
+  # ~11.7s. The kernel command line is the only mechanism that covers it, and
+  # without it this failure costs a person standing at the device.
+  panic-reboot: |
+    CMDLINE:append = " panic=10"
+
   # The live kiosk runs the legacy fbdev path, not vc4 KMS -- gldriver_test.sh
   # installs 99-fbturbo.conf there because v3d is not "okay" on this board. KMS
   # would also ignore the firmware HDMI settings above, replacing a display path
@@ -63,35 +71,123 @@ local_conf_header:
   display: |
     DISABLE_VC4GRAPHICS = "1"
 
-    # With no USB-serial adapter on hand, the panel IS the console. Upstream
-    # only sets console=serial0 when ENABLE_UART=1, so kernel output would go
-    # somewhere unreadable and a failed boot would show as a black rectangle.
-    # The Raspbian kiosk carries both; so do we. Last console= wins /dev/console,
-    # both still receive kernel messages.
-    CMDLINE_SERIAL = "console=serial0,115200 console=tty1"
+    # console=tty1 ONLY. The kiosk panel is the console (owner, 2026-08-12) --
+    # this unit IS a display, so kernel output always has a screen, and there is
+    # no serial adapter and will not be one. The 4.0s mmc_rescan panic was read
+    # off that panel.
+    #
+    # Carrying console=serial0 as well cost 2.43s of wall clock for 0.43s of CPU,
+    # measured n=3: every printk is written SYNCHRONOUSLY to a 115200 UART, so
+    # the core stalls on it rather than computing. 261 kernel lines is ~19.6KB,
+    # ~1.7s at that baud, and the measured cost is higher because early-boot
+    # messages predate journald. "Expecting device wlan0" moved 7.7s -> 6.1s.
+    #
+    # ENABLE_UART is left alone deliberately: only the cmdline argument was
+    # measured, and changing the firmware setting in config.txt is a different,
+    # untested change.
+    CMDLINE_SERIAL = "console=tty1"
 
   kiosk: |
     AUTONOMOS_FEATURES = "graphics"
     PACKAGECONFIG:remove:pn-webkitgtk3 = "jit gtk4"
     PACKAGECONFIG:append:pn-webkitgtk3 = " reduce-size"
-    IMAGE_INSTALL:append = " surf kiosk-session zram wpa-supplicant-service packagegroup-core-x11 xwininfo xprop ttf-roboto imagemagick tzdata"
+    IMAGE_INSTALL:append = " surf kiosk-session kiosk-soak kiosk-journal kiosk-hardware kiosk-bootprof zram wpa-supplicant-service packagegroup-core-x11 xwininfo xprop ttf-roboto imagemagick tzdata"
+
+    # serial-getty is a login prompt on a port with nothing attached, started at
+    # 25.4s -- before the wlan0 gate.
+    #
+    # SERIAL_CONSOLES = "", not PACKAGE_EXCLUDE: packagegroup-core-boot RDEPENDS
+    # on systemd-serialgetty, so excluding the package fails do_rootfs with
+    # "conflicting requests". systemd-serialgetty.bb wraps its whole do_install
+    # in `if [ ! -z "${SERIAL_CONSOLES}" ]` and sets ALLOW_EMPTY, so an empty
+    # value yields a present-but-empty package: the dependency is satisfied and
+    # no units are installed.
+    #
+    # It is also cheap. systemd-serialgetty is its OWN recipe, not part of
+    # systemd, and is PACKAGE_ARCH = MACHINE_ARCH -- so this re-hashes one small
+    # recipe rather than dragging webkitgtk3 into a rebuild.
+    SERIAL_CONSOLES = ""
 
     # core-image-base ships no tzdata at all, so the first boot ran in UTC and
     # the kiosk clock was four hours out. A runtime fix does not survive an OTA
     # update -- A/B replaces the whole rootfs slot -- so it belongs here.
     DEFAULT_TIMEZONE = "America/New_York"
 
-    # Volatile journald meant the one boot that failed left no evidence behind.
-    # A kiosk that is only reachable over the network it failed to bring up is
-    # exactly the case where the previous boot's log is the whole diagnosis.
-    VOLATILE_LOG_DIR = "no"
+    # Journal persistence is the kiosk-journal recipe, not VOLATILE_LOG_DIR.
+    # That variable is read by systemd's do_install, so setting it re-hashes
+    # systemd -> gtk+3/at-spi2-core -> webkitgtk3, costing a multi-hour WebKit
+    # rebuild. It also puts the journal on the rootfs slot, which an A/B update
+    # replaces -- destroying the logs of the boot that failed.
     hostname:pn-base-files = "${KIOSK_HOSTNAME}"
+
+  # update-bundle.bb packages whichever image RAUC_SLOT_rootfs names, and its
+  # default is autonomos-devel -- a different image, with no surf and no kiosk
+  # unit. Installing that bundle would replace the slot and report success.
+  # The :pn- form is required, not stylistic: update-bundle.bb assigns both of
+  # these with a plain "=", which beats a bare local.conf value, so the override
+  # is applied after the recipe parses or it is silently discarded.
+  rauc: |
+    RAUC_SLOT_rootfs:pn-update-bundle = "core-image-base"
+
+    # Tier 1 -- scp the .raucb, then rauc install -- is the fallback every later
+    # delivery tier rests on, so it is what the first bundle has to be. casync
+    # buys bandwidth that a LAN against a local mirror does not need, and adds a
+    # convert step that can fail after the image itself is already built.
+    RAUC_CASYNC_BUNDLE:pn-update-bundle = "0"
 
   # Nothing here runs a Wayland compositor, VC4 has no Vulkan, and ptest builds
   # test suites for a board that will never run them. Removing them is free
   # before the first build and costs a rebuild after it.
   trim: |
-    DISTRO_FEATURES:remove = " wayland vulkan ptest"
+    # bluetooth is removed from DISTRO_FEATURES as well as MACHINE_FEATURES
+    # because packagegroup-base.bb pulls packagegroup-base-bluetooth on
+    # DISTRO_FEATURES alone (line 28), not just COMBINED_FEATURES. Removing it
+    # from MACHINE_FEATURES only was measured and did NOT drop bluez5,
+    # pi-bluetooth or the BT firmware from the image.
+    #
+    # alsa and touchscreen are deliberately NOT removed from DISTRO_FEATURES:
+    # both are keyed on MACHINE_FEATURES/COMBINED_FEATURES, so the machine-side
+    # removal is sufficient, and touching DISTRO_FEATURES risks re-hashing
+    # gstreamer -> webkitgtk3 into a multi-hour rebuild for no extra benefit.
+    DISTRO_FEATURES:remove = " wayland vulkan ptest bluetooth"
+
+    # Nothing on this kiosk pairs, scans or streams; the only link is WiFi
+    # (owner, 2026-08-12). rpi-base.inc adds bluetooth to MACHINE_FEATURES, which
+    # pulls packagegroup-base-bluetooth -> bluez5, pi-bluetooth and the BT
+    # firmware, and pi-bluetooth ships 90-pi-bluetooth.rules -- the udev rule
+    # that instantiates bthelper@hci0 on every boot at 34.5s.
+    #
+    # Measured on the device: bluetooth + hciuart + bthelper is 2.43s of boot CPU
+    # and 4.2MB of RSS. It moves wlan0 by 0.00s because it runs after the gate,
+    # so this buys headroom and image bytes rather than time.
+    #
+    # The BCM43430 is a combo part: this removes the BT firmware patch
+    # (BCM43430A1.hcd), NOT the WiFi firmware (brcmfmac43430-sdio), which comes
+    # from the wifi feature. Verify brcmfmac firmware survives before flashing --
+    # it is the lifeline.
+    # Nothing pairs, nothing plays audio, there is no touchscreen behind the
+    # glass, and there is no serial adapter. rpi-base.inc:125 adds all of these
+    # unconditionally, so they are stripped here rather than at the platform
+    # include (which only controls this project's own append).
+    #
+    # keyboard and usbhost are deliberately KEPT: a USB keyboard on tty1 is the
+    # only way into this device if the network is gone, and the panel is the
+    # console.
+    MACHINE_FEATURES:remove = "bluetooth alsa touchscreen serial"
+
+    # busybox syslogd + klogd duplicate journald onto the SD card, and klogd
+    # re-injects the entire kernel ring buffer into the journal a second time --
+    # visible as a burst of kernel[NNN] lines replaying earlier timestamps.
+    # 181ms of boot CPU between them, before the gate, for records journald
+    # already holds. journald stays: it is the only evidence channel this
+    # device has, and the network hang destroys its own logs.
+    VIRTUAL-RUNTIME_base-utils-syslog = ""
+
+    # raspberrypi0-wifi.conf:11 pulls the BT firmware blob through
+    # MACHINE_EXTRA_RRECOMMENDS, independently of MACHINE_FEATURES, so removing
+    # the feature drops bluez5 and pi-bluetooth but leaves BCM43430A1.hcd behind.
+    # Inert once hciuart and bluez are gone, but it is bytes for nothing.
+    MACHINE_EXTRA_RRECOMMENDS:remove = "bluez-firmware-rpidistro-bcm43430a1-hcd"
 
   # WebKit's link step wants several GB per linker process. The host has ~7.7GB,
   # so cpu_count() parallelism OOMs hours into the build. The fixed caps are a
