@@ -40,6 +40,22 @@ do_install() {
     # not overlapping. DNS still resolves; timesyncd is the only consumer.
     ln -sf /dev/null ${D}${sysconfdir}/systemd/system/systemd-resolved.service
 
+    # Nobody logs in interactively on a kiosk behind glass. logind owns seat and
+    # session management that Xorg MAY want, which is why this was flagged rather
+    # than recommended until it was tried.
+    #
+    # Measured n=3 at basic.target, on top of the resolved masking above:
+    #   resolved masked only          21.30 / 21.15 / 21.07  mean 21.17
+    #   + logind and userdbd masked   19.47 / 19.90 / 19.84  mean 19.74
+    # -1.43s, ranges disjoint. Cumulative 22.20 -> 19.74.
+    #
+    # The display was verified as PIXELS, not as a process list: a framebuffer
+    # capture rendered the clock to the second, the weather icons (which is the
+    # complete-display endpoint), the park table and a current-cycle METAR.
+    ln -sf /dev/null ${D}${sysconfdir}/systemd/system/systemd-logind.service
+    ln -sf /dev/null ${D}${sysconfdir}/systemd/system/systemd-userdbd.service
+    ln -sf /dev/null ${D}${sysconfdir}/systemd/system/systemd-userdbd.socket
+
     # udev evaluates every rule file against all 345 device uevents. This board
     # has no sound card (/sys/class/sound empty), no V4L (/sys/class/video4linux
     # absent), no DRM card, and only the aggregate 'mice' input node -- yet the
@@ -74,5 +90,8 @@ FILES:${PN} = " \
     ${sysconfdir}/sysctl.d/60-kiosk-panic.conf \
     ${sysconfdir}/systemd/system/zram.service \
     ${sysconfdir}/systemd/system/systemd-resolved.service \
+    ${sysconfdir}/systemd/system/systemd-logind.service \
+    ${sysconfdir}/systemd/system/systemd-userdbd.service \
+    ${sysconfdir}/systemd/system/systemd-userdbd.socket \
     ${sysconfdir}/udev/rules.d \
 "
