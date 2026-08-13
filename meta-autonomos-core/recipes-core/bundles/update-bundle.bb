@@ -9,6 +9,12 @@
 #   AUTONOMOS_RAUC_KEY_FILE = "signing.key.pem"
 #   AUTONOMOS_RAUC_CERT_FILE = "signing.cert.pem"
 
+# Required since the bundle gained a SRC_URI (the RAUC slot-post-install hook):
+# insane.bbclass fails do_populate_lic for any recipe that fetches files without
+# LIC_FILES_CHKSUM, and returns early only for CLOSED. This recipe produces an
+# internal artefact, so CLOSED is the accurate declaration rather than a silencer.
+LICENSE = "CLOSED"
+
 inherit bundle autonomos-rauc
 
 RAUC_BUNDLE_COMPATIBLE = "${AUTONOMOS_RAUC_COMPATIBLE}"
