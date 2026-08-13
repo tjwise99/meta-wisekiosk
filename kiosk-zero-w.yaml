@@ -118,20 +118,22 @@ local_conf_header:
     # systemd -> gtk+3/at-spi2-core -> webkitgtk3, costing a multi-hour WebKit
     # rebuild. It also puts the journal on the rootfs slot, which an A/B update
     # replaces -- destroying the logs of the boot that failed.
-    hostname:pn-base-files = "${KIOSK_HOSTNAME}"
+    # hostname is NOT baked. It is site configuration; kiosk-provision sets it
+    # from /data/config/hostname at boot.
 
-    # Every OTA otherwise mints a new machine-id on the new slot's first boot,
-    # so journald opens a fresh /var/log/journal/<id> and orphans the old one.
-    # SystemMaxUse is enforced per machine-id and never bounds the total: four
-    # namespaces reached 136.6MB on a 479MB /data that also stages the ~130MB
-    # bundle. KIOSK_MACHINE_ID is per-unit and lives in secrets.yaml.
-    INHERIT += "kiosk-machine-id"
+    # machine-id is NOT baked -- a fixed id in the image gives every unit the
+    # same identity, and systemd derives the networkd DUID from it. It is
+    # per-device: written into each new slot by the RAUC post-install hook, and
+    # into a fresh card by provisioning. journald reads it at ~8.2s, before
+    # /data is mounted, which is why it must be in the rootfs rather than read
+    # from /data at boot.
 
     # systemd-resolved answered zero queries and cost ~729ms before the gate, to
     # write one file. Masked in kiosk-hardware; this writes the static
     # /etc/resolv.conf that replaces it. Measured -1.03s at basic.target, n=3,
-    # ranges not overlapping, with DNS still resolving. KIOSK_NAMESERVER is a
-    # site value and lives in secrets.yaml.
+    # ranges not overlapping, with DNS still resolving. The nameserver itself is
+    # NOT baked -- /etc/resolv.conf is a symlink into /data/config, written by
+    # provisioning.
     INHERIT += "kiosk-static-resolv"
 
   # update-bundle.bb packages whichever image RAUC_SLOT_rootfs names, and its

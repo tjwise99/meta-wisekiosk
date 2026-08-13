@@ -14,9 +14,6 @@ RDEPENDS:${PN} = "surf xinit xserver-xorg xserver-xorg-module-exa"
 SYSTEMD_SERVICE:${PN} = "kiosk.service"
 SYSTEMD_AUTO_ENABLE = "enable"
 
-# The URL is baked from KIOSK_URL, so changing it must invalidate this task.
-do_install[vardeps] += "KIOSK_URL"
-
 do_install() {
     install -d ${D}${bindir}
     install -m 0755 ${WORKDIR}/kiosk-launch ${D}${bindir}/kiosk-launch
@@ -24,10 +21,9 @@ do_install() {
     install -d ${D}${systemd_system_unitdir}
     install -m 0644 ${WORKDIR}/kiosk.service ${D}${systemd_system_unitdir}/kiosk.service
 
-    install -d ${D}${sysconfdir}
-    # KIOSK_INSPECTOR is written explicitly rather than left undefined, so the
-    # switch is discoverable by reading the file on the device.
-    printf 'KIOSK_URL=%s\nKIOSK_INSPECTOR=0\n' "${KIOSK_URL}" > ${D}${sysconfdir}/kiosk.conf
+    # No /etc/kiosk.conf is generated. KIOSK_URL is site configuration and the
+    # image must not carry it; kiosk.service reads /data/config/kiosk.conf,
+    # written by provisioning.
 }
 
-FILES:${PN} += "${systemd_system_unitdir}/kiosk.service ${sysconfdir}/kiosk.conf"
+FILES:${PN} += "${systemd_system_unitdir}/kiosk.service"
