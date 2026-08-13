@@ -95,6 +95,14 @@ local_conf_header:
     # DEPENDS and which therefore needs a bbappend plus cmake video/audio flags:
     # a different kind of change, deliberately not batched with this one.
     PACKAGECONFIG:remove:pn-webkitgtk3 = "jit gtk4 enchant"
+
+    # iproute2-tc: ingress rate policing, so the board enforces its own receive
+    # ceiling instead of trusting every sender. The kernel modules (sch_ingress,
+    # act_police, sch_tbf, cls_u32) are already built in; only the binary was
+    # missing. This MUST live here, not in autonomos-common.inc -- the kas target
+    # is core-image-base, and that .inc is only included by autonomos-base.bb,
+    # which is not built. The first attempt went there and silently shipped nothing.
+    IMAGE_INSTALL:append = " iproute2-tc"
     PACKAGECONFIG:append:pn-webkitgtk3 = " reduce-size"
     IMAGE_INSTALL:append = " surf kiosk-session kiosk-soak kiosk-journal kiosk-hardware kiosk-netcheck kiosk-bootprof zram wpa-supplicant-service packagegroup-core-x11 xwininfo xprop ttf-roboto imagemagick tzdata-core tzdata-americas"
 
