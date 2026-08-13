@@ -188,10 +188,24 @@ kiosk-preflight image="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wi
     echo "preflight OK"
 
 # Separates the receive burst from the sync: combining them is what hangs it.
+#
+# Defaults retuned 2026-08-13 from 2/4/3 to 8/2/2. The old values were simply
+# the first shape that worked and were never tested against anything; they put
+# ~7.3min of pure sleeping into a 20min transfer. Measured after seeding the
+# defect first (24MB continuous HUNG, 0 bytes, watchdog recovered):
+#
+#   24MB  chunk=8 rx=2 sync=2   32s   clean
+#   40MB  chunk=8 rx=2 sync=2   52s   clean
+#   125MB chunk=8 rx=2 sync=2   6min  15 bursts, 0 hangs, md5 MATCH
+#
+# 806KB/s against 104KB/s. The board needs DISCONTINUITY, not small chunks or
+# long pauses -- consistent with the trigger being continuous receive rather
+# than rate or volume. The mechanism is still not understood: this is a bound
+# established at operational scale, not an explanation.
 [group('ota')]
 [script('bash')]
 [doc("Deliver a bundle in chunked bursts, verified end to end")]
-kiosk-send bundle="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host="root@192.168.1.6" chunk_mb="2" rx_pause="4" sync_pause="3":
+kiosk-send bundle="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host="root@192.168.1.6" chunk_mb="8" rx_pause="2" sync_pause="2":
     KIOSK_HOST={{host}} tools/send-bundle-chunked.sh {{bundle}} {{chunk_mb}} {{rx_pause}} {{sync_pause}}
 
 # Does NOT reboot -- inspect `rauc status` first, then `just kiosk-reboot`.
