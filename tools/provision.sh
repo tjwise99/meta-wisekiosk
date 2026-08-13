@@ -16,9 +16,17 @@ set -euo pipefail
 
 MODE=${1:?usage: provision.sh device <ssh-target> | card <mounted-/data>}
 DEST=${2:?usage: provision.sh device <ssh-target> | card <mounted-/data>}
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
-SEC="$ROOT/secrets.yaml"
-[ -r "$SEC" ] || { echo "no $SEC -- copy secrets.yaml.tmpl and fill it in"; exit 1; }
+# The secrets live OUTSIDE the repository, deliberately. Nothing site-specific
+# reaches the image any more, so the build must not be able to read them even by
+# accident: with no secrets.yaml in the tree and no kas include for it, a
+# leftover ${WIFI_SSID} expands to empty and breaks loudly instead of silently
+# baking a real credential into a bundle.
+SEC=${KIOSK_SECRETS:-$HOME/.config/wisekiosk/secrets.yaml}
+[ -r "$SEC" ] || {
+    echo "no secrets at $SEC"
+    echo "copy secrets.yaml.tmpl there and fill it in, or set KIOSK_SECRETS"
+    exit 1
+}
 
 val() { sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\"\(.*\)\"[[:space:]]*$/\1/p" "$SEC" | head -n1; }
 SSID=$(val WIFI_SSID);      PSK=$(val WIFI_PSK_HASH)

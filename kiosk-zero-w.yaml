@@ -9,7 +9,6 @@ header:
   includes:
     - includes/base.yaml
     - includes/platforms/raspberrypi-zero-w.yaml
-    - secrets.yaml
 
 ##################
 # REPOS & LAYERS #
