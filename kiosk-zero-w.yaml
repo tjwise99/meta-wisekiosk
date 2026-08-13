@@ -89,7 +89,13 @@ local_conf_header:
 
   kiosk: |
     AUTONOMOS_FEATURES = "graphics"
-    PACKAGECONFIG:remove:pn-webkitgtk3 = "jit gtk4"
+    # enchant is spellcheck. There is no text input on this kiosk -- no keyboard,
+    # no form, nothing focusable -- so it is a dictionary and two libraries
+    # (enchant2, aspell) for a feature that cannot be reached. It is a real
+    # PACKAGECONFIG, unlike gstreamer, which webkitgtk3 carries in its hard
+    # DEPENDS and which therefore needs a bbappend plus cmake video/audio flags:
+    # a different kind of change, deliberately not batched with this one.
+    PACKAGECONFIG:remove:pn-webkitgtk3 = "jit gtk4 enchant"
     PACKAGECONFIG:append:pn-webkitgtk3 = " reduce-size"
     IMAGE_INSTALL:append = " surf kiosk-session kiosk-soak kiosk-journal kiosk-hardware kiosk-netcheck kiosk-bootprof zram wpa-supplicant-service packagegroup-core-x11 xwininfo xprop ttf-roboto imagemagick tzdata-core tzdata-americas"
 
