@@ -16,17 +16,50 @@ defaults:
 ##################
 # REPOS & LAYERS #
 ##################
+# Every repo is pinned by commit, at the SHAs the 2026-08-14 baseline image was
+# built from. Floating on branch heads makes any manifest difference
+# unattributable -- a rebuild would mix "what we changed" with "what upstream
+# pushed since". Bumping a pin is an edit here, reviewed like any other.
 repos:
+  # No url: kas resolves this to the repository containing this config file.
+  # meta-wisekiosk LAYERDEPENDS on the Raspberry Pi layers, so this file is not
+  # usable alone -- it expects a platform include from includes/platforms/.
+  meta-wisekiosk:
+    layers:
+      meta-wisekiosk:
+
+  # Upstream, consumed as a dependency instead of forked. Pinned at its tip
+  # (dormant since 2026-01-20). patches/ carries the two changes that cannot
+  # be expressed from a downstream layer -- see patches/meta-autonomos/.
+  meta-autonomos:
+    url: "https://github.com/jsmith212/meta-autonomos.git"
+    branch: main
+    commit: 1fd4eb55c2ef0902176986bb0dea90e7c34d02bf
+    path: "sources/meta-autonomos"
+    layers:
+      meta-autonomos-core:
+    patches:
+      01-graphics:
+        repo: meta-wisekiosk
+        path: "patches/meta-autonomos/0001-distro-make-graphics-strip-conditional.patch"
+      02-wpa:
+        repo: meta-wisekiosk
+        path: "patches/meta-autonomos/0002-wpa-supplicant-stop-baking-credentials.patch"
+
   poky:
     url: "https://git.yoctoproject.org/git/poky"
+    commit: 077627338ac18aeca34bfe0c52777fab38e2e0c0
     path: "sources/poky"
     layers:
       meta:
       meta-poky:
       meta-yocto-bsp:
 
+  # https, not git://: git.openembedded.org and git.yoctoproject.org sit behind
+  # Cloudflare, which refuses port 9418.
   meta-openembedded:
-    url: "git://git.openembedded.org/meta-openembedded"
+    url: "https://git.openembedded.org/meta-openembedded"
+    commit: ef3df29f2cfca6a9513b51ebcdccf82b6c8a836f
     path: "sources/meta-openembedded"
     layers:
       meta-oe:
@@ -35,16 +68,14 @@ repos:
       meta-python:
 
   meta-arm:
-    url: "git://git.yoctoproject.org/meta-arm"
+    url: "https://git.yoctoproject.org/meta-arm"
+    commit: 045eb74bd9abe7d9ccf365a2417e440ce83bcbb0
     path: "sources/meta-arm"
     layers:
       meta-arm-toolchain:
       meta-arm:
 
   meta-virtualization:
-    url: "git://git.yoctoproject.org/meta-virtualization"
+    url: "https://git.yoctoproject.org/meta-virtualization"
+    commit: 0d9fb7fef86c5cbc177045c7b86bc71948f8657d
     path: "sources/meta-virtualization"
-
-  meta-autonomos:
-    layers:
-      meta-autonomos-core:

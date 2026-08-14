@@ -1,8 +1,8 @@
 # Shared deploy recipes
 #
 # Required variables (set by importing Justfile):
-#   machine     - Target machine (e.g., raspberrypi5)
-#   image-name  - Image base name (e.g., autonomos-devel)
+#   machine     - Target machine (e.g., raspberrypi0-wifi)
+#   image-name  - Image base name (e.g., core-image-base)
 
 # Flash WIC image to SD card
 [group('deploy')]

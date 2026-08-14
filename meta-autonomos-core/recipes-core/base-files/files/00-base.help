@@ -1,5 +1,0 @@
-[Base System]
-  ll              - List files (ls -alh)
-  switch-part     - Switch to other RAUC slot and reboot
-  rauc status     - Show A/B partition status
-  journalctl -f   - Follow system logs

@@ -1,5 +1,0 @@
-[Containers]
-  docker ps       - List running containers
-  docker images   - List images
-  docker logs     - View container logs
-  Data: /data/docker (persistent)
