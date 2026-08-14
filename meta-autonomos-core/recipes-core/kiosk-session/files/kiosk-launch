@@ -11,7 +11,7 @@ export GDK_GL=disable
 # complete-display measurement, and it should not listen unless asked. Turn it
 # on over SSH with no rebuild and no trip to the device:
 #
-#   sed -i 's/^KIOSK_INSPECTOR=0/KIOSK_INSPECTOR=1/' /etc/kiosk.conf
+#   echo 'KIOSK_INSPECTOR=1' >> /data/config/kiosk.conf   # kiosk.service EnvironmentFile
 #   systemctl restart kiosk
 #   # then from the workstation:  ssh -L 2999:127.0.0.1:2999 root@<kiosk>
 #

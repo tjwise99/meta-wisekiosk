@@ -73,11 +73,14 @@ place to look, not WebKit.
 curl -L -o ~/bin/kas-container https://raw.githubusercontent.com/siemens/kas/5.4/kas-container
 chmod +x ~/bin/kas-container
 
-cp secrets.yaml.tmpl secrets.yaml     # fill in; gitignored, and it must stay that way
+cp secrets.yaml.tmpl ~/.config/wisekiosk/secrets.yaml   # fill in; lives OUTSIDE this public repo
 kas-container build kiosk-zero-w.yaml
 
 # writes to build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/*.wic.bz2
 bzcat <image>.wic.bz2 | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
+
+# the image carries NO site config; provision the flashed card from your out-of-tree secrets:
+tools/provision.sh card
 ```
 
 A full build including WebKit takes **~4.5 h** on 8 cores / 11 GB. Anything that changes
@@ -87,8 +90,11 @@ overscan, UART) are free to change.
 
 ### Configuration
 
-Everything device-specific lives in the gitignored `secrets.yaml`: WiFi SSID and PSK hash, kiosk URL,
-hostname, mirror host. The tracked template carries names with empty values only.
+Every device-specific value lives **outside this repository**, in `~/.config/wisekiosk/secrets.yaml`
+(override with `$KIOSK_SECRETS`): WiFi SSID and PSK hash, kiosk URL, hostname, mirror host, machine-id.
+The image carries **no** site config; `tools/provision.sh` reads these and writes `/data/config` on
+the flashed card, which the device reads at runtime. The tracked `secrets.yaml.tmpl` carries names
+with empty values only, and CI rejects a `secrets.yaml` committed to the tree.
 
 **kas merges `local_conf_header` by block name and the top-level file wins**, so a block named the
 same as one in `kiosk-zero-w.yaml` is discarded silently — no warning, no error, variables that never
@@ -246,7 +252,7 @@ The `read-only-rootfs` feature makes the root filesystem immutable, improving re
 
 | Path               | Purpose                            |
 | ------------------ | ---------------------------------- |
-| `/etc/machine-id`  | Unique system ID (bind from /data) |
+| `/etc/machine-id`  | Unique system ID, provisioned to `/data/etc` (pin gap tracked in #10) |
 | `/var/log/journal` | System logs (bind from /data)      |
 | `/var/lib/docker`  | Docker images/volumes (symlink)    |
 | `/data/*`          | All application data               |
@@ -352,16 +358,10 @@ reboot
 
 ## Secrets Configuration
 
-Create a `secrets.yaml` file (do not commit to version control):
-
-```yaml
-local_conf_header:
-  wifi: |
-    WPA_SSID = "YourNetwork"
-    WPA_PSK = "YourPassword"
-```
-
-Use the provided `secrets.yaml.tmpl` as a template.
+Site values live **outside this public repository**, at `~/.config/wisekiosk/secrets.yaml` (override
+with `$KIOSK_SECRETS`). A `secrets.yaml` committed to the tree is rejected by CI. Copy the tracked
+`secrets.yaml.tmpl` there and fill it in — `tools/provision.sh` reads it and writes `/data/config` on
+the card.
 
 ## Adding New Platforms
 
