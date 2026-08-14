@@ -1,4 +1,0 @@
-[Read-Only Rootfs]
-  write-enable    - Temporarily make rootfs writable
-  write-disable   - Re-enable read-only protection
-  Persistent: /data/*, /etc/machine-id, /var/log/journal, SSH keys

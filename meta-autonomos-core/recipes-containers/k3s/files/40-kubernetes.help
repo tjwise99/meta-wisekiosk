@@ -1,5 +1,0 @@
-[Kubernetes]
-  kubectl get pods   - List pods
-  kubectl get nodes  - List nodes
-  k3s kubectl ...    - Direct k3s kubectl
-  Data: /data/k3s (persistent)

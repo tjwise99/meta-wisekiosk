@@ -1,0 +1,45 @@
+From 4a1fa185648251f7f232ffa79ef237aded335784 Mon Sep 17 00:00:00 2001
+From: Wise <47094117+tjwise99@users.noreply.github.com>
+Date: Fri, 14 Aug 2026 02:00:37 -0400
+Subject: [PATCH 1/2] distro: make graphics strip conditional
+
+DISTRO_FEATURES:remove = " x11 wayland" cannot be undone from downstream.
+bitbake applies :remove after every :append, so no layer, image or local.conf
+can put x11 back; the symptom is a recipe failing its REQUIRED_DISTRO_FEATURES
+check for a feature you can point at in your own configuration. The conditional
+therefore has to live at the source, which is why this is a patch against
+meta-autonomos rather than a bbappend in the consuming layer.
+
+Gating the removal on AUTONOMOS_FEATURES follows the pattern autonomos.conf
+already uses for containers, kubernetes and read-only-rootfs. Default behaviour
+is unchanged: without 'graphics' in AUTONOMOS_FEATURES the removal is exactly
+what it was.
+
+Upstream submission: suitable to submit -- this is a general fix, not specific
+to any board. Not yet submitted; upstream has been dormant since 2026-01-20.
+
+Applied by kas at checkout (see includes/base.yaml); the applied tree must equal
+the pre-restructure fork content -- verified by diff in the migration PR.
+---
+ meta-autonomos-core/conf/distro/autonomos.conf | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/meta-autonomos-core/conf/distro/autonomos.conf b/meta-autonomos-core/conf/distro/autonomos.conf
+index e0e334f..53341bb 100644
+--- a/meta-autonomos-core/conf/distro/autonomos.conf
++++ b/meta-autonomos-core/conf/distro/autonomos.conf
+@@ -19,8 +19,9 @@ VIRTUAL-RUNTIME_init_manager = "systemd"
+ VIRTUAL-RUNTIME_initscripts = "systemd-compat-units"
+ VIRTUAL-RUNTIME_network_manager = "networkd"
+ 
+-# Strip out unnecessary graphical support
+-DISTRO_FEATURES:remove = " x11 wayland"
++# Strip out unnecessary graphical support. A :remove cannot be undone by a later append, so this
++# has to be conditional at the source rather than overridden by an image or local.conf.
++DISTRO_FEATURES:remove = "${@bb.utils.contains('AUTONOMOS_FEATURES', 'graphics', '', ' x11 wayland', d)}"
+ 
+ # Use IPK package format
+ PACKAGE_CLASSES = "package_ipk"
+-- 
+2.53.0
+

@@ -6,22 +6,27 @@ header:
 repos:
   meta-raspberrypi:
     url: "https://github.com/agherzan/meta-raspberrypi.git"
+    commit: 6ca1f75017cc5d5acdb8bb05634c4bc01fa049fd
     path: "sources/meta-raspberrypi"
 
   meta-lts-mixins:
     url: https://git.yoctoproject.org/meta-lts-mixins
     # Workaround for U-Boot patch incompatibility with raspberrypi layer
     branch: scarthgap/u-boot
+    commit: a44882db02a0ed0f149371831bfbe067665eb42b
     path: "sources/meta-lts-mixins"
 
   meta-rauc-community:
     url: "https://github.com/rauc/meta-rauc-community.git"
+    commit: 222c61275054974cdbd09bd5faa2b7a37ddbd840
     path: "sources/meta-rauc-community"
     branch: scarthgap
     layers:
       meta-rauc-raspberrypi:
 
-  # Add the Raspberry Pi platform layer
+  # Add the Raspberry Pi platform layer. kas merges repo dictionaries across
+  # include files, so this enables a second layer inside the meta-autonomos repo
+  # that includes/base.yaml declares and pins.
   meta-autonomos:
     layers:
       meta-autonomos-raspberrypi:

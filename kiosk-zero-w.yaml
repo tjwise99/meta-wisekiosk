@@ -2,30 +2,14 @@
 # HEADER #
 ##########
 # Kiosk image for the Raspberry Pi Zero W: surf on WebKitGTK, no desktop, no
-# window manager. See docs in the kiosk-reference project for the phase plan --
-# Phase 0a is `bitbake webkitgtk3 surf`, which needs no image and no card.
+# window manager. This is the only kas config in the repo; it pulls in the repo
+# pins (includes/base.yaml, which fetches meta-autonomos and patches it) and the
+# machine, then adds everything specific to this image below.
 header:
   version: 20
   includes:
     - includes/base.yaml
     - includes/platforms/raspberrypi-zero-w.yaml
-
-##################
-# REPOS & LAYERS #
-##################
-# base.yaml fetches these three over git://, which git.openembedded.org and
-# git.yoctoproject.org no longer serve -- both now resolve to Cloudflare, which
-# fronts HTTP/HTTPS only and refuses port 9418. Branch pins from base.yaml are
-# inherited; only the URL changes here.
-repos:
-  meta-openembedded:
-    url: "https://git.openembedded.org/meta-openembedded"
-
-  meta-arm:
-    url: "https://git.yoctoproject.org/meta-arm"
-
-  meta-virtualization:
-    url: "https://git.yoctoproject.org/meta-virtualization"
 
 ##########
 # TARGET #
