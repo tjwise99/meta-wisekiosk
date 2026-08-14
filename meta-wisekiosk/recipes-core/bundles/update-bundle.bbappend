@@ -6,5 +6,12 @@ FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
 SRC_URI += "file://kiosk-slot-hook.sh"
 
+# Required by the SRC_URI above: insane.bbclass fails do_populate_lic for any
+# recipe that fetches files without LIC_FILES_CHKSUM, and returns early only for
+# CLOSED. The bundle is an internal artefact, so CLOSED is the accurate
+# declaration rather than a silencer. It lives here, with the SRC_URI that
+# provokes the check, instead of in upstream's update-bundle.bb.
+LICENSE = "CLOSED"
+
 RAUC_BUNDLE_HOOKS[file] = "kiosk-slot-hook.sh"
 RAUC_SLOT_rootfs[hooks] = "post-install"
