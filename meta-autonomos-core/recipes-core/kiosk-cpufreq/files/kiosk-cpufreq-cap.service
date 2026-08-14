@@ -1,0 +1,30 @@
+[Unit]
+# The Pi Zero W's top OPP (1000 MHz) is unstable under sustained SDIO + network
+# load on this board. Measured 2026-08-13: a 120 MB unthrottled receive killed
+# it 2/2 pinned at 1000 MHz and ~8/8 with the stock uncapped ondemand governor,
+# while 8/8 survived at every OPP below it -- including ondemand capped here,
+# with frequency transitions still occurring. So transitions are fine; the top
+# OPP is not.
+#
+# The crash is a bogus indirect branch in the softirq network receive path
+# (deliver_skb -> pt_prev->func()), captured via pstore. Matches
+# raspberrypi/linux #2555, where six independent users report force_turbo +
+# over_voltage as the fix.
+#
+# This caps the frequency instead, because it ships in the image and arrives by
+# OTA. over_voltage would need a /boot write, which cannot be delivered by OTA
+# at all -- config.txt lives on the shared FAT partition.
+#
+# Cost: 10% of peak CPU. Revert: systemctl disable --now kiosk-cpufreq-cap
+Description=Cap CPU frequency below the unstable top OPP
+After=sysinit.target
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'echo 900000 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq'
+ExecStart=/bin/sh -c 'echo "cpufreq capped at $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq) kHz" > /dev/kmsg'
+
+[Install]
+WantedBy=sysinit.target

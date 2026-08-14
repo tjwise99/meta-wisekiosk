@@ -1,9 +1,15 @@
 [Unit]
 Description=Bring up wlan0 in client mode using wpa_supplicant
+# The credentials live on /data, not in the image: a rootfs carrying one site's
+# SSID and PSK hash is one image per site, and puts those credentials inside
+# every update bundle.
+After=data.mount
+Requires=data.mount
+ConditionPathIsMountPoint=/data
 
 [Service]
 Type=forking
-ExecStart=wpa_supplicant -i wlan0 -B -c /etc/wpa_supplicant.conf
+ExecStart=wpa_supplicant -i wlan0 -B -c /data/config/wpa_supplicant.conf
 
 [Install]
 WantedBy=network.target

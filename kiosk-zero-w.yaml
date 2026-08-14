@@ -9,7 +9,6 @@ header:
   includes:
     - includes/base.yaml
     - includes/platforms/raspberrypi-zero-w.yaml
-    - secrets.yaml
 
 ##################
 # REPOS & LAYERS #
@@ -89,7 +88,47 @@ local_conf_header:
 
   kiosk: |
     AUTONOMOS_FEATURES = "graphics"
-    PACKAGECONFIG:remove:pn-webkitgtk3 = "jit gtk4"
+    # enchant is spellcheck. There is no text input on this kiosk -- no keyboard,
+    # no form, nothing focusable -- so it is a dictionary and two libraries
+    # (enchant2, aspell) for a feature that cannot be reached. It is a real
+    # PACKAGECONFIG, unlike gstreamer, which webkitgtk3 carries in its hard
+    # DEPENDS and which therefore needs a bbappend plus cmake video/audio flags:
+    # a different kind of change, deliberately not batched with this one.
+    PACKAGECONFIG:remove:pn-webkitgtk3 = "jit gtk4 enchant"
+
+    # iproute2-tc: ingress rate policing, so the board enforces its own receive
+    # ceiling instead of trusting every sender. The kernel modules (sch_ingress,
+    # act_police, sch_tbf, cls_u32) are already built in; only the binary was
+    # missing. This MUST live here, not in autonomos-common.inc -- the kas target
+    # is core-image-base, and that .inc is only included by autonomos-base.bb,
+    # which is not built. The first attempt went there and silently shipped nothing.
+    IMAGE_INSTALL:append = " iproute2-tc"
+
+    # kiosk-cpufreq: caps scaling_max_freq below this board's unstable top OPP.
+    # THE fix for the crash diagnosed 2026-08-13 -- 1000 MHz corrupts memory
+    # under sustained SDIO + network load (2/2 deaths pinned there; 8/8
+    # survivals at every OPP below, with the governor still switching). It ships
+    # in the image specifically so it arrives by OTA: the config.txt
+    # over_voltage route that upstream reports use lives on the shared FAT
+    # partition and can never be delivered to a wall-mounted unit remotely.
+    IMAGE_INSTALL:append = " kiosk-cpufreq"
+
+    # ramoops: persistent RAM store, so a kernel panic survives the reset. This
+    # is what finally captured the root cause. A userspace witness cannot see a
+    # panic by construction -- after one, no userspace is ever scheduled again --
+    # so no amount of fsync could ever have caught it.
+    #
+    # Both halves are needed and neither is a default: the overlay is absent
+    # from meta-raspberrypi's 70-entry whitelist, and the stock overlay ships
+    # console-size=0, which disables the one zone that carries the log tail.
+    #
+    # NOTE: this reaches the device only on a CARD REFLASH. config.txt and the
+    # overlays live on the shared FAT partition, which RAUC never touches
+    # (RAUC_BUNDLE_SLOTS = "rootfs"). The running unit already has both, hand
+    # installed 2026-08-13; this exists so a rebuilt card is not silently worse
+    # than the unit in the field.
+    RPI_KERNEL_DEVICETREE_OVERLAYS:append = " overlays/ramoops.dtbo"
+    RPI_EXTRA_CONFIG:append = "\ndtoverlay=ramoops,total-size=0x40000,record-size=0x8000,console-size=0x20000\n"
     PACKAGECONFIG:append:pn-webkitgtk3 = " reduce-size"
     IMAGE_INSTALL:append = " surf kiosk-session kiosk-soak kiosk-journal kiosk-hardware kiosk-netcheck kiosk-bootprof zram wpa-supplicant-service packagegroup-core-x11 xwininfo xprop ttf-roboto imagemagick tzdata-core tzdata-americas"
 
@@ -118,14 +157,23 @@ local_conf_header:
     # systemd -> gtk+3/at-spi2-core -> webkitgtk3, costing a multi-hour WebKit
     # rebuild. It also puts the journal on the rootfs slot, which an A/B update
     # replaces -- destroying the logs of the boot that failed.
-    hostname:pn-base-files = "${KIOSK_HOSTNAME}"
+    # hostname is NOT baked. It is site configuration; kiosk-provision sets it
+    # from /data/config/hostname at boot.
 
-    # Every OTA otherwise mints a new machine-id on the new slot's first boot,
-    # so journald opens a fresh /var/log/journal/<id> and orphans the old one.
-    # SystemMaxUse is enforced per machine-id and never bounds the total: four
-    # namespaces reached 136.6MB on a 479MB /data that also stages the ~130MB
-    # bundle. KIOSK_MACHINE_ID is per-unit and lives in secrets.yaml.
-    INHERIT += "kiosk-machine-id"
+    # machine-id is NOT baked -- a fixed id in the image gives every unit the
+    # same identity, and systemd derives the networkd DUID from it. It is
+    # per-device: written into each new slot by the RAUC post-install hook, and
+    # into a fresh card by provisioning. journald reads it at ~8.2s, before
+    # /data is mounted, which is why it must be in the rootfs rather than read
+    # from /data at boot.
+
+    # systemd-resolved answered zero queries and cost ~729ms before the gate, to
+    # write one file. Masked in kiosk-hardware; this writes the static
+    # /etc/resolv.conf that replaces it. Measured -1.03s at basic.target, n=3,
+    # ranges not overlapping, with DNS still resolving. The nameserver itself is
+    # NOT baked -- /etc/resolv.conf is a symlink into /data/config, written by
+    # provisioning.
+    INHERIT += "kiosk-static-resolv"
 
   # update-bundle.bb packages whichever image RAUC_SLOT_rootfs names, and its
   # default is autonomos-devel -- a different image, with no surf and no kiosk
@@ -226,7 +274,12 @@ local_conf_header:
   parallel: |
     BB_NUMBER_THREADS = "6"
     PARALLEL_MAKE = "-j6"
-    PARALLEL_MAKE:pn-webkitgtk3 = "-j6"
+    # webkitgtk3 translation units peak at 1.0-1.3 GB of compiler RSS. At -j6 on a
+    # 12 GB host this swapped 22 million pages and ran the compilers at ~8% CPU
+    # efficiency -- one source file accumulated 3h45m of wall time for 19 min of
+    # CPU, and the build managed 64 ninja edges in 50 minutes. -j2 is not a
+    # throttle, it is the setting that finishes first.
+    PARALLEL_MAKE:pn-webkitgtk3 = "-j2"
     BB_PRESSURE_MAX_MEMORY = "20000"
 
   diskmonitoring: |

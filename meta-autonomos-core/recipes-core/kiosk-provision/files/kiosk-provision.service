@@ -1,0 +1,16 @@
+[Unit]
+Description=Apply per-site configuration from /data
+DefaultDependencies=no
+# /data has to be mounted, and every consumer has to run after this.
+After=data.mount
+Requires=data.mount
+Before=wpa_supplicant.service systemd-timesyncd.service kiosk.service network-pre.target
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/kiosk-provision
+
+[Install]
+WantedBy=sysinit.target

@@ -15,14 +15,41 @@ fail=0
 bad() { printf 'FAIL  %s\n' "$*"; fail=1; }
 ok()  { printf 'ok    %s\n' "$*"; }
 
-# --- 1. secrets.yaml must never be tracked --------------------------------
-# This repository is PUBLIC. secrets.yaml holds the SSID, the PSK hash, the site
-# hostname and the device machine-id. None of that is credential-shaped, so no
-# secret scanner would stop it -- which is exactly why it needs its own check.
+# --- 1. secrets must not be in the tree AT ALL ----------------------------
+# This repository is PUBLIC, and secrets.yaml holds the SSID, the PSK hash, the
+# site hostname and the device machine-id -- none of it credential-shaped, so no
+# scanner would stop it.
+#
+# Stronger than "untracked": the file must not EXIST here. Nothing site-specific
+# reaches the image any more, so the build has no reason to read it, and a build
+# that cannot read it cannot bake it. Secrets live at
+# $KIOSK_SECRETS or ~/.config/wisekiosk/secrets.yaml.
 if [ -n "$(git ls-files -- secrets.yaml)" ]; then
-    bad "secrets.yaml is tracked -- it is gitignored for a reason"
+    bad "secrets.yaml is TRACKED -- this repository is public"
+elif [ -e secrets.yaml ]; then
+    bad "secrets.yaml exists in the tree -- move it to ~/.config/wisekiosk/secrets.yaml"
 else
-    ok "secrets.yaml is not tracked"
+    ok "no secrets.yaml in the tree"
+fi
+
+# --- 1b. no site value may be a build input -------------------------------
+# The fail-closed half. If one of these is ever referenced again, the build
+# would bake one site's configuration into every image and put that site's
+# wireless credentials inside every update bundle.
+sitevals=$(grep -rnE '\$\{(WIFI_SSID|WIFI_PSK_HASH|KIOSK_URL|KIOSK_HOSTNAME|KIOSK_MACHINE_ID|KIOSK_NAMESERVER)\}' \
+    kiosk-zero-w.yaml meta-autonomos-core meta-autonomos-raspberrypi includes 2>/dev/null \
+    | grep -vE ':[[:space:]]*#')
+if [ -n "$sitevals" ]; then
+    bad "site configuration is a build input again:"
+    printf '%s\n' "$sitevals" | sed 's/^/        /'
+else
+    ok "no site value reaches the image"
+fi
+
+if grep -qE '^[[:space:]]*-[[:space:]]*secrets\.yaml' kiosk-zero-w.yaml 2>/dev/null; then
+    bad "kiosk-zero-w.yaml still includes secrets.yaml as a kas include"
+else
+    ok "secrets.yaml is not a kas include"
 fi
 
 # --- 2. the tracked template must stay empty ------------------------------

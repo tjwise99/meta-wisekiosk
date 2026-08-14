@@ -188,10 +188,24 @@ kiosk-preflight image="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wi
     echo "preflight OK"
 
 # Separates the receive burst from the sync: combining them is what hangs it.
+#
+# Defaults retuned 2026-08-13 from 2/4/3 to 8/2/2. The old values were simply
+# the first shape that worked and were never tested against anything; they put
+# ~7.3min of pure sleeping into a 20min transfer. Measured after seeding the
+# defect first (24MB continuous HUNG, 0 bytes, watchdog recovered):
+#
+#   24MB  chunk=8 rx=2 sync=2   32s   clean
+#   40MB  chunk=8 rx=2 sync=2   52s   clean
+#   125MB chunk=8 rx=2 sync=2   6min  15 bursts, 0 hangs, md5 MATCH
+#
+# 806KB/s against 104KB/s. The board needs DISCONTINUITY, not small chunks or
+# long pauses -- consistent with the trigger being continuous receive rather
+# than rate or volume. The mechanism is still not understood: this is a bound
+# established at operational scale, not an explanation.
 [group('ota')]
 [script('bash')]
 [doc("Deliver a bundle in chunked bursts, verified end to end")]
-kiosk-send bundle="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host="root@192.168.1.6" chunk_mb="2" rx_pause="4" sync_pause="3":
+kiosk-send bundle="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host="root@192.168.1.6" chunk_mb="8" rx_pause="2" sync_pause="2":
     KIOSK_HOST={{host}} tools/send-bundle-chunked.sh {{bundle}} {{chunk_mb}} {{rx_pause}} {{sync_pause}}
 
 # Does NOT reboot -- inspect `rauc status` first, then `just kiosk-reboot`.
@@ -202,6 +216,20 @@ kiosk-install host="root@192.168.1.6":
     SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
     echo "== before"
     $SSH {{host}} 'fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT; rauc status 2>&1 | grep -E "Booted|Activated|boot status"'
+    echo "== clock sanity: RAUC rejects a bundle whose cert is not yet valid"
+    # This board has NO RTC and NO fake-hwclock, so every boot starts in the
+    # past and only NTP moves it forward. An install that races NTP fails with
+    # "certificate is not yet valid", which reads like a broken bundle and is
+    # not. Cost a confusing failure on 2026-08-13 after a clean 119 MB transfer.
+    DEV_EPOCH=$($SSH {{host}} 'date +%s')
+    HOST_EPOCH=$(date +%s)
+    SKEW=$(( HOST_EPOCH - DEV_EPOCH ))
+    echo "   device epoch $DEV_EPOCH, host $HOST_EPOCH, skew ${SKEW}s"
+    if [ "$SKEW" -gt 3600 ] || [ "$SKEW" -lt -3600 ]; then
+        echo "   device clock is off by ${SKEW}s -- setting it from this host before installing"
+        $SSH {{host}} "date -u -s '$(date -u '+%Y-%m-%d %H:%M:%S')'"
+        echo "   device now: $($SSH {{host}} date)"
+    fi
     echo "== verifying bundle signature against the device keyring"
     $SSH {{host}} 'rauc info /data/update.raucb' || { echo "bundle did not verify -- refusing to install"; exit 1; }
     echo "== installing"

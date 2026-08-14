@@ -80,3 +80,16 @@ guards:
 install-hooks:
     git config core.hooksPath .githooks
     @echo "core.hooksPath -> .githooks (pre-commit runs tools/ci-guards.sh)"
+
+# Write per-site config to a device's /data. The image carries none of it.
+[group('provision')]
+[doc("Provision a reachable device's /data from secrets.yaml")]
+provision-device host="root@192.168.1.6":
+    tools/provision.sh device {{host}}
+
+# Before first boot: the wifi credentials are what let you reach the device, so
+# the first write cannot come over the network.
+[group('provision')]
+[doc("Provision a mounted /data partition on a fresh card")]
+provision-card mountpoint:
+    tools/provision.sh card {{mountpoint}}
