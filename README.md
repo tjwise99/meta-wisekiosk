@@ -19,7 +19,7 @@
 
 ## TODO: fixes to send upstream
 
-Three 1. juss found while bringing up the Zero W target. **None is specific to this board** — each
+Three fixes, found while bringing up the Zero W target. **None is specific to this board** — each
 affects anyone building the upstream layer today — so they are worth offering back rather than
 keeping as local divergence. Commits are on `zero-w-port`.
 
@@ -59,13 +59,28 @@ Verified 2026-08-11 on a Pi Zero W (BCM2835, ARMv6, 512MB).
 | Browser | `surf` 2.1 + the kiosk patch (milestones, override-redirect, shims) |
 | Display | bare Xorg, `xf86-video-fbdev`, no display manager, no window manager |
 | Update | RAUC A/B over U-Boot — both slots visible, **rollback never exercised** |
-| Complete display | **57.08 s** (n=3) vs **47.53 s** for the Raspbian config it replaces — **slower**, see below |
+| Complete display | **53.65 s** (n=3) vs **47.53 s** for the Raspbian config it replaces — **slower**, see below |
 | Memory | 87 MB used of 428; zram present and never touched |
 
-**It is ~9.5 s slower than the configuration it replaces, and the gap is boot, not the browser.**
+**It is ~6.1 s slower than the configuration it replaces, and the gap is boot, not the browser.**
 `surf` does not exec until ~41 s, against ~34 s on Raspbian. **No systemd unit in this image has ever
 been trimmed**, while the Raspbian setup went through five rounds of removals. That is the first
 place to look, not WebKit.
+
+### Why the Zero W target exists
+
+The impetus is **WiseKiosk**: this wall-mounted Zero W behind one-way glass. The previous build was
+stock Raspberry Pi OS (Raspbian), and it hit two walls. **Compatibility** — the newest browser that
+runs on genuine ARMv6 is years behind, the package archives for this board are going dark, and the
+side-by-side Chromium install needed to work the platform was a standing maintenance cost.
+**Performance** — a stock distribution boots a load of services this kiosk never uses, all paid on
+one 1 GHz ARM11 core before a frame is drawn. A hand-rolled Yocto image answers both: the browser is
+compiled from source for `Tag_CPU_arch: v6KZ` instead of pulled from a dying archive, and the image
+starts from nothing and adds only what the kiosk needs — the boot-trim work is where the performance
+win is meant to land, and RAUC A/B gives this unreachable device the over-the-air rollback the
+Raspbian card never had.
+
+Full field notes are in [`docs/`](docs/).
 
 ### Build and flash
 
@@ -104,13 +119,11 @@ reach bitbake. Keep the keys unique.
 
 - **Rollback has never been exercised.** RAUC reports healthy slots; that is not the same as proving
   a bad update rolls back, or that a slow-but-healthy boot does *not* trigger one. A first boot takes
-  ~57 s to render, which a naive health-check timeout would fail.
+  ~54 s to render, which a naive health-check timeout would fail.
 - **Signing keys are the development keys** shipped upstream. Production needs its own, and the
   decision is one-way: a device trusts only the keyring baked into its rootfs.
 - **The soak sampler is not a recipe** — it is installed at runtime and will not survive a reflash.
   Its log lives on `/data` and does survive an A/B update.
-- **Config is build-time.** `KIOSK_URL` is baked; the runtime `/data/kiosk.conf` override is designed
-  but not implemented, so a URL change is currently a rebuild.
 - **Screen blanking over a long idle is unverified.** `-s 0 -dpms -nocursor` moved from lightdm into
   the kiosk unit; that failure only appears after ~20 minutes.
 

@@ -1,0 +1,11 @@
+# Paths and commands the docs name that the Yocto image does not carry, each
+# with the reason it is absent. A waiver is not a way to silence the check --
+# it is where the next contributor meets an argument instead of a gap.
+#
+# Add a line only when the absence is intended. If a binary is missing because
+# the image lost something the docs still prescribe, fix the doc or the image;
+# that is the case this check exists to catch.
+
+/usr/bin/chromium-browser  # SL16G Raspbian card only. Kept installed there for CDP debugging (owner, 2026-08-06); never in the Yocto image.
+/usr/bin/node              # Workstation path in a lessons entry, not a device path.
+/usr/bin/urxvt             # Named by image-trim-recommendations.md ONLY to record that it is absent: the struck-through row exists because the "comes with packagegroup-core-x11" claim was checked on 2026-08-13 and was never true. Removing the row would lose the correction and invite the same wrong recommendation back.

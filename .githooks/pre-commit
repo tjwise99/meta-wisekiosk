@@ -1,4 +1,15 @@
 #!/bin/sh
 # Same guards CI runs, so a commit cannot pass here and fail there.
 # Install with: just install-hooks
-exec tools/ci-guards.sh
+#
+# A repo-local core.hooksPath shadows the GLOBAL pre-commit, which is the
+# authoritative, fail-closed gitleaks gate (it fixes up PATH for the Nix profile
+# and blocks the commit if the scanner is missing). ci-guards' own gitleaks
+# check fails OPEN -- it skips when gitleaks is not on PATH -- so this hook must
+# also invoke the global one, or a bare-PATH commit could bypass secret scanning.
+tools/ci-guards.sh || exit 1
+
+global=$(git config --global --get core.hooksPath 2>/dev/null)
+case "$global" in "~/"*) global="$HOME/${global#\~/}" ;; esac
+[ -x "$global/pre-commit" ] && exec "$global/pre-commit"
+exit 0
