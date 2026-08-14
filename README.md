@@ -67,6 +67,21 @@ Verified 2026-08-11 on a Pi Zero W (BCM2835, ARMv6, 512MB).
 been trimmed**, while the Raspbian setup went through five rounds of removals. That is the first
 place to look, not WebKit.
 
+### Why the Zero W target exists
+
+The impetus is **WiseKiosk**: this wall-mounted Zero W behind one-way glass. The previous build was
+stock Raspberry Pi OS (Raspbian), and it hit two walls. **Compatibility** — the newest browser that
+runs on genuine ARMv6 is years behind, the package archives for this board are going dark, and the
+side-by-side Chromium install needed to work the platform was a standing maintenance cost.
+**Performance** — a stock distribution boots a load of services this kiosk never uses, all paid on
+one 1 GHz ARM11 core before a frame is drawn. A hand-rolled Yocto image answers both: the browser is
+compiled from source for `Tag_CPU_arch: v6KZ` instead of pulled from a dying archive, and the image
+starts from nothing and adds only what the kiosk needs — the boot-trim work is where the performance
+win is meant to land, and RAUC A/B gives this unreachable device the over-the-air rollback the
+Raspbian card never had.
+
+Full field notes are in [`docs/`](docs/).
+
 ### Build and flash
 
 ```sh

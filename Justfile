@@ -81,6 +81,31 @@ install-hooks:
     git config core.hooksPath .githooks
     @echo "core.hooksPath -> .githooks (pre-commit runs tools/ci-guards.sh)"
 
+# === Documentation checks ===
+
+# Verify the docs/ tree: cross-references resolve, and prose matches the shipped image.
+[group('check')]
+[doc("Run every documentation check against docs/")]
+[script('bash')]
+verify:
+    rc=0
+    python3 tools/doc-links.py docs || rc=1
+    python3 tools/doc-image.py check docs tools/image-snapshot.json tools/doc-image-waivers.txt || rc=1
+    if [ $rc -ne 0 ]; then echo; echo "verify FAILED"; fi
+    exit $rc
+
+# Cross-references in docs/: [text](path), #anchors, and section-name refs must resolve.
+[group('check')]
+[doc("Check that every docs/ cross-reference resolves")]
+links:
+    python3 tools/doc-links.py docs
+
+# docs/ prose vs what the image actually ships (needs tools/image-snapshot.json).
+[group('check')]
+[doc("Check docs/ against what the image ships")]
+image:
+    python3 tools/doc-image.py check docs tools/image-snapshot.json tools/doc-image-waivers.txt
+
 # Write per-site config to a device's /data. The image carries none of it.
 [group('provision')]
 [doc("Provision a reachable device's /data from secrets.yaml")]

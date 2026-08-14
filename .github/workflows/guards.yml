@@ -34,3 +34,8 @@ jobs:
 
       - name: Run repository guards
         run: tools/ci-guards.sh
+
+      - name: Run documentation gate
+        run: |
+          python3 tools/doc-links.py docs
+          python3 tools/doc-image.py check docs tools/image-snapshot.json tools/doc-image-waivers.txt
