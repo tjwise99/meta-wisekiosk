@@ -70,8 +70,10 @@ cp secrets.yaml.tmpl ~/.config/wisekiosk/secrets.yaml   # fill in; lives OUTSIDE
 just build          # kas fetches sources/, applies the patches, builds core-image-base
 ```
 
-`just build` is `kas-container build kiosk-zero-w.yaml`. The first run clones every repo in
-`includes/base.yaml` into `sources/` — several GB and a long while before any compiling starts.
+`just build` is `kas-container build kiosk-zero-w.yaml`. The first run clones every repo declared
+across the kas include chain — `includes/base.yaml`, `includes/rauc.yaml` and
+`includes/platforms/raspberrypi.yaml` — into `sources/`: nine repositories, several GB and a long
+while before any compiling starts.
 
 A full build including WebKit takes **~4.5 h** on 8 cores / 11 GB. Anything that changes
 `DISTRO_FEATURES`, `MACHINE_FEATURES` or webkit's `PACKAGECONFIG` **invalidates WebKit and costs that

@@ -22,6 +22,8 @@ defaults:
 # pushed since". Bumping a pin is an edit here, reviewed like any other.
 repos:
   # No url: kas resolves this to the repository containing this config file.
+  # meta-wisekiosk LAYERDEPENDS on the Raspberry Pi layers, so this file is not
+  # usable alone -- it expects a platform include from includes/platforms/.
   meta-wisekiosk:
     layers:
       meta-wisekiosk:

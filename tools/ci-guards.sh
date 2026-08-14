@@ -88,6 +88,15 @@ fi
 # --- 3. shell scripts must parse ------------------------------------------
 # sh -n catches the unterminated quote / missing fi class. It is not shellcheck
 # and does not pretend to be; it needs nothing installed and never false-alarms.
+# The extensionless scripts are named explicitly because '*.sh' cannot see
+# them; the existence check keeps a rename from silently shrinking the scan,
+# same as guard 1b.
+scan3="meta-wisekiosk/recipes-core/kiosk-netcheck/files/kiosk-netcheck \
+       meta-wisekiosk/recipes-core/kiosk-provision/files/kiosk-provision \
+       meta-wisekiosk/recipes-core/kiosk-session/files/kiosk-launch"
+missing3=""
+for p in $scan3; do [ -e "$p" ] || missing3="$missing3 $p"; done
+[ -n "$missing3" ] && bad "guard 3 cannot scan -- path renamed or removed:$missing3"
 badsh=0
 while IFS= read -r f; do
     [ -f "$f" ] || continue
@@ -96,7 +105,7 @@ while IFS= read -r f; do
         printf '%s\n' "$err" | sed 's/^/        /'
         badsh=1
     fi
-done < <(git ls-files -- '*.sh' 'tools/kiosk-netcheck')
+done < <(git ls-files -- '*.sh' $scan3)
 [ "$badsh" -eq 0 ] && ok "shell scripts parse"
 
 # --- 4. kas configs must be valid YAML ------------------------------------

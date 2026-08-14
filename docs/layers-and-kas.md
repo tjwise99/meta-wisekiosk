@@ -132,7 +132,11 @@ BBFILE_PRIORITY_wisekiosk = "10"
 ```
 
 Priority decides who wins when two layers say something about the same recipe. Upstream's layers are
-`autonomos-core` at 6 and `autonomos-raspberrypi` at 7. Higher wins, so:
+`autonomos-core` at 6 and `autonomos-raspberrypi` at 7, and the Raspberry Pi BSP layer
+(`raspberrypi`) sits at 9 — so 10 puts this layer above every layer whose recipes it appends. (These
+are *collection* names from each layer's `layer.conf`, which is what `bitbake-layers show-layers`
+prints; they drop the `meta-` prefix the directory names carry, so `meta-autonomos-core` the
+directory is `autonomos-core` the layer.) Higher wins, so:
 
 - when two layers carry a `.bb` for the same recipe at the same version, the higher-priority layer's
   file is the one used;
@@ -193,5 +197,7 @@ unattributable. To move it:
 4. Re-run `tools/ci-guards.sh`, then rebuild and compare the image manifest against the previous
    build before shipping anything to a device.
 
-The same steps apply to any other repo in `includes/base.yaml`; those pins are all commits too, for
-the same reason.
+The same steps apply to every other pinned repo. The pins live in three files: most repos in
+`includes/base.yaml`, meta-rauc in `includes/rauc.yaml`, and the three Raspberry Pi repos
+(meta-raspberrypi, meta-lts-mixins, meta-rauc-community) in `includes/platforms/raspberrypi.yaml` —
+`grep -rn 'commit:' includes/` lists them all.
