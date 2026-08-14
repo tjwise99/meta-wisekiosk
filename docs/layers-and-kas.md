@@ -72,8 +72,9 @@ never reach BitBake. Keep the names unique. This is the main reason this reposit
 
 ## How this repository consumes meta-autonomos
 
-`meta-autonomos` supplies the `autonomos` distro (which defines the RAUC *compatible* string, systemd
-as init, the ext4 sizing), the RAUC bundle recipe, and the Raspberry Pi platform layer. It is fetched
+`meta-autonomos` supplies the `autonomos` distro (systemd as init, the ext4 sizing), the
+`autonomos-rauc.bbclass` that sets the RAUC *compatible* string to the literal
+`autonomos-${MACHINE}`, the RAUC bundle recipe, and the Raspberry Pi platform layer. It is fetched
 like any other dependency:
 
 ```yaml
@@ -167,8 +168,15 @@ hatch for "upstream's recipe is fine, but one of its input files is wrong" — a
 recognising, because a shadowed file is invisible in the recipe you are reading.
 
 This particular file is the network lifeline: a unit that does not bring up `wlan0` is a board that
-needs someone standing in front of it. It is checked on the built image before any update ships,
-not trusted from the tree.
+needs someone standing in front of it. Nothing automates a check on it — after any change near this
+file, inspect the built rootfs rather than trusting the tree:
+
+```sh
+debugfs -R "cat /etc/systemd/system/wpa_supplicant.service" \
+  build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/core-image-base-raspberrypi0-wifi.rootfs.ext4
+```
+
+and confirm it reads `/data/config/wpa_supplicant.conf` and requires `data.mount`.
 
 ## Bumping the upstream pin
 

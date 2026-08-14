@@ -14,14 +14,17 @@ provisioning and read at runtime.
 > which supplies the `autonomos` distro, the RAUC bundle recipe and the Raspberry Pi platform layer.
 > kas fetches it at a pinned commit into `sources/`; this repository contains none of it.
 >
-> The upstream repository carries **no license file**, so all rights in that work remain with its
-> author. Nothing here is offered under any license on their behalf, and nothing here redistributes
-> it — `sources/` is gitignored and every user fetches upstream directly from upstream.
+> The upstream repository carries **no top-level license**. Its core layer contains a `COPYING.MIT`
+> (standard Yocto layer boilerplate) and its README defers to per-recipe licenses, so the licensing
+> of the tree as a whole is unclear — all rights not clearly granted remain with its author. Nothing
+> here is offered under any license on their behalf, and nothing here redistributes it — `sources/`
+> is gitignored and every user fetches upstream directly from upstream.
 >
 > Upstream's identifiers — the `autonomos` distro, `AUTONOMOS_FEATURES`, the `meta-autonomos-*` layer
-> names — are deliberately left unrenamed. Two concrete reasons: the RAUC *compatible* string derives
-> from the distro, and a deployed board refuses a bundle whose compatible does not match its own, so
-> renaming the distro is a one-way change that strands every unit in the field. And the two patches
+> names — are deliberately left unrenamed. Two concrete reasons: the RAUC *compatible* string is
+> `autonomos-${MACHINE}`, a literal set by upstream's `autonomos-rauc.bbclass`, and a deployed board
+> refuses a bundle whose compatible does not match its own — so moving off upstream's class or
+> renaming its identifiers is a one-way change that strands every unit in the field. And the two patches
 > in `patches/meta-autonomos/` have to apply to upstream's files as upstream writes them.
 
 ## Layout: scaffolding vs. layer
@@ -53,6 +56,9 @@ If you are new to Yocto, read **[docs/layers-and-kas.md](docs/layers-and-kas.md)
 a layer is, what kas does with these files, and why the two patches cannot be bbappends.
 
 ## Quick start
+
+`kas-container` runs the build inside a container, so a working **Docker or Podman** is a
+prerequisite — it is the only host dependency besides `just`.
 
 ```sh
 curl -L -o ~/bin/kas-container https://raw.githubusercontent.com/siemens/kas/5.4/kas-container
@@ -105,7 +111,8 @@ machine-id. `tools/provision.sh` reads that file and writes `/data/config` on th
 reachable device; the device reads it at boot.
 
 The tracked `secrets.yaml.tmpl` carries names with empty values only. `tools/ci-guards.sh` — run by
-CI and by the pre-commit hook — rejects a `secrets.yaml` anywhere in the tree, and fails if any of
+CI and by the pre-commit hook — rejects a `secrets.yaml` at the repository root (the only place kas
+would pick one up), and fails if any of
 those value names becomes a build input again in the kas config, the layer, `includes/` or
 `patches/`. Install the hook with `just install-hooks`.
 
