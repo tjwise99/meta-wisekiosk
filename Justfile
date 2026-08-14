@@ -1,33 +1,37 @@
-# AutonomOS Build and Deployment Commands
+# Kiosk build and deployment commands
 #
-# This Justfile provides convenience commands for building AutonomOS images,
-# managing RAUC OTA updates, and deploying to devices.
+# Convenience commands for building the kiosk image, managing RAUC OTA updates,
+# and deploying to the device.
 #
 # Quick start:
-#   just build              # Build the image
+#   just build              # Build the image (kas fetches sources/ on first run)
+#   just kiosk-ota          # Build a bundle and install it on the device
 #   just flash /dev/sdX     # Flash to SD card
 #   just rauc-status <ip>   # Check device RAUC status
 
 set dotenv-load := true
 
 # Default machine target
-machine := env('MACHINE', 'raspberrypi5')
+machine := env('MACHINE', 'raspberrypi0-wifi')
 
 # Kas configuration
-config := env('KAS_CONFIG', 'reference.yaml')
+config := env('KAS_CONFIG', 'kiosk-zero-w.yaml')
 
 # Image name for flash recipe
-image-name := "autonomos-devel"
+image-name := "core-image-base"
 
 # === RAUC Configuration ===
 
 # Directory for RAUC bundles
 rauc-bundle-dir := "build/bundles"
 
-# Development signing keys (override RAUC_CERT, RAUC_KEY, RAUC_KEYRING for production)
-rauc-cert := env('RAUC_CERT', 'meta-autonomos-core/files/rauc-example-keys/development.cert.pem')
-rauc-key := env('RAUC_KEY', 'meta-autonomos-core/files/rauc-example-keys/development.key.pem')
-rauc-keyring := env('RAUC_KEYRING', 'meta-autonomos-core/files/rauc-example-keys/development.cert.pem')
+# Development signing keys, used by the casync recipes in ota.just (override
+# RAUC_CERT, RAUC_KEY, RAUC_KEYRING for production). They are upstream's own
+# example keys and live in the meta-autonomos checkout, so these paths exist
+# only after `kas-container checkout kiosk-zero-w.yaml` has populated sources/.
+rauc-cert := env('RAUC_CERT', 'sources/meta-autonomos/meta-autonomos-core/files/rauc-example-keys/development.cert.pem')
+rauc-key := env('RAUC_KEY', 'sources/meta-autonomos/meta-autonomos-core/files/rauc-example-keys/development.key.pem')
+rauc-keyring := env('RAUC_KEYRING', 'sources/meta-autonomos/meta-autonomos-core/files/rauc-example-keys/development.cert.pem')
 
 # Import shared recipes
 import 'justfiles/ota.just'
@@ -42,7 +46,7 @@ help:
 
 # === Build ===
 
-# Build the AutonomOS image using kas-container
+# Build the kiosk image using kas-container
 [group('build')]
 build:
     kas-container build {{config}}

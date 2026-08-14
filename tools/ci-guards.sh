@@ -36,9 +36,29 @@ fi
 # The fail-closed half. If one of these is ever referenced again, the build
 # would bake one site's configuration into every image and put that site's
 # wireless credentials inside every update bundle.
+#
+# patches/ is scanned because a kas patch is a build input like any other: it is
+# applied to the meta-autonomos checkout before bitbake ever parses it, so a
+# patch is a route to reintroduce credential baking into a tree this repository
+# does not otherwise contain. Only ADDED lines count -- 0002 exists precisely to
+# delete the ${WIFI_SSID} substitution, so its deletion lines quote the string it
+# removes and are filtered out below.
+#
+# The paths are checked for existence first. grep over a path that no longer
+# exists reports nothing and this guard would read green, which is how a layer
+# rename silently disarms it.
+scan1b="kiosk-zero-w.yaml meta-wisekiosk includes patches"
+missing1b=""
+for p in $scan1b; do
+    [ -e "$p" ] || missing1b="$missing1b $p"
+done
+if [ -n "$missing1b" ]; then
+    bad "guard 1b cannot scan -- path renamed or removed:$missing1b"
+fi
 sitevals=$(grep -rnE '\$\{(WIFI_SSID|WIFI_PSK_HASH|KIOSK_URL|KIOSK_HOSTNAME|KIOSK_MACHINE_ID|KIOSK_NAMESERVER)\}' \
-    kiosk-zero-w.yaml meta-autonomos-core meta-autonomos-raspberrypi includes 2>/dev/null \
-    | grep -vE ':[[:space:]]*#')
+    $scan1b 2>/dev/null \
+    | grep -vE ':[[:space:]]*#' \
+    | grep -vE '^patches/[^:]+:[0-9]+:-')
 if [ -n "$sitevals" ]; then
     bad "site configuration is a build input again:"
     printf '%s\n' "$sitevals" | sed 's/^/        /'

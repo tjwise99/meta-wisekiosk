@@ -132,9 +132,9 @@ casync-stats store:
 # NOT covered by `just build`, which makes core-image-base only -- shipping a
 # stale .raucb silently reinstalls the previous image.
 #
-# kconfig, not the root Justfile's `config`: that defaults to reference.yaml, a
-# DIFFERENT product. Building the bundle against it fails on a missing include,
-# which is the good case; silently building the wrong image would be the bad one.
+# kconfig is its own parameter rather than the root Justfile's `config` so that
+# a KAS_CONFIG pointing at some other product cannot silently build the wrong
+# image into a bundle named like this one. Both default to kiosk-zero-w.yaml.
 # Comments must sit ABOVE the attributes -- just rejects one between them.
 [group('ota')]
 [doc("Build the RAUC update bundle")]
