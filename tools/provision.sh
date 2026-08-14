@@ -77,13 +77,49 @@ case "$MODE" in
     cp "$STAGE/etc/machine-id" "$DEST/etc/machine-id"
     chown -R 0:0 "$DEST/config" "$DEST/etc" 2>/dev/null || echo "note: run as root to own the files correctly"
     chmod 0600 "$DEST/config/wpa_supplicant.conf"
+
+    # Verify here, not in a procedure someone is told to follow. The failure
+    # this catches is discovered on the device otherwise, and a card that comes
+    # up unprovisioned has no network, so recovering it means physical access
+    # and a second flash.
+    #
+    # Both checks are of things the WRITE can get wrong, never of a value this
+    # script just wrote from input it already validated: re-counting the ssid=
+    # lines of a heredoc, or re-measuring the length of a machine-id the
+    # 32-hex check above already rejected, is arithmetic on a known quantity and
+    # looks identical whether or not it fails.
+    #
+    #   mode        world-readable wifi credentials on a card that leaves the
+    #               room, and wpa_supplicant will not say a word about it. Fires
+    #               when $DEST is the vfat boot partition rather than ext4
+    #               /data: vfat accepts a chmod and ignores it
+    #   ownership   the chown above is downgraded to a note on failure, so this
+    #               is the check that makes it loud -- files owned by the
+    #               invoking user land the wifi credentials on the device owned
+    #               by uid 1000, the same failure the device branch calls out
+    bad=0
+    say() { printf 'VERIFY FAIL  %s\n' "$*" >&2; bad=1; }
+
+    mode=$(stat -c %a "$DEST/config/wpa_supplicant.conf")
+    [ "$mode" = "600" ] || say "wpa_supplicant.conf is mode $mode, must be 600"
+
+    for f in "$DEST/config/"* "$DEST/etc/machine-id"; do
+        own=$(stat -c %u:%g "$f")
+        [ "$own" = "0:0" ] || say "$f is owned by $own, must be 0:0 -- re-run as root"
+    done
+
+    if [ "$bad" -ne 0 ]; then
+        echo "NOT provisioned -- do not boot this card" >&2
+        exit 1
+    fi
+
     sync
     echo "provisioned $DEST"
     ;;
   device)
     ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10)
-    # tar over stdin: small, one stream, nothing like the sustained transfer that
-    # wedges this board.
+    # tar over stdin: one stream, and a few kilobytes of it. Small enough that
+    # transfer shape is not a consideration here either way.
     # --owner/--group: tar otherwise preserves THIS host's uid/gid, landing the
     # wifi credentials owned by uid 1000 on the device.
     tar -C "$STAGE" --owner=root --group=root --numeric-owner -cf - . | ssh "${ssh_opts[@]}" "$DEST" \

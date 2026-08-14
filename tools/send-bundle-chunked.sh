@@ -1,12 +1,18 @@
 #!/bin/bash
-# Deliver a large file to the kiosk over SSH without wedging its SDIO/mmc path.
+# Deliver a large file to the kiosk over SSH in synced, resumable chunks.
 #
-# Evidence this is built on (docs/experiment-log.md):
+# SUPERSEDED: the SDIO/mmc wedge this shape works around was a symptom of
+# top-OPP memory corruption, fixed by the clock cap in
+# meta-wisekiosk/recipes-core/kiosk-cpufreq. Kept until removal lands --
+# issue #29 remove chunked bundle delivery.
+#
+# Evidence this was built on, measured on the uncapped board
+# (mechanism: docs/issue_investigation/wifi_instability/README.md):
 #   Test A  334 MB written to /data + sync, negligible network  -> SURVIVED
 #   Test B  133 MB received into /dev/null, zero disk writes    -> HUNG in 11 s
 #   TX      133 MB sent from the device, three runs             -> 2 of 3 HUNG
-# Sustained activity in either direction wedges it, and combining network
-# receive with a synchronous SD write is the worst case: a sync after every
+# Sustained activity in either direction wedged it, and combining network
+# receive with a synchronous SD write was the worst case: a sync after every
 # append made the board hang on the FIRST chunk every time, where the unsynced
 # form moved 14 in a row.
 #

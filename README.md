@@ -8,6 +8,9 @@ Updates are RAUC A/B over U-Boot, delivered over the LAN. Site configuration —
 hostname, machine-id — is **never** in the image; it is written to the device's `/data` partition by
 provisioning and read at runtime.
 
+The page the kiosk shows is served by a separate system elsewhere on the LAN that this repository
+neither builds nor deploys. Only its URL enters here, as site config.
+
 > ## Attribution
 >
 > This project builds on [jsmith212/meta-autonomos](https://github.com/jsmith212/meta-autonomos),
@@ -46,14 +49,17 @@ meta-wisekiosk/                    <- the repository (project scaffolding)
 │   ├── classes/
 │   └── recipes-*/
 ├── Justfile, justfiles/           build, OTA and device commands
-├── tools/                         provisioning, chunked bundle delivery, CI guards
-├── docs/                          layers-and-kas.md
+├── tools/                         provisioning, bundle delivery, device debugging, doc gate, CI guards
+├── docs/                          layers-and-kas.md, issue_investigation/
 └── sources/                       gitignored; everything kas fetches lands here
 ```
 
 Nothing outside `meta-wisekiosk/` is read by BitBake. Nothing inside it is read by anything else.
 If you are new to Yocto, read **[docs/layers-and-kas.md](docs/layers-and-kas.md)** — it explains what
 a layer is, what kas does with these files, and why the two patches cannot be bbappends.
+
+Every change that was acted on is documented at the recipe carrying it; the per-issue investigations
+behind those changes are indexed in **[docs/README.md](docs/README.md)**.
 
 ## Quick start
 
@@ -102,8 +108,10 @@ just kiosk-rollback # if the new slot comes up wrong
 ```
 
 `kiosk-preflight` refuses a delivery that cannot work — wrong slot size, stale bundle, no room on
-`/data` — before spending twenty-five minutes transferring it. The transfer is chunked because this
-board wedges on sustained SDIO traffic in either direction; a plain `scp` of the bundle hangs it.
+`/data` — before spending twenty-five minutes transferring it. The chunked transfer is a superseded
+workaround: the root cause is fixed by the clock cap in
+[`kiosk-cpufreq`](meta-wisekiosk/recipes-core/kiosk-cpufreq/kiosk-cpufreq_1.0.bb), and removing the
+chunking is tracked by issue #29 remove chunked bundle delivery.
 
 ## Configuration and secrets
 
@@ -121,6 +129,10 @@ those value names becomes a build input again in the kas config, the layer, `inc
 **kas merges `local_conf_header` by block name and the top-level file wins**, so a block named the
 same as one in `kiosk-zero-w.yaml` is discarded silently — no warning, no error, variables that never
 reach bitbake. Keep the keys unique.
+
+Losing `/data` is a re-provisioning, not a restore. `tools/provision.sh` writes the site config
+again from `secrets.yaml`, and a machine-id not recorded there comes back as a new one; there is no
+multi-GB image to put back.
 
 ## Upstream fixes
 
@@ -164,5 +176,8 @@ Two more fixes belong upstream but did not need a patch, because a downstream la
   a bad update rolls back, or that a slow-but-healthy boot does *not* trigger one.
 - **Signing keys are upstream's development keys.** Production needs its own, and the decision is
   one-way: a device trusts only the keyring baked into its rootfs.
+- **Root login is unauthenticated.** The image carries `debug-tweaks`, so root has an empty password.
+  Deferred deliberately while a second device still depends on unauthenticated access; tracked as
+  issue #7 debug-tweaks empty root password, which carries the detail.
 - **Screen blanking over a long idle is unverified.** `-s 0 -dpms -nocursor` moved from lightdm into
   the kiosk unit; that failure only appears after ~20 minutes.

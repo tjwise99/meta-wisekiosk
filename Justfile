@@ -85,6 +85,35 @@ install-hooks:
     git config core.hooksPath .githooks
     @echo "core.hooksPath -> .githooks (pre-commit runs tools/ci-guards.sh)"
 
+# === Documentation checks ===
+
+# Both checks run even when the first fails: two independent findings are worth
+# more than the first one twice.
+[group('check')]
+[script('bash')]
+[doc("Run every documentation check")]
+verify:
+    rc=0
+    python3 tools/doc-links.py || rc=1
+    python3 tools/doc-image.py check || rc=1
+    if [ $rc -ne 0 ]; then echo; echo "verify FAILED"; fi
+    exit $rc
+
+# Cross-references in every tracked Markdown file: [text](path), #anchors, and
+# section-name refs must resolve.
+[group('check')]
+[doc("Check that every tracked Markdown cross-reference resolves")]
+links:
+    python3 tools/doc-links.py
+
+# What the prose says the image ships, against what it ships. Needs a populated
+# build/ rootfs and is therefore local-only -- CI never builds, so wiring it
+# into a required check would mean a permanently skipping gate.
+[group('check')]
+[doc("Check docs against what the built image ships (skips if unbuilt)")]
+image:
+    python3 tools/doc-image.py check
+
 # Write per-site config to a device's /data. The image carries none of it.
 [group('provision')]
 [doc("Provision a reachable device's /data from secrets.yaml")]

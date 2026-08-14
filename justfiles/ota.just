@@ -124,10 +124,10 @@ casync-stats store:
 
 # === Tier 1 delivery: plain .raucb, chunked ===
 #
-# This board wedges on sustained SDIO traffic in EITHER direction, and a plain
-# scp of the 133MB bundle hangs it in ~11s having moved 0 bytes. These recipes
-# encode the delivery shape that works; see the kiosk-reference project,
-# docs/experiment-log.md, for the measurements behind it.
+# The chunking these recipes encode is SUPERSEDED and retained only until #29
+# remove chunked bundle delivery lands. Root cause and measurements are in
+# meta-wisekiosk/recipes-core/kiosk-cpufreq and
+# docs/issue_investigation/wifi_instability/README.md.
 
 # NOT covered by `just build`, which makes core-image-base only -- shipping a
 # stale .raucb silently reinstalls the previous image.
@@ -187,21 +187,13 @@ kiosk-preflight image="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wi
     fi
     echo "preflight OK"
 
-# Separates the receive burst from the sync: combining them is what hangs it.
-#
-# Defaults retuned 2026-08-13 from 2/4/3 to 8/2/2. The old values were simply
-# the first shape that worked and were never tested against anything; they put
-# ~7.3min of pure sleeping into a 20min transfer. Measured after seeding the
-# defect first (24MB continuous HUNG, 0 bytes, watchdog recovered):
-#
-#   24MB  chunk=8 rx=2 sync=2   32s   clean
-#   40MB  chunk=8 rx=2 sync=2   52s   clean
-#   125MB chunk=8 rx=2 sync=2   6min  15 bursts, 0 hangs, md5 MATCH
-#
-# 806KB/s against 104KB/s. The board needs DISCONTINUITY, not small chunks or
-# long pauses -- consistent with the trigger being continuous receive rather
-# than rate or volume. The mechanism is still not understood: this is a bound
-# established at operational scale, not an explanation.
+# SUPERSEDED. The wedge this chunking works around was a symptom, and the fix is
+# the clock cap in meta-wisekiosk/recipes-core/kiosk-cpufreq, already on main.
+# The mechanism is written up once, in that recipe's comments and in
+# docs/issue_investigation/wifi_instability/README.md -- do not restate it here.
+# Chunking stays in the tree only until its removal lands: #29 remove chunked
+# bundle delivery. Every default below was tuned against the uncapped board and
+# is kept unchanged so the removal has something to compare against.
 [group('ota')]
 [script('bash')]
 [doc("Deliver a bundle in chunked bursts, verified end to end")]
@@ -260,9 +252,18 @@ kiosk-reboot host="root@192.168.1.6":
 kiosk-ota host="root@192.168.1.6" kconfig="kiosk-zero-w.yaml": (kiosk-bundle kconfig) (kiosk-preflight "build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/core-image-base-raspberrypi0-wifi.rootfs.ext4" "build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host) (kiosk-send "build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host) (kiosk-install host)
     @echo "Delivered and installed. Verify, then: just kiosk-reboot {{host}}"
 
-# Roll back to the other slot.
+# The [doc] attribute rather than a trailing comment: just takes the LAST
+# comment line before a recipe as its --list text, so a comment that grows
+# silently renames the recipe.
+#
+# What this fixes is a bad ROOTFS. Both slots mount the same /data, so a wrong
+# site config, a missing machine-id or a corrupt file there is identical on
+# either side of a rollback -- the boot counter simply drains to zero. If the
+# fault followed the update, roll back; if it followed a provisioning step,
+# re-provision.
 [group('ota')]
 [script('bash')]
+[doc("Roll back to the other slot")]
 kiosk-rollback host="root@192.168.1.6":
     SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
     $SSH {{host}} 'rauc status mark-bad booted; fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT'

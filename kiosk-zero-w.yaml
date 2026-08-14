@@ -114,6 +114,9 @@ local_conf_header:
     RPI_KERNEL_DEVICETREE_OVERLAYS:append = " overlays/ramoops.dtbo"
     RPI_EXTRA_CONFIG:append = "\ndtoverlay=ramoops,total-size=0x40000,record-size=0x8000,console-size=0x20000\n"
     PACKAGECONFIG:append:pn-webkitgtk3 = " reduce-size"
+    # imagemagick is here for `import -window root`, the only screenshot path
+    # this image has: fbgrab was dropped on a misdiagnosis and never restored.
+    # See docs/issue_investigation/screenshot_capture_fbgrab/README.md.
     IMAGE_INSTALL:append = " surf kiosk-session kiosk-soak kiosk-journal kiosk-hardware kiosk-netcheck kiosk-bootprof zram wpa-supplicant-service packagegroup-core-x11 xwininfo xprop ttf-roboto imagemagick tzdata-core tzdata-americas"
 
     # serial-getty is a login prompt on a port with nothing attached, started at
