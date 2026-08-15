@@ -152,6 +152,29 @@ else
     printf 'skip  gitleaks not installed locally (CI runs it)\n'
 fi
 
+# --- 6. no IP addresses in tracked files ----------------------------------
+# This repo is PUBLIC and its docs are meant to be generic. A hardcoded LAN
+# address fingerprints the network and is caught by neither gitleaks nor guard 1
+# (an RFC1918 address is not credential-shaped). NO exemptions: device addresses
+# live only in the environment (KIOSK_HOST) or a local .env, never in the tree,
+# so any private IPv4 in a tracked file fails. `just find <cidr>` is how an
+# address is discovered at use time.
+ipre='(^|[^0-9.])(192\.168\.[0-9]{1,3}\.[0-9]{1,3}|10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3})([^0-9.]|$)'
+ipfound=$(
+    while IFS= read -r f; do
+        case "$f" in
+            *.png|*.jpg|*.jpeg|*.gz|*.bz2|*.xz|*.zst|*.raucb|*.wic|*.ico) continue ;;
+        esac
+        grep -HnE "$ipre" "$f" 2>/dev/null
+    done < <(git ls-files)
+)
+if [ -n "$ipfound" ]; then
+    bad "IP address in a tracked file -- keep the tree generic (KIOSK_HOST / just find, never committed):"
+    printf '%s\n' "$ipfound" | sed 's/^/        /'
+else
+    ok "no IP addresses in tracked files"
+fi
+
 if [ "$fail" -ne 0 ]; then
     printf '\nguards FAILED\n'
     exit 1

@@ -20,12 +20,13 @@ config := env('KAS_CONFIG', 'kiosk-zero-w.yaml')
 # Image name for flash recipe
 image-name := "core-image-base"
 
-# The device every host-defaulting recipe talks to, in ssh target form. This is
-# a hardware-in-the-loop unit and boards get swapped, so the address is the one
-# thing here guaranteed to go stale -- it is defined once and overridden by the
-# environment (`export KIOSK_HOST=root@<addr>`) rather than edited per recipe.
-# `just find <cidr>` is how you learn the address of a board you just swapped in.
-kiosk-host := env('KIOSK_HOST', 'root@192.168.1.6')
+# The device every host-defaulting recipe talks to, in ssh target form. The
+# address is site-specific and this repo is PUBLIC, so it is never committed:
+# there is no in-tree default. Set it in the environment
+# (`export KIOSK_HOST=root@<addr>`) or a local .env, and `just find <cidr>`
+# learns the address of a board you just swapped in. A recipe run without it
+# fails on an empty host rather than targeting a stale one.
+kiosk-host := env('KIOSK_HOST', '')
 
 # === RAUC Configuration ===
 
