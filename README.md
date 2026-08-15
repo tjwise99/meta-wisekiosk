@@ -89,15 +89,19 @@ overscan, UART) are free to change.
 ### Flashing a card
 
 ```sh
-# build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/*.wic.bz2
-bzcat <image>.wic.bz2 | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
-
-# the image carries NO site config; provision the card before first boot
-tools/provision.sh card /mnt/data
+just flash /dev/sdX                 # writes build/.../*.wic.bz2, re-reads the partition table
+just provision-fresh-card /dev/sdX  # mounts partition 4, writes the site config, unmounts
 ```
 
 The card must be provisioned before it boots. WiFi credentials are what let you reach the device, so
 the first write cannot come over the network.
+
+`/data` is the **fourth** partition, and nothing on the card says so — the layout is boot, rootfs-a,
+rootfs-b, data. `provision-fresh-card` derives it; provisioning by hand instead
+(`tools/provision.sh card <mountpoint>`) means picking that partition yourself, and picking the
+rootfs or the vfat boot partition leaves a unit that boots with no network and no way in but a USB
+keyboard. `tools/provision.sh` refuses either — vfat cannot hold the 0600 the wifi credentials need,
+and a non-root run leaves them owned by the wrong uid — but only after the card is already written.
 
 ### Updating a running device
 
@@ -106,6 +110,12 @@ just kiosk-ota      # bundle -> preflight -> chunked send -> rauc install
 just kiosk-reboot
 just kiosk-rollback # if the new slot comes up wrong
 ```
+
+Every recipe that defaults to a device — `kiosk-ota`, `kiosk-send`, `kiosk-install`, `kiosk-reboot`,
+`kiosk-rollback`, `kiosk-preflight`, `kiosk-backup`, `provision-device` — takes its default from one
+`kiosk-host` variable in the [`Justfile`](Justfile), so `export KIOSK_HOST=root@<addr>` retargets all
+of them at once. Boards get swapped on this unit; `just find <cidr>` is how you learn the address of
+the one now on the bench. An explicit `host` argument still wins over both.
 
 `kiosk-preflight` refuses a delivery that cannot work — wrong slot size, stale bundle, no room on
 `/data` — before spending twenty-five minutes transferring it. The chunked transfer is a superseded

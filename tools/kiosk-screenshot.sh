@@ -3,6 +3,10 @@
 #
 #   tools/kiosk-screenshot.sh root@<host> [out.png]
 #
+# The capture itself needs a reachable kiosk. What runs without one: argument
+# handling, the overwrite guard, mkdir of the output directory, and the
+# ssh/scp failure modes against an unreachable or nonexistent host.
+#
 # `import -window root` (imagemagick) is the capture path this image carries.
 # There is no scrot and no fbgrab: fbgrab was dropped on a misdiagnosis and
 # never restored -- see docs/issue_investigation/screenshot_capture_fbgrab/README.md

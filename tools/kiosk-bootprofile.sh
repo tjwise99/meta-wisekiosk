@@ -3,6 +3,12 @@
 #
 #   tools/kiosk-bootprofile.sh root@<host> [outdir] [wait-seconds]
 #
+# The six-step cycle below (enable, reboot, wait, collect, disable, analyze)
+# needs a reachable kiosk end to end. What runs without one: argument
+# handling, outdir creation, the ssh failure modes against an unreachable or
+# nonexistent host, and the analyzer's parsing, invoked directly against a
+# sample file.
+#
 # The sampler is image content that ships disabled -- it costs ~240ms of the
 # boot it measures, so it is not something to leave on. What it is, what it
 # cannot see, and how to read its output are at

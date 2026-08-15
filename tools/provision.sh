@@ -33,8 +33,9 @@ SSID=$(val WIFI_SSID);      PSK=$(val WIFI_PSK_HASH)
 URL=$(val KIOSK_URL);       HOST=$(val KIOSK_HOSTNAME)
 NS=$(val KIOSK_NAMESERVER); MID=$(val KIOSK_MACHINE_ID)
 
-for n in SSID PSK URL HOST NS; do
-    [ -n "${!n}" ] || { echo "secrets.yaml is missing $n"; exit 1; }
+for pair in SSID:WIFI_SSID PSK:WIFI_PSK_HASH URL:KIOSK_URL HOST:KIOSK_HOSTNAME NS:KIOSK_NAMESERVER; do
+    n=${pair%%:*}; real=${pair#*:}
+    [ -n "${!n}" ] || { echo "secrets.yaml is missing $real"; exit 1; }
 done
 
 # machine-id: 32 lowercase hex. Generated per device if secrets.yaml has none --
@@ -122,9 +123,19 @@ case "$MODE" in
     # transfer shape is not a consideration here either way.
     # --owner/--group: tar otherwise preserves THIS host's uid/gid, landing the
     # wifi credentials owned by uid 1000 on the device.
+    #
+    # rc is captured rather than left to errexit: a bare ssh diagnostic and a
+    # silent exit 255 say nothing about which of this script's two remote steps
+    # ran, and the difference matters -- a write that failed leaves /data as it
+    # was, a read-back that failed does not say whether the write landed.
+    rc=0
     tar -C "$STAGE" --owner=root --group=root --numeric-owner -cf - . | ssh "${ssh_opts[@]}" "$DEST" \
-        'mkdir -p /data/config /data/etc && tar -C /data -xf - && chown -R 0:0 /data/config /data/etc && chmod 0600 /data/config/wpa_supplicant.conf && sync'
-    ssh "${ssh_opts[@]}" "$DEST" 'ls -l /data/config /data/etc/machine-id'
+        'mkdir -p /data/config /data/etc && tar -C /data -xf - && chown -R 0:0 /data/config /data/etc && chmod 0600 /data/config/wpa_supplicant.conf && sync' || rc=$?
+    [ "$rc" -eq 0 ] || { echo "could not write /data on $DEST (tar|ssh rc=$rc) -- nothing was provisioned" >&2; exit 1; }
+
+    rc=0
+    ssh "${ssh_opts[@]}" "$DEST" 'ls -l /data/config /data/etc/machine-id' || rc=$?
+    [ "$rc" -eq 0 ] || { echo "wrote /data on $DEST but could not read it back (ssh rc=$rc) -- check it by hand" >&2; exit 1; }
     echo "provisioned $DEST"
     ;;
   *) echo "unknown mode $MODE"; exit 1 ;;

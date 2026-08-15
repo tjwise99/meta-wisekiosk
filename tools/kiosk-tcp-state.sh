@@ -3,9 +3,9 @@
 #
 #   tools/kiosk-tcp-state.sh <kiosk-address> [port]
 #
-# Run this ON THE MACHINE SERVING THE PAGE. netstat only sees sockets local to
-# the host it runs on, so pointing it at the kiosk from a third machine reports
-# nothing and reads exactly like a kiosk that is not connecting.
+# Run this ON THE MACHINE SERVING THE PAGE. A socket table only holds sockets
+# local to the host it is read on, so pointing this at the kiosk from a third
+# machine reports nothing and reads exactly like a kiosk that is not connecting.
 #
 # This is the read of last resort: the kiosk's correct display is a black
 # background, so "working", "browser crashed", "JavaScript threw" and "X never
@@ -32,14 +32,48 @@ set -uo pipefail
 ADDR=${1:?usage: kiosk-tcp-state.sh <kiosk-address> [port]}
 PORT=${2:-8080}
 
-command -v netstat > /dev/null || { echo "netstat not installed on this host" >&2; exit 2; }
+# ss is iproute2 and present wherever `ip` is; netstat is net-tools, which many
+# images no longer ship at all. Their state names differ -- ss says ESTAB and
+# FIN-WAIT-2, netstat says ESTABLISHED and FIN_WAIT2 -- so whichever ran, the
+# names are canonicalised below to the spelling the table above uses, which is
+# neither engine's. A table whose rows can never match the output is worse than
+# no table.
+if command -v ss > /dev/null; then
+    engine="ss"
+    rows=$(ss -tan 2>/dev/null)
+    statecol=1
+elif command -v netstat > /dev/null; then
+    engine="netstat"
+    rows=$(netstat -an 2>/dev/null | grep '^tcp')
+    statecol=6
+else
+    echo "neither ss (iproute2) nor netstat (net-tools) is installed on this host" >&2
+    exit 2
+fi
 
-# The state is the last field of a netstat TCP row. Counting local addresses
-# instead answers a different question and produces a table that never matches
-# the one above.
-out=$(netstat -an | grep "^tcp" | grep "$ADDR" | grep ":$PORT" | awk '{print $NF}' | sort | uniq -c)
+# The kiosk is the CLIENT here: this host listens on PORT and the kiosk dials in
+# from an ephemeral port. So the rows that belong to it are the ones whose local
+# port is PORT and whose peer address is the kiosk -- both columns, not either.
+# Matching the address anywhere in the row also catches this host's own outbound
+# connections to the kiosk and the listening socket, which answers a different
+# question and produces a count that never matches the table above.
+#
+# Column 4 is the local address and column 5 the peer in both engines; only the
+# state moves, which is what statecol carries.
+out=$(printf '%s\n' "$rows" | awk -v sc="$statecol" -v addr="$ADDR" -v port="$PORT" '
+    $1 == "State" { next }
+    NF >= 5 {
+        lp = $4; sub(/.*:/, "", lp)
+        pa = $5; sub(/:[^:]*$/, "", pa); gsub(/[][]/, "", pa)
+        if (lp == port && pa == addr) print $sc
+    }' \
+    | sed -e 's/-/_/g' \
+          -e 's/^ESTAB$/ESTABLISHED/' \
+          -e 's/^FIN_WAIT\([12]\)$/FIN_WAIT_\1/' \
+          -e 's/^SYN_RECV$/SYN_RECEIVED/' \
+    | sort | uniq -c)
 
-echo "$ADDR:$PORT  $(date '+%H:%M:%S')"
+echo "$ADDR:$PORT  $(date '+%H:%M:%S')  [$engine]"
 if [ -z "$out" ]; then
     echo "  no connections"
 else
