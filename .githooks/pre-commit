@@ -1,4 +1,14 @@
 #!/bin/sh
 # Same guards CI runs, so a commit cannot pass here and fail there.
 # Install with: just install-hooks
-exec tools/ci-guards.sh
+#
+# doc-image.py is not run here: it needs a populated build/ rootfs, which most
+# checkouts do not have, so it would print a skip banner on every commit. It is
+# a local gate, `just image`, run by hand after a build.
+#
+# Both checks run even when the first fails, matching `just verify`: two
+# independent findings are worth more than the first one twice.
+rc=0
+tools/ci-guards.sh || rc=1
+python3 tools/doc-links.py || rc=1
+exit $rc

@@ -24,6 +24,12 @@ if [ "${KIOSK_INSPECTOR:-0}" = "1" ]; then
 	INSPECT="-N"
 fi
 
+# There is no backend-readiness wait before the exec, and one must not be built
+# on busybox `nc`: it exits 1 against an open port as well as a closed one, so
+# the probe can never report success -- a readiness check that cannot pass looks
+# exactly like a backend that is never ready. kiosk.service already gates on
+# network-online.target, which is the part that was doing any work.
+#
 # Milestones go to BOTH the journal and a file: measure-surf.sh reads the file,
 # and the journal is what makes a first boot debuggable over SSH.
 exec surf -K $INSPECT "$KIOSK_URL" 2>&1 | tee /var/log/surf-milestones.log

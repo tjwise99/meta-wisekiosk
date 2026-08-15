@@ -90,10 +90,12 @@ fi
 # and does not pretend to be; it needs nothing installed and never false-alarms.
 # The extensionless scripts are named explicitly because '*.sh' cannot see
 # them; the existence check keeps a rename from silently shrinking the scan,
-# same as guard 1b.
+# same as guard 1b. The pre-commit hook is in that set: it is the thing that
+# runs this script, so a syntax error in it disarms every guard here.
 scan3="meta-wisekiosk/recipes-core/kiosk-netcheck/files/kiosk-netcheck \
        meta-wisekiosk/recipes-core/kiosk-provision/files/kiosk-provision \
-       meta-wisekiosk/recipes-core/kiosk-session/files/kiosk-launch"
+       meta-wisekiosk/recipes-core/kiosk-session/files/kiosk-launch \
+       .githooks/pre-commit"
 missing3=""
 for p in $scan3; do [ -e "$p" ] || missing3="$missing3 $p"; done
 [ -n "$missing3" ] && bad "guard 3 cannot scan -- path renamed or removed:$missing3"

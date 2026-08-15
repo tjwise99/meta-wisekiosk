@@ -14,11 +14,10 @@
 # -- so a fresh card takes the COMPILED-IN default and saves that out. On a card
 # that already has a saved env, the saved value wins and this changes nothing.
 #
-# Deliberately not done with fw_setenv, per docs/image-migration.md: the env
-# shares its 0x4000 block with BOOT_ORDER and the RAUC slot counters, and a
-# write interrupted at the wrong moment drops U-Boot to a built-in default with
-# no RAUC boot logic -- an unbootable card. Baking it costs nothing and cannot
-# be interrupted.
+# Deliberately not done with fw_setenv: the env shares its 0x4000 block with
+# BOOT_ORDER and the RAUC slot counters, and a write interrupted at the wrong
+# moment drops U-Boot to a built-in default with no RAUC boot logic -- an
+# unbootable card. Baking it costs nothing and cannot be interrupted.
 #
 # Injected into the defconfig rather than shipped as a .patch so it survives
 # upstream edits to that file; delete-then-append keeps it idempotent across

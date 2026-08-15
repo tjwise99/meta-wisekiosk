@@ -3,3 +3,13 @@ build/
 sources/
 .kas_shell_history
 secrets.yaml
+
+# Operator notes about the physical units: serials, MACs, addresses, one-off
+# readings. Individually harmless, together a fingerprint of one network, and
+# this repository is public.
+local/
+
+# The skills under .claude/ are tracked; these two are per-checkout machine
+# state, and settings.local.json in particular carries local filesystem paths.
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

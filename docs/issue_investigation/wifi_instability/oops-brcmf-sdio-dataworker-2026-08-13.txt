@@ -1,0 +1,43 @@
+<1>[   63.752959] Unable to handle kernel paging request at virtual address c1137c58 when execute
+<1>[   63.752988] [c1137c58] *pgd=0100041e(bad)
+<0>[   63.753029] Internal error: Oops: 8000000d [#1] ARM
+<4>[   63.753056] Modules linked in: brcmfmac_wcc brcmfmac brcmutil raspberrypi_hwmon fixed cfg80211 rfkill sch_fq_codel zram zsmalloc fuse nfnetlink ipv6
+<4>[   63.753154] CPU: 0 PID: 33 Comm: kworker/u3:0 Not tainted 6.6.63 #1
+<4>[   63.753183] Hardware name: BCM2835
+<4>[   63.753204] Workqueue: brcmf_wq/mmc1:0001:1 brcmf_sdio_dataworker [brcmfmac]
+<4>[   63.753687] PC is at 0xc1137c58
+<4>[   63.753715] LR is at 0xc49eb964
+<4>[   63.753737] pc : [<c1137c58>]    lr : [<c49eb964>]    psr: a0000113
+<4>[   63.753759] sp : dc815ee0  ip : c082e990  fp : 00000000
+<4>[   63.753778] r10: c0f746f0  r9 : 00000000  r8 : 00000040
+<4>[   63.753797] r7 : c0f746a8  r6 : c1021898  r5 : c23ea3c0  r4 : c20b0800
+<4>[   63.753818] r3 : 00000000  r2 : 00000005  r1 : 00000000  r0 : c23ea3c0
+<4>[   63.753839] Flags: NzCv  IRQs on  FIQs on  Mode SVC_32  ISA ARM  Segment user
+<4>[   63.753864] Control: 00c5387d  Table: 02ea0008  DAC: 00000055
+<1>[   63.753883] Register r0 information: slab skbuff_head_cache start c23ea3c0 pointer offset 0 size 184
+<1>[   63.753939] Register r1 information: NULL pointer
+<1>[   63.753968] Register r2 information: non-paged memory
+<1>[   63.753992] Register r3 information: NULL pointer
+<1>[   63.754023] Register r4 information: slab kmalloc-cg-2k start c20b0800 pointer offset 0 size 2048
+<1>[   63.754078] Register r5 information: slab skbuff_head_cache start c23ea3c0 pointer offset 0 size 184
+<1>[   63.754134] Register r6 information: non-slab/vmalloc memory
+<1>[   63.754162] Register r7 information: non-slab/vmalloc memory
+<1>[   63.754191] Register r8 information: non-paged memory
+<1>[   63.754220] Register r9 information: NULL pointer
+<1>[   63.754247] Register r10 information: non-slab/vmalloc memory
+<1>[   63.754276] Register r11 information: NULL pointer
+<1>[   63.754305] Register r12 information: non-slab/vmalloc memory
+<0>[   63.754334] Process kworker/u3:0 (pid: 33, stack limit = 0x267cafc7)
+<0>[   63.754371] Stack: (0xdc815ee0 to 0xdc816000)
+<0>[   63.754406] 5ee0: c1021898 2648b1ba c23eacc0 c20b0800 00000000 c0f746f0 c0f746a8 2648b1ba
+<0>[   63.754440] 5f00: c20b0800 c08fbc18 c0f746f0 c0855eac c0e286b8 c23ea3c0 c0e1e910 2648b1ba
+<0>[   63.754469] 5f20: 00000000 00000000 00000000 c085601c 00000001 c0f746f0 dc815f73 00000040
+<0>[   63.754502] 5f40: c0e8ef20 dc815f80 c0f746f0 c08569f8 80000193 c0052f0c c0e286a0 c0f746a0
+<0>[   63.754532] 5f60: 0000012c dc815f78 ffffa3b9 c0856e00 0057b000 00000000 dc815f78 dc815f78
+<0>[   63.754563] 5f80: dc815f80 dc815f80 c0f6caac 2648b1ba ffffa3b8 00000003 00000004 c0f90760
+<0>[   63.754592] 5fa0: 00000008 c1d08000 00000101 00000000 0000000c c0027ecc ffffa3b8 0000000a
+<0>[   63.754622] 5fc0: ffffa3b8 0000000a 00000000 04208060 00000000 c498a000 20000010 60000113
+<0>[   63.754652] 5fe0: 000001ff 00000000 c2ea4580 c2f39e10 bf1f22e8 0000000e dc9cddf0 c09f5984
+<0>[   63.754699] Code: b62fce94 b62fce8c 00000000 b62fce6c (b62fce74) 
+<4>[   63.754731] ---[ end trace 0000000000000000 ]---
+<0>[   63.769811] Kernel panic - not syncing: Fatal exception in interrupt

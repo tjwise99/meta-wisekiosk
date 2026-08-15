@@ -34,3 +34,15 @@ jobs:
 
       - name: Run repository guards
         run: tools/ci-guards.sh
+
+      # Pure stdlib, no install step. tools/doc-image.py is deliberately NOT
+      # here: it compares prose against a built rootfs, CI never builds one, and
+      # a required check that skips on every run is noise, not a gate.
+      #
+      # !cancelled(): this runs even when the guards step failed, matching the
+      # hook and `just verify` -- two independent findings are worth more than
+      # the first one twice. The job still fails if either step does, and unlike
+      # always() a cancelled run stays cancelled.
+      - name: Check Markdown cross-references
+        if: ${{ !cancelled() }}
+        run: python3 tools/doc-links.py

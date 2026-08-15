@@ -1,8 +1,10 @@
 SUMMARY = "Kiosk hardware trim: keep unused subsystems out of the boot, and reboot on panic"
 DESCRIPTION = "Drop-in configuration only -- no binaries, no services. Deliberately a \
-separate recipe rather than a systemd_%.bbappend: touching the systemd recipe re-hashes \
-systemd -> gtk+3/at-spi2-core -> webkitgtk3, which is a multi-hour WebKit rebuild for three \
-config files. The same reasoning is why kiosk-journal exists."
+separate recipe rather than a systemd_%.bbappend: touching the systemd recipe risks a \
+multi-hour WebKit rebuild for three config files, and dbus is the load-bearing hop, not \
+gtk+3. The chain is at recipes-core/packagegroups/packagegroup-base.bbappend and the \
+removal routes it closes are in docs/issue_investigation/webkit_dependency_trims/README.md. \
+The same reasoning is why kiosk-journal exists."
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 

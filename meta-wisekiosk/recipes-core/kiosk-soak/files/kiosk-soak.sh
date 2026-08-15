@@ -1,5 +1,6 @@
 #!/bin/sh
-# Kiosk soak sampler, ported from tools/kiosk-soak.sh for the Yocto image.
+# Kiosk soak sampler, ported from the Raspbian-era kiosk's sampler for the
+# Yocto image.
 #
 #   kiosk-soak.sh              take one sample
 #   kiosk-soak.sh --summary [N]   report over the last N samples (default: all)
@@ -14,6 +15,29 @@
 #     resolved with command -v rather than by grepping for a path. The principle
 #     is unchanged: ask the launcher, never hardcode. A sampler that names one
 #     browser records zeros for the other and calls it data.
+#
+# The fields that are not self-evident from the printf below:
+#   boot       first 8 of boot_id. A change means the device rebooted, and the
+#              samples either side are not one series
+#   pid        main browser pid. A change means the browser restarted; `none`
+#              means it was not running at that sample
+#   nproc      processes in the browser family (surf plus its WebKit children)
+#   rss_total  RSS across that whole family, and the memory number that matters
+#              -- the renderer is a separate process and holds most of it
+#   thr        vcgencmd get_throttled. Anything but 0x0 means it throttled at
+#              some point SINCE BOOT, not that it is throttling now
+#   ent        entropy pool. Low is expected; rngd is deliberately off for surf
+#
+# Read a --summary in this order, weakest evidence last:
+#   1. reboots and browser restarts. Non-zero means the memory series is really
+#      two series, and no rate fitted across it means anything
+#   2. samples w/o browser. Non-zero means the kiosk was down at those samples
+#   3. the shape of rss_total across the window, before any slope. This port
+#      prints no hourly mean, so that read is manual against the log
+#   4. the slope, last
+#
+# Why the order is that way, and why the endpoint delta is labelled NOT a rate:
+# docs/issue_investigation/surf_memory_soak/README.md.
 set -u
 LOG=${KIOSK_SOAK_LOG:-/data/kiosk-soak.log}
 LAUNCHER=${KIOSK_LAUNCHER:-/usr/bin/kiosk-launch}
