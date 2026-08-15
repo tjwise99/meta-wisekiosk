@@ -97,9 +97,9 @@ bootprofile host outdir="local":
 # restore path nobody has rehearsed. Restoring is `just provision-device` plus
 # whatever this archive holds, applied by hand.
 #
-# One plain stream, no chunking. Verifying that shape against the capped board
-# is part of #29 remove chunked bundle delivery; until then gzip -t below is
-# what says whether the transfer arrived whole.
+# One plain stream, no chunking -- the plain-transfer shape verified against the
+# capped board with #29. gzip -t below is what says whether the transfer arrived
+# whole.
 #
 # The pull itself needs a reachable device. What runs without one: mkdir, the
 # overwrite guard, and gzip -t catching a truncated (here, empty) stream.

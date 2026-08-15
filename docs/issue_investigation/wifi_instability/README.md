@@ -74,8 +74,9 @@ Net progress across the last four runs was zero, and gentler pause variants (6 s
 way. Nothing was damaged — `BOOT_ORDER=B A`, both slots `good`, kiosk active, no FAT errors — and
 every hang self-recovered. The attempt was stopped deliberately rather than ground against the risk
 of unclean shutdowns corrupting the FAT partition that holds `uboot.env`. This episode predates the
-top-OPP finding; the delivery design it produced is documented at
-[`send-bundle-chunked.sh`](../../../tools/send-bundle-chunked.sh).
+top-OPP finding; the chunked delivery design it produced was removed once the cap made a plain
+transfer safe (issue #29), leaving the single verified `scp` documented in
+[`../../rauc-key-rotation.md`](../../rauc-key-rotation.md).
 
 **Panic recovery bound.** Recovery from `sysrq`-triggered panic to SSH answering was **60 s** — a
 10 s `panic=10` delay plus a normal boot — confirmed by a changed `boot_id`, with counters at `3/3`,
@@ -124,8 +125,10 @@ passing watchdog-reset test for whether the region survives.
   [`linux-raspberrypi_%.bbappend`](../../../meta-wisekiosk/recipes-kernel/linux/linux-raspberrypi_%.bbappend).
 - `panic=10` on the kernel command line, and the ramoops overlay with an explicit `console-size=`:
   the `panic-reboot` and `kiosk` blocks of [`kiosk-zero-w.yaml`](../../../kiosk-zero-w.yaml).
-- Chunked delivery, superseded by the cap above and tracked for removal by issue #29 remove chunked
-  bundle delivery: [`send-bundle-chunked.sh`](../../../tools/send-bundle-chunked.sh).
+- Chunked delivery, superseded by the cap above and since removed (issue #29 remove chunked bundle
+  delivery): a plain full-size transfer was verified 5/5 on the capped board, so the OTA path is now
+  a single md5-verified `scp` (`kiosk-send-direct`), documented in
+  [`../../rauc-key-rotation.md`](../../rauc-key-rotation.md).
 
 Two threads stay open elsewhere: issue #11 cpufreq cap not in force during the first ~20s of boot
 tracks the window before the cap unit runs, and the `mmc_rescan` panic mechanism is tracked as its

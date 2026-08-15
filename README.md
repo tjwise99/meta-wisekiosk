@@ -106,22 +106,23 @@ and a non-root run leaves them owned by the wrong uid — but only after the car
 ### Updating a running device
 
 ```sh
-just kiosk-ota      # bundle -> preflight -> chunked send -> rauc install
+just kiosk-ota      # bundle -> preflight -> verified scp -> rauc install
 just kiosk-reboot
 just kiosk-rollback # if the new slot comes up wrong
 ```
 
-Every recipe that defaults to a device — `kiosk-ota`, `kiosk-send`, `kiosk-install`, `kiosk-reboot`,
+Every recipe that defaults to a device — `kiosk-ota`, `kiosk-send-direct`, `kiosk-install`, `kiosk-reboot`,
 `kiosk-rollback`, `kiosk-preflight`, `kiosk-backup`, `provision-device` — takes its default from one
 `kiosk-host` variable in the [`Justfile`](Justfile), so `export KIOSK_HOST=root@<addr>` retargets all
 of them at once. Boards get swapped on this unit; `just find <cidr>` is how you learn the address of
 the one now on the bench. An explicit `host` argument still wins over both.
 
 `kiosk-preflight` refuses a delivery that cannot work — wrong slot size, stale bundle, no room on
-`/data` — before spending twenty-five minutes transferring it. The chunked transfer is a superseded
-workaround: the root cause is fixed by the clock cap in
-[`kiosk-cpufreq`](meta-wisekiosk/recipes-core/kiosk-cpufreq/kiosk-cpufreq_1.0.bb), and removing the
-chunking is tracked by issue #29 remove chunked bundle delivery.
+`/data` — before the transfer. Delivery is a single md5-verified `scp` (`kiosk-send-direct`, ~45s for
+the ~114MB bundle): the sustained-transfer wedge that once forced chunking was top-OPP memory
+corruption, fixed by the clock cap in
+[`kiosk-cpufreq`](meta-wisekiosk/recipes-core/kiosk-cpufreq/kiosk-cpufreq_1.0.bb), so the chunker was
+removed (issue #29 remove chunked bundle delivery, verified 5/5 on the capped board).
 
 ## Configuration and secrets
 

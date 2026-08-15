@@ -9,6 +9,26 @@
 # Both checks run even when the first fails, matching `just verify`: two
 # independent findings are worth more than the first one twice.
 rc=0
+
+# Setting this repo's own core.hooksPath OVERRIDES the machine-global
+# core.hooksPath, which would otherwise run the global gitleaks pre-commit -- and
+# that one fails CLOSED (no scanner, no commit) where ci-guards.sh's gitleaks is
+# optional. Chain to it explicitly so our hooks do not silently drop that
+# guarantee. If it is armed and missing, that is itself a failure, not a skip.
+global_dir=$(git config --global core.hooksPath 2>/dev/null)
+case "$global_dir" in
+    "~/"*) global_dir="$HOME/${global_dir#\~/}" ;;
+    "~")   global_dir="$HOME" ;;
+esac
+if [ -n "$global_dir" ]; then
+    if [ -x "$global_dir/pre-commit" ]; then
+        "$global_dir/pre-commit" || rc=1
+    else
+        echo "pre-commit: global hook armed at $global_dir but no runnable pre-commit there" >&2
+        rc=1
+    fi
+fi
+
 tools/ci-guards.sh || rc=1
 python3 tools/doc-links.py || rc=1
 exit $rc
