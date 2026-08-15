@@ -25,7 +25,6 @@ image-name := "core-image-base"
 # thing here guaranteed to go stale -- it is defined once and overridden by the
 # environment (`export KIOSK_HOST=root@<addr>`) rather than edited per recipe.
 # `just find <cidr>` is how you learn the address of a board you just swapped in.
-# tools/send-bundle-chunked.sh reads KIOSK_HOST itself and needs no plumbing.
 kiosk-host := env('KIOSK_HOST', 'root@192.168.1.6')
 
 # === RAUC Configuration ===
@@ -45,6 +44,7 @@ rauc-keyring := env('RAUC_KEYRING', 'sources/meta-autonomos/meta-autonomos-core/
 import 'justfiles/ota.just'
 import 'justfiles/deploy.just'
 import 'justfiles/device.just'
+import 'justfiles/rotate.just'
 
 default: help
 

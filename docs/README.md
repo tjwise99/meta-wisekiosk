@@ -3,6 +3,7 @@
 | Document | What question it answers |
 |---|---|
 | [`layers-and-kas.md`](layers-and-kas.md) | How does a tree of YAML and recipes become an image, for someone who has not used Yocto? |
+| [`rauc-key-rotation.md`](rauc-key-rotation.md) | How do you replace the RAUC signing key the devices trust, and why must it happen in a fixed order? |
 | [`issue_investigation/boot_cpu_saturation/`](issue_investigation/boot_cpu_saturation/README.md) | Across a boot, is the single core doing work, waiting on hardware, or queued behind something else? |
 | [`issue_investigation/wlan0_udev_queue/`](issue_investigation/wlan0_udev_queue/README.md) | What occupies the gap between the WiFi chip appearing on the bus and `wlan0` existing, and what is removing it worth? |
 | [`issue_investigation/first_boot_after_ota/`](issue_investigation/first_boot_after_ota/README.md) | What does the first boot of a freshly written slot cost, and how long is the device unreachable? |
