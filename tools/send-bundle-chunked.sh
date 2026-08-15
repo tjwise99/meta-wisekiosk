@@ -6,6 +6,11 @@
 # meta-wisekiosk/recipes-core/kiosk-cpufreq. Kept until removal lands --
 # issue #29 remove chunked bundle delivery.
 #
+# The transfer loop needs a reachable kiosk end to end. What runs without
+# one: argument handling, the BUNDLE readability check, and the bounded
+# retry/timeout behavior of wait_for_device against an unreachable or
+# nonexistent host.
+#
 # Evidence this was built on, measured on the uncapped board
 # (mechanism: docs/issue_investigation/wifi_instability/README.md):
 #   Test A  334 MB written to /data + sync, negligible network  -> SURVIVED
@@ -26,7 +31,11 @@
 # honest progress marker.
 set -u
 
-BUNDLE=$(readlink -f "${1:?usage: send-bundle-chunked.sh <file> [chunk_mb] [rx_pause] [sync_pause]}")
+# The usage check has to fire BEFORE the command substitution, not inside it:
+# `${1:?}` there kills only the subshell, and the parent carries on with an
+# empty BUNDLE to fail a second time on the readability check below.
+[ $# -ge 1 ] || { echo "usage: send-bundle-chunked.sh <file> [chunk_mb] [rx_pause] [sync_pause]" >&2; exit 1; }
+BUNDLE=$(readlink -f "$1")
 CHUNK_MB=${2:-2}
 RX_PAUSE=${3:-4}
 SYNC_PAUSE=${4:-3}
@@ -34,7 +43,12 @@ HOST=${KIOSK_HOST:-root@192.168.1.6}
 DEST=${KIOSK_DEST:-/data/update.raucb}
 SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
 
-SIZE=$(stat -Lc%s "$BUNDLE")          # -L: a symlink's own size is its target's NAME length
+# Checked here, not left to surface inside the transfer loop: an unreadable
+# BUNDLE would otherwise leave SIZE empty and fall straight into
+# wait_for_device, which retries the device for up to 400s before anything
+# says the real problem was a missing local file.
+[ -r "$BUNDLE" ] || { echo "no such file: $BUNDLE" >&2; exit 1; }
+SIZE=$(stat -Lc%s "$BUNDLE") || { echo "cannot stat $BUNDLE" >&2; exit 1; }  # -L: a symlink's own size is its target's NAME length
 CHUNK=$((CHUNK_MB * 1024 * 1024))
 LOCAL_MD5=$(md5sum "$BUNDLE" | cut -d' ' -f1)
 MAX_STALL=${MAX_STALL:-40}            # consecutive no-progress rounds before giving up

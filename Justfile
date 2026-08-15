@@ -20,6 +20,14 @@ config := env('KAS_CONFIG', 'kiosk-zero-w.yaml')
 # Image name for flash recipe
 image-name := "core-image-base"
 
+# The device every host-defaulting recipe talks to, in ssh target form. This is
+# a hardware-in-the-loop unit and boards get swapped, so the address is the one
+# thing here guaranteed to go stale -- it is defined once and overridden by the
+# environment (`export KIOSK_HOST=root@<addr>`) rather than edited per recipe.
+# `just find <cidr>` is how you learn the address of a board you just swapped in.
+# tools/send-bundle-chunked.sh reads KIOSK_HOST itself and needs no plumbing.
+kiosk-host := env('KIOSK_HOST', 'root@192.168.1.6')
+
 # === RAUC Configuration ===
 
 # Directory for RAUC bundles
@@ -117,7 +125,7 @@ image:
 # Write per-site config to a device's /data. The image carries none of it.
 [group('provision')]
 [doc("Provision a reachable device's /data from secrets.yaml")]
-provision-device host="root@192.168.1.6":
+provision-device host=kiosk-host:
     tools/provision.sh device {{host}}
 
 # Before first boot: the wifi credentials are what let you reach the device, so

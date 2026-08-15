@@ -43,14 +43,29 @@ status host:
 # given symptom calls for.
 
 # Takes a CIDR rather than a host: this is the recipe for when the address is
-# what you are missing.
+# what you are missing. The script picks its own L2 view -- Windows interop
+# under WSL, a local interface otherwise -- and prints which one it used,
+# because a miss means something different in each.
+#
+# Exit 3 stays non-zero: it means "no L2 view, nothing could be identified", and
+# a caller that read that as "the subnet is empty" is the exact mistake this
+# recipe exists to prevent. But a rc=3 run can still have printed useful
+# addresses above, and just's bare "error: recipe find failed" describes none of
+# that, so the line below names what 3 means before just says its piece.
 [group('device')]
-[doc("Ping-sweep a /24 and report Raspberry Pi OUIs from the ARP cache")]
+[script('bash')]
+[doc("Sweep a /24 and report Raspberry Pi OUIs from the best neighbour table available")]
 find cidr:
     tools/kiosk-find.sh {{cidr}}
+    rc=$?
+    if [ $rc -eq 3 ]; then
+        echo "exit 3: no L2 view of {{cidr}}. Anything printed above is reachability only," >&2
+        echo "        not an identification, and no line of it says the subnet is empty." >&2
+    fi
+    exit $rc
 
-# Run from the host serving the page -- netstat only sees its own sockets, so
-# the address to pass is the KIOSK's, not this host's.
+# Run from the host serving the page -- a socket table only holds that host's
+# own sockets, so the address to pass is the KIOSK's, not this host's.
 [group('device')]
 [doc("Infer browser state from TCP connections to the served page")]
 tcp-state kiosk-addr port="8080":
@@ -86,14 +101,20 @@ bootprofile host outdir="local":
 # is part of #29 remove chunked bundle delivery; until then gzip -t below is
 # what says whether the transfer arrived whole.
 #
+# The pull itself needs a reachable device. What runs without one: mkdir, the
+# overwrite guard, and gzip -t catching a truncated (here, empty) stream.
+#
 # The tarball lands in local/: it holds /data/config/wpa_supplicant.conf and the
 # persistent journal, and local/ is this repository's gitignored home for
 # exactly that. just runs recipes with cwd at the repository root, which is
 # public.
+#
+# host is an ssh target, `root@<addr>`, not a bare address: it defaults to
+# kiosk-host, which every other host-defaulting recipe shares.
 [group('device')]
 [script('bash')]
 [doc("Pull a dated tarball of the device's /data to this host")]
-kiosk-backup host="192.168.1.6":
+kiosk-backup host=kiosk-host:
     SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
     mkdir -p local
     OUT="local/kiosk-data-$(date +%F).tar.gz"
@@ -101,7 +122,7 @@ kiosk-backup host="192.168.1.6":
         echo "$OUT exists -- move it aside rather than overwriting today's backup"
         exit 1
     fi
-    $SSH root@{{host}} 'tar -czf - -C / data' > "$OUT"
+    $SSH {{host}} 'tar -czf - -C / data' > "$OUT"
     # A truncated stream still leaves a file, and gzip is where that shows up.
     gzip -t "$OUT" || { echo "$OUT does not decompress -- the transfer was cut short"; rm -f "$OUT"; exit 1; }
     echo "wrote $OUT ($(du -h "$OUT" | cut -f1))"

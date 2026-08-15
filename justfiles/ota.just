@@ -146,7 +146,7 @@ kiosk-bundle kconfig="kiosk-zero-w.yaml":
 [group('ota')]
 [script('bash')]
 [doc("Refuse a delivery that cannot work: slot size, stale bundle, /data space")]
-kiosk-preflight image="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/core-image-base-raspberrypi0-wifi.rootfs.ext4" bundle="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host="root@192.168.1.6":
+kiosk-preflight image="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/core-image-base-raspberrypi0-wifi.rootfs.ext4" bundle="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host=kiosk-host:
     set -euo pipefail
     SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
 
@@ -197,14 +197,14 @@ kiosk-preflight image="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wi
 [group('ota')]
 [script('bash')]
 [doc("Deliver a bundle in chunked bursts, verified end to end")]
-kiosk-send bundle="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host="root@192.168.1.6" chunk_mb="8" rx_pause="2" sync_pause="2":
+kiosk-send bundle="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host=kiosk-host chunk_mb="8" rx_pause="2" sync_pause="2":
     KIOSK_HOST={{host}} tools/send-bundle-chunked.sh {{bundle}} {{chunk_mb}} {{rx_pause}} {{sync_pause}}
 
 # Does NOT reboot -- inspect `rauc status` first, then `just kiosk-reboot`.
 [group('ota')]
 [script('bash')]
 [doc("Install a staged bundle and show slot state")]
-kiosk-install host="root@192.168.1.6":
+kiosk-install host=kiosk-host:
     SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
     echo "== before"
     $SSH {{host}} 'fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT; rauc status 2>&1 | grep -E "Booted|Activated|boot status"'
@@ -233,7 +233,7 @@ kiosk-install host="root@192.168.1.6":
 # Reboot and wait for the kiosk to answer again.
 [group('ota')]
 [script('bash')]
-kiosk-reboot host="root@192.168.1.6":
+kiosk-reboot host=kiosk-host:
     SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
     BEFORE=$($SSH {{host}} 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null)
     $SSH {{host}} 'systemctl reboot' >/dev/null 2>&1 || true
@@ -249,7 +249,7 @@ kiosk-reboot host="root@192.168.1.6":
 
 # Full Tier 1 OTA. Builds the bundle FIRST so a stale .raucb cannot be shipped.
 [group('ota')]
-kiosk-ota host="root@192.168.1.6" kconfig="kiosk-zero-w.yaml": (kiosk-bundle kconfig) (kiosk-preflight "build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/core-image-base-raspberrypi0-wifi.rootfs.ext4" "build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host) (kiosk-send "build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host) (kiosk-install host)
+kiosk-ota host=kiosk-host kconfig="kiosk-zero-w.yaml": (kiosk-bundle kconfig) (kiosk-preflight "build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/core-image-base-raspberrypi0-wifi.rootfs.ext4" "build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host) (kiosk-send "build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host) (kiosk-install host)
     @echo "Delivered and installed. Verify, then: just kiosk-reboot {{host}}"
 
 # The [doc] attribute rather than a trailing comment: just takes the LAST
@@ -264,7 +264,7 @@ kiosk-ota host="root@192.168.1.6" kconfig="kiosk-zero-w.yaml": (kiosk-bundle kco
 [group('ota')]
 [script('bash')]
 [doc("Roll back to the other slot")]
-kiosk-rollback host="root@192.168.1.6":
+kiosk-rollback host=kiosk-host:
     SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
     $SSH {{host}} 'rauc status mark-bad booted; fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT'
     echo "Marked booted slot bad. Now: just kiosk-reboot {{host}}"
