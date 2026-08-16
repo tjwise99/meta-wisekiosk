@@ -119,6 +119,15 @@ local_conf_header:
     # See docs/issue_investigation/screenshot_capture_fbgrab/README.md.
     IMAGE_INSTALL:append = " surf kiosk-session kiosk-soak kiosk-journal kiosk-hardware kiosk-netcheck kiosk-bootprof zram wpa-supplicant-service packagegroup-core-x11 xwininfo xprop ttf-roboto imagemagick tzdata-core tzdata-americas"
 
+    # kiosk-provision: applies /data/config over the image defaults at boot --
+    # sets the hostname into the kernel (nothing reads a hostname file) and
+    # seeds /data/etc/machine-id when /data lacks one. Without it a device keeps
+    # the image-default hostname and /data/config/hostname is written but never
+    # read. It is a sysinit oneshot ordered before wpa_supplicant / timesyncd /
+    # network-pre; boot-profiled on hardware one run each side: BOOT-to-60s
+    # unchanged and every marker within ~1s of the baseline (mixed sign).
+    IMAGE_INSTALL:append = " kiosk-provision"
+
     # serial-getty is a login prompt on a port with nothing attached, started at
     # 25.4s -- before the wlan0 gate.
     #

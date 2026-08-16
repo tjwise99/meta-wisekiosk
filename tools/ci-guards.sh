@@ -175,6 +175,92 @@ else
     ok "no IP addresses in tracked files"
 fi
 
+# --- 7. an auto-enabled service recipe must be reachable from an image -----
+# A recipe under meta-wisekiosk/recipes*/ can auto-enable a systemd service yet
+# be in no IMAGE_INSTALL, so it never runs (kiosk-provision #35, read-only-
+# rootfs-config #10); recipe and IMAGE_INSTALL each parse fine alone, only the
+# cross-check sees it. Scoped to auto-enabled services (owner, 2026-08-15): a
+# debug tool (no service, or unit shipped disabled like kiosk-bootprof) and a
+# config-only recipe are out of scope. "Reachable" is a literal IMAGE_INSTALL
+# token; a transitively-pulled recipe false-FAILs (safe) -- name it or extend.
+# Paths are existence-checked first (as 1b/3) so a rename cannot read green.
+scan7_root="meta-wisekiosk"
+scan7_image="kiosk-zero-w.yaml"
+
+# Combined text of a recipe: the .bb plus every require/include-d .inc (systemd
+# metadata may live there), resolved beside the requiring file first else by
+# basename in the layer; recursive, visited-guarded. NOT followed: `inherit` of
+# a custom .bbclass, or a .bbappend -- a recipe signalled only that way is missed.
+recipe_text7() {
+    local f=$1 seen=$2 inc resolved
+    [ -f "$f" ] || return 0
+    case " $seen " in *" $f "*) return 0 ;; esac
+    seen="$seen $f"
+    cat "$f"
+    while IFS= read -r inc; do
+        [ -n "$inc" ] || continue
+        if [ -f "$(dirname "$f")/$inc" ]; then
+            resolved="$(dirname "$f")/$inc"
+        else
+            resolved=$(find "$scan7_root" -name "$(basename "$inc")" -type f 2>/dev/null | head -n1)
+        fi
+        [ -n "$resolved" ] && recipe_text7 "$resolved" "$seen"
+    done < <(grep -hE '^[[:space:]]*(require|include)[[:space:]]' "$f" 2>/dev/null \
+             | sed -E 's/^[[:space:]]*(require|include)[[:space:]]+//; s/[[:space:]].*$//')
+}
+
+missing7=""
+[ -d "$scan7_root" ] || missing7="$missing7 $scan7_root"
+[ -f "$scan7_image" ] || missing7="$missing7 $scan7_image"
+if [ -n "$missing7" ]; then
+    bad "guard 7 cannot scan -- path renamed or removed:$missing7"
+else
+    # PN = .bb basename minus the trailing _<version> (bitbake splits at last _).
+    recipes7=$(find "$scan7_root" -path "${scan7_root}/recipes*/*" -name '*.bb' 2>/dev/null | sort -u)
+    if [ -z "$recipes7" ]; then
+        bad "guard 7 found no recipes under ${scan7_root}/recipes* -- glob broken or layer renamed"
+    else
+        # IMAGE_INSTALL tokens (any :append/:prepend/override/legacy _append),
+        # minus :remove tokens (a :remove wins regardless of order); inline
+        # comments stripped so they cannot smuggle a token in.
+        ii_add=$(grep -E '^[[:space:]]*IMAGE_INSTALL([:_][A-Za-z0-9._:+-]+)?[[:space:]]*[?:+.]*=' "$scan7_image" \
+            | grep -vE '^[[:space:]]*IMAGE_INSTALL[:_][^=]*remove' \
+            | sed -E 's/^[^=]*=//; s/#.*//; s/"//g' | tr '\n' ' ')
+        ii_remove=$(grep -E '^[[:space:]]*IMAGE_INSTALL[:_][^=]*remove[^=]*=' "$scan7_image" \
+            | sed -E 's/^[^=]*=//; s/#.*//; s/"//g' | tr '\n' ' ')
+        unreachable7=""
+        while IFS= read -r bb; do
+            [ -n "$bb" ] || continue
+            text=$(recipe_text7 "$bb" "")
+            # here-strings, never `| grep -q`: grep -q + pipefail inverts a match
+            # (producer SIGPIPEs to 141) once text exceeds the pipe buffer.
+            grep -qE '^[[:space:]]*inherit[[:space:]].*systemd' <<< "$text" || continue
+            grep -qE '^[[:space:]]*SYSTEMD_SERVICE' <<< "$text" || continue
+            # disabled only if a disable assignment exists and no enable one does
+            # (per-PN/later enable wins; no assignment defaults to enable).
+            ae=$(sed -nE '/^[[:space:]]*SYSTEMD_AUTO_ENABLE/{s/#.*//;p;}' <<< "$text")
+            if grep -qE '=[^=]*disable' <<< "$ae" && ! grep -qE '=[^=]*enable' <<< "$ae"; then
+                continue
+            fi
+            pn=$(basename "$bb" | sed -E 's/\.bb$//; s/_[^_]*$//')
+            case " $ii_add " in
+                *" $pn "*)
+                    case " $ii_remove " in
+                        *" $pn "*) unreachable7="$unreachable7 $pn" ;;
+                    esac
+                    ;;
+                *) unreachable7="$unreachable7 $pn" ;;
+            esac
+        done <<< "$recipes7"
+        if [ -n "$unreachable7" ]; then
+            bad "auto-enabled service recipe is installed by no image:"
+            for pn in $unreachable7; do printf '        %s\n' "$pn"; done
+        else
+            ok "every auto-enabled service recipe is reachable from an image"
+        fi
+    fi
+fi
+
 if [ "$fail" -ne 0 ]; then
     printf '\nguards FAILED\n'
     exit 1
