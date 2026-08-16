@@ -80,14 +80,6 @@ local_conf_header:
     # a different kind of change, deliberately not batched with this one.
     PACKAGECONFIG:remove:pn-webkitgtk3 = "jit gtk4 enchant"
 
-    # iproute2-tc: ingress rate policing, so the board enforces its own receive
-    # ceiling instead of trusting every sender. The kernel modules (sch_ingress,
-    # act_police, sch_tbf, cls_u32) are already built in; only the binary was
-    # missing. This MUST live here, not in autonomos-common.inc -- the kas target
-    # is core-image-base, and that .inc is only included by autonomos-base.bb,
-    # which is not built. The first attempt went there and silently shipped nothing.
-    IMAGE_INSTALL:append = " iproute2-tc"
-
     # kiosk-cpufreq: caps scaling_max_freq below this board's unstable top OPP.
     # THE fix for the crash diagnosed 2026-08-13 -- 1000 MHz corrupts memory
     # under sustained SDIO + network load (2/2 deaths pinned there; 8/8
