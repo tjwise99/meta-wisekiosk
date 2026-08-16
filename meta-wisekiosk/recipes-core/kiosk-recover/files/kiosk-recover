@@ -1,0 +1,137 @@
+#!/bin/sh
+# kiosk-recover -- reverse kiosk-hardware's boot trims so the locked-down kiosk
+# becomes an interactively-debuggable Linux box again, then reboot.
+#
+# It restores, in order:
+#   1. the DNS resolver, login/session and userdb units kiosk-hardware masks
+#   2. default udev device handling (the masked rule files)
+#   3. Bluetooth input (the modprobe drop-in's third pass)
+#   4. the /etc/resolv.conf symlink into /data
+#   5. reboot
+#
+# This is NOT a boot un-bricker. It runs on a slot that already boots far enough
+# to give a shell; it cannot rescue a slot that does not. Recovery of a dead
+# slot is an A/B rollback, not this.
+#
+# Idempotent -- safe to run twice; a second run finds nothing left to do.
+# It does NOT touch /boot, sshd, systemd-networkd or wpa_supplicant, and there
+# is deliberately NO timer, deadman or auto-revert: this recovery machinery is
+# itself an untested change, so it only ever runs when a human runs it.
+#
+# Placement: this script lives on /data (see tools/provision.sh), which survives
+# an A/B flip and a reflash, so it is present regardless of which image booted.
+#
+# Usage:
+#   kiosk-recover            apply the changes and reboot
+#   kiosk-recover --dry-run  print exactly what would change; touch nothing; no
+#                            reboot. Use this to confirm targeting before the
+#                            real run.
+
+set -u
+
+DRY=0
+case "${1:-}" in
+    --dry-run) DRY=1 ;;
+    "")        ;;
+    *) echo "usage: kiosk-recover [--dry-run]" >&2; exit 2 ;;
+esac
+
+log()  { echo "kiosk-recover: $*"; }
+act()  { if [ "$DRY" -eq 1 ]; then echo "  would: $*"; else "$@"; fi; }
+
+# --- 1. unmask the boot-trim units ----------------------------------------
+# kiosk-hardware masks these with /dev/null symlinks in /etc/systemd/system.
+# Remove ONLY a mask (a symlink to /dev/null), never a real unit or drop-in a
+# human may have added there.
+#
+# zram.service is DELIBERATELY NOT in this list. Its mask is not a boot trim --
+# it is a defect workaround (issue #17): the unit fails every boot with "Device
+# or resource busy" and, when it does run, sizes swap at 90% of RAM. Unmasking
+# it restores a broken unit, so recovery leaves it masked on purpose. Do not
+# "fix" this omission by adding zram.service here.
+for u in systemd-resolved.service systemd-logind.service \
+         systemd-userdbd.service systemd-userdbd.socket; do
+    p="/etc/systemd/system/$u"
+    if [ -L "$p" ] && [ "$(readlink "$p")" = /dev/null ]; then
+        act rm -f "$p"
+        log "unmasked $u"
+    else
+        log "already unmasked $u"
+    fi
+done
+
+# --- 2. delete the udev rule masks ----------------------------------------
+# kiosk-hardware masks rules by installing /dev/null symlinks in
+# /etc/udev/rules.d (KIOSK_UDEV_RULES_MASKED). Remove SYMLINKS ONLY.
+#
+# The '-type l' restriction is load-bearing, not a nicety: FILES:${PN} claims
+# the whole /etc/udev/rules.d directory, so any real *.rules file there is a
+# shipped file. The first version of this script glob-deleted *.rules and
+# destroyed three shipped files (99-fuse, can, touchscreen). NEVER widen this to
+# a *.rules glob. The extra "-> /dev/null" check keeps it to kiosk-hardware's
+# own masks and spares any other symlink someone may have placed here.
+if [ -d /etc/udev/rules.d ]; then
+    find /etc/udev/rules.d -maxdepth 1 -type l | while IFS= read -r l; do
+        [ "$(readlink "$l")" = /dev/null ] || continue
+        act rm -f "$l"
+        log "removed udev mask $(basename "$l")"
+    done
+fi
+
+# --- 3. re-enable Bluetooth (the modprobe third pass) ---------------------
+# There is no separate Bluetooth drop-in. Bluetooth is the third pass of the
+# single combined /etc/modprobe.d/kiosk-blacklist.conf. Comment out ONLY those
+# six lines (install/blacklist for hci_uart, btbcm, bluetooth). Pass 1
+# (camera/ISP/codec/audio) and pass 2 (vc_sm_cma/gpiomem/uio) MUST survive
+# intact, so this matches those three exact module tokens and nothing else.
+# NEVER delete the file. Idempotent: an already-commented line no longer
+# matches, so a second run is a no-op.
+BL=/etc/modprobe.d/kiosk-blacklist.conf
+if [ -f "$BL" ]; then
+    hits=$(awk '
+        /^[[:space:]]*#/ { next }
+        /^[[:space:]]*(install|blacklist)[[:space:]]+(hci_uart|btbcm|bluetooth)([[:space:]]|$)/ { print }
+    ' "$BL")
+    if [ -n "$hits" ]; then
+        if [ "$DRY" -eq 1 ]; then
+            echo "  would comment out these Bluetooth lines in $BL:"
+            printf '%s\n' "$hits" | sed 's/^/      /'
+        else
+            # cat over the original path (not mv) preserves its mode and owner.
+            awk '
+                /^[[:space:]]*#/ { print; next }
+                /^[[:space:]]*(install|blacklist)[[:space:]]+(hci_uart|btbcm|bluetooth)([[:space:]]|$)/ {
+                    print "# kiosk-recover disabled: " $0; next
+                }
+                { print }
+            ' "$BL" > "$BL.kiosk-recover.tmp" \
+                && cat "$BL.kiosk-recover.tmp" > "$BL" \
+                && rm -f "$BL.kiosk-recover.tmp"
+            log "re-enabled Bluetooth (commented 6 lines in $BL)"
+        fi
+    else
+        log "Bluetooth already re-enabled in $BL"
+    fi
+fi
+
+# --- 4. restore the resolv.conf symlink -----------------------------------
+# /etc/resolv.conf -> /data/config/resolv.conf (kiosk-static-resolv.bbclass).
+# The tmpfiles entry that ships this uses 'L', not 'L+', so it will NOT recreate
+# the symlink once /etc/resolv.conf exists -- whatever this writes is what stays.
+WANT=/data/config/resolv.conf
+CUR=$(readlink /etc/resolv.conf 2>/dev/null || true)
+if [ "$CUR" = "$WANT" ]; then
+    log "resolv.conf already -> $WANT"
+else
+    act rm -f /etc/resolv.conf
+    act ln -s "$WANT" /etc/resolv.conf
+    log "resolv.conf -> $WANT"
+fi
+
+# --- 5. reboot ------------------------------------------------------------
+if [ "$DRY" -eq 1 ]; then
+    log "dry-run: no changes made, not rebooting"
+    exit 0
+fi
+log "rebooting"
+reboot

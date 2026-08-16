@@ -22,6 +22,16 @@ DEST=${2:?usage: provision.sh device <ssh-target> | card <mounted-/data>}
 # leftover ${WIFI_SSID} expands to empty and breaks loudly instead of silently
 # baking a real credential into a bundle.
 SEC=${KIOSK_SECRETS:-$HOME/.config/wisekiosk/secrets.yaml}
+
+# The recovery script (issue #28) is placed on /data, not the rootfs, so it
+# survives an A/B flip and a reflash. Its single source of truth is the
+# kiosk-recover recipe's files/ dir; provisioning is the /data placement path,
+# so it is copied to /data/RECOVER.sh here. ci-guards.sh guard 8 fails if this
+# wiring is broken (script missing, or provision.sh no longer references it).
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+RECOVER_SRC="$REPO/meta-wisekiosk/recipes-core/kiosk-recover/files/kiosk-recover"
+[ -r "$RECOVER_SRC" ] || { echo "recovery script missing at $RECOVER_SRC"; exit 1; }
+
 [ -r "$SEC" ] || {
     echo "no secrets at $SEC"
     echo "copy secrets.yaml.tmpl there and fill it in, or set KIOSK_SECRETS"
@@ -69,6 +79,7 @@ printf '%s\n' "$HOST" > "$STAGE/config/hostname"
 : > "$STAGE/config/resolv.conf"
 for ns in $NS; do printf 'nameserver %s\n' "$ns" >> "$STAGE/config/resolv.conf"; done
 printf '%s\n' "$MID" > "$STAGE/etc/machine-id"
+install -m 0755 "$RECOVER_SRC" "$STAGE/RECOVER.sh"
 
 case "$MODE" in
   card)
@@ -76,8 +87,11 @@ case "$MODE" in
     mkdir -p "$DEST/config" "$DEST/etc"
     cp "$STAGE/config/"* "$DEST/config/"
     cp "$STAGE/etc/machine-id" "$DEST/etc/machine-id"
+    cp "$STAGE/RECOVER.sh" "$DEST/RECOVER.sh"
     chown -R 0:0 "$DEST/config" "$DEST/etc" 2>/dev/null || echo "note: run as root to own the files correctly"
+    chown 0:0 "$DEST/RECOVER.sh" 2>/dev/null || true
     chmod 0600 "$DEST/config/wpa_supplicant.conf"
+    chmod 0755 "$DEST/RECOVER.sh"
 
     # Verify here, not in a procedure someone is told to follow. The failure
     # this catches is discovered on the device otherwise, and a card that comes
@@ -134,7 +148,7 @@ case "$MODE" in
     [ "$rc" -eq 0 ] || { echo "could not write /data on $DEST (tar|ssh rc=$rc) -- nothing was provisioned" >&2; exit 1; }
 
     rc=0
-    ssh "${ssh_opts[@]}" "$DEST" 'ls -l /data/config /data/etc/machine-id' || rc=$?
+    ssh "${ssh_opts[@]}" "$DEST" 'ls -l /data/config /data/etc/machine-id /data/RECOVER.sh' || rc=$?
     [ "$rc" -eq 0 ] || { echo "wrote /data on $DEST but could not read it back (ssh rc=$rc) -- check it by hand" >&2; exit 1; }
     echo "provisioned $DEST"
     ;;
