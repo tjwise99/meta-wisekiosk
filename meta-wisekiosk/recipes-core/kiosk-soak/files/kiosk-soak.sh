@@ -123,9 +123,32 @@ DISK=$(df / | awk 'NR==2{print $5}' | tr -d ' %')
 MU=$(free | awk '/^Mem/{printf "%d", $3 / 1024}')
 MA=$(free | awk '/^Mem/{printf "%d", $7 / 1024}')
 
-printf 'ts=%s iso=%s boot=%s up=%s load1=%s load5=%s load15=%s temp=%s thr=%s memused=%s memavail=%s ent=%s disk=%s browser=%s pid=%s nproc=%s rss_main=%s rss_total=%s\n' \
+# Clock and boot-counter instrumentation for issues #31 (timesyncd/clock) and
+# #18/#26 (RAUC boot-counter). Appended at the END of the line so the --summary
+# parser above -- which keys on named fields, not field position -- is
+# unaffected. All three probes run once per 5-min tick.
+#   ntpsync  timedatectl's NTPSynchronized: has the clock been disciplined
+#   dns      a resolve probe of a timesyncd default server; FAIL means the
+#            hostname NTP list could not have been reached this tick
+#   border/baleft/bbleft  RAUC BOOT_ORDER and per-slot boot attempts remaining.
+#            A healthy boot never logged these before; the space in BOOT_ORDER
+#            ("A B") is squashed to "A_B" so the key=value line stays parseable.
+NTPSYNC=$(timedatectl show -p NTPSynchronized --value 2>/dev/null)
+[ "$NTPSYNC" = "yes" ] || NTPSYNC=no
+nslookup 2.pool.ntp.org >/dev/null 2>&1 && DNS=ok || DNS=FAIL
+BORDER=unknown; BALEFT=unknown; BBLEFT=unknown
+FW=$(fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT 2>/dev/null)
+if [ -n "$FW" ]; then
+  BORDER=$(printf '%s\n' "$FW" | awk -F= '/^BOOT_ORDER=/{gsub(/ /,"_",$2); print $2}')
+  BALEFT=$(printf '%s\n' "$FW" | awk -F= '/^BOOT_A_LEFT=/{print $2}')
+  BBLEFT=$(printf '%s\n' "$FW" | awk -F= '/^BOOT_B_LEFT=/{print $2}')
+fi
+: "${BORDER:=unknown}" "${BALEFT:=unknown}" "${BBLEFT:=unknown}"
+
+printf 'ts=%s iso=%s boot=%s up=%s load1=%s load5=%s load15=%s temp=%s thr=%s memused=%s memavail=%s ent=%s disk=%s browser=%s pid=%s nproc=%s rss_main=%s rss_total=%s ntpsync=%s dns=%s border=%s baleft=%s bbleft=%s\n' \
   "$(date +%s)" "$(date +%Y-%m-%dT%H:%M:%S%z)" "$BOOT" "$UP" "$L1" "$L5" "$L15" "$TEMP" "${THR:-unknown}" \
   "$MU" "$MA" "$ENT" "$DISK" "$COMM" "${PID:-none}" "$NPROC" "$RSS_MAIN" "$RSS_TOTAL" \
+  "$NTPSYNC" "$DNS" "$BORDER" "$BALEFT" "$BBLEFT" \
   >> "$LOG"
 
 # Cap the log so a sampler left running for a year cannot fill the partition.
