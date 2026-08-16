@@ -51,6 +51,11 @@ if [ "${1:-}" = "--summary" ]; then
       n++
       if (first == "") { first = v["ts"]; frss = v["rss_total"]; fboot = v["boot"] }
       last = v["ts"]; lrss = v["rss_total"]
+      # timer cadence is 300s (OnUnitActiveSec=5min); with ~1s execution/
+      # AccuracySec jitter a healthy delta is ~301s. 450 = 1.5x cadence
+      # catches a single missed run (~600s) with margin, never jitter
+      if (prevts != "" && v["ts"] - prevts > 450) { gaps++; if (v["ts"] - prevts > maxgap) maxgap = v["ts"] - prevts }
+      prevts = v["ts"]
       if (v["boot"] != fboot && !seen[v["boot"]]++) reboots++
       if (v["pid"] == "none") down++
       else { if (prevpid != "" && v["pid"] != prevpid) restarts++; prevpid = v["pid"] }
@@ -65,10 +70,16 @@ if [ "${1:-}" = "--summary" ]; then
       printf "  samples          %d over %.1f h\n", n, hours
       printf "  reboots          %d\n", reboots + 0
       printf "  browser restarts %d\n", restarts + 0
+      if (gaps > 0) printf "  ts gaps          %d (largest %ds) <-- series not contiguous\n", gaps + 0, maxgap + 0
       printf "  samples w/o browser  %d %s\n", down + 0, (down > 0 ? "<-- kiosk was down" : "")
       printf "  rss_total range  %d .. %d kB\n", minrss, maxrss
       printf "  rss_total ends   %d -> %d kB (endpoint delta %+d -- NOT a rate)\n", frss, lrss, lrss - frss
-      if (hours > 0.5) printf "  slope            %+.1f kB/h  (n=%d)\n", (lrss - frss) / hours, n
+      if (reboots > 0 || gaps > 0) {
+        reason = (reboots > 0 && gaps > 0) ? "reboot + ts gap" : (reboots > 0 ? "reboot" : "ts gap")
+        printf "  slope            n/a  (%s -- memory series is not one contiguous run)\n", reason
+      }
+      else if (n == 2) printf "  slope            n/a  (two-point series -- endpoint delta above is the only estimate)\n"
+      else if (hours > 0.5) printf "  slope            %+.1f kB/h  (n=%d)\n", (lrss - frss) / hours, n
       printf "  peak temp        %.1f C\n", maxtemp
       printf "  peak load1       %.2f  (includes the sampler wake-up itself)\n", maxload
       printf "  throttled        %d sample(s) with thr != 0x0\n", thr + 0
