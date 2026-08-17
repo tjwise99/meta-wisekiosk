@@ -21,8 +21,9 @@ default server list stands, which is a list of DNS hostnames, not literal addres
 ([`kiosk-hardware_1.0.bb`](../../../meta-wisekiosk/recipes-core/kiosk-hardware/kiosk-hardware_1.0.bb)),
 and `/etc/resolv.conf` is a symlink to `/data/config/resolv.conf`, written by provisioning
 ([`kiosk-static-resolv.bbclass`](../../../meta-wisekiosk/classes/kiosk-static-resolv.bbclass),
-lines 13-15). `timesyncd` is the *sole* consumer of that resolver path — nothing else on
-the image does a DNS lookup — so a boot's only DNS-dependent step is resolving its own NTP server.
+lines 10-11). `timesyncd` is the *sole* consumer of that resolver path — nothing else on
+the image does a DNS lookup — so a boot's only DNS-dependent step is resolving its own NTP server
+(the symlink itself is created at lines 27-32).
 `wlan0` does not exist until ~32.6 s into boot
 ([`wlan0_udev_queue`](../wlan0_udev_queue/README.md)), which puts a hard floor under how early any
 network-dependent step, DNS or NTP, can start.
@@ -52,6 +53,11 @@ could not consume a boot-attempt counter by rebooting out from under its own goo
 lines and both `bootloop.log`/`mmc.log` captures were present at harvest; `pstore` was checked
 non-empty on every boot as a `mmc_rescan`-panic watch (issue #18) — none fired.
 
+`collect.sh` was deployed to `/data/bootloop/collect.sh` on the bench board for this run and was
+never part of any shipped image; per the traceability rule above it is tracked alongside this
+write-up as [`bootloop-collect.sh`](bootloop-collect.sh) — that file, not prose, is the harness of
+record for the bench corpus.
+
 Prod's earlier evidence came from reading `journalctl`'s retained boots directly — three, all that
 survived rotation — for time-to-first-NTP-contact. The soak extension (PR #40, draft) was then
 verified live: a fresh 5-minute sample line on the running prod board carries the new fields, and the
@@ -61,6 +67,31 @@ cleanly. That confirms the instrument works; it does not yet supply a bench-scal
 The tree facts above — the resolver chain, the masked units, `timesyncd`'s compiled defaults, the
 state directory's location, and the `ota.just` workaround — were each read from source rather than
 assumed, and are cited by file and line above.
+
+**Board code provenance.** Both boards report identical `/etc/os-release`
+(`ID=autonomos`, `VERSION="0.1 (Rubik)"`) and identical `/etc/version`
+(`20180309123456`) — an unmodified OE-core distro default, not a value this tree sets or updates
+per build; grepping `meta-wisekiosk/`, `classes/`, `includes/`, and `patches/` for anything that
+writes `/etc/version`, `BUILDNAME`, or `DISTRO_VERSION` from the source tree's git state finds
+nothing. **The image does not embed its own build commit — this is a real traceability gap, not
+just an unrecorded fact**, and baking the source git commit into the image (e.g. into
+`/etc/version` or a dedicated `/etc/build-info` at image build time) is the durable fix. Absent
+that, this investigation's board-to-code link rests on the harness/instrument that gathered each
+board's data, recorded here instead:
+
+- The **bench board's** 40-boot corpus came from the boot-loop harness
+  (`bootloop.service` + `collect.sh`, tracked in this directory as
+  [`bootloop-collect.sh`](bootloop-collect.sh) — see "How the test was performed" below), run against
+  the bench board's then-current shipped image; the harness itself is not part of any image and was
+  torn down after harvest.
+- The **prod board's** steady-state soak data was gathered with an **out-of-tree hot-swap**, not
+  the prod board's current image build: the soak sampler's `ntpsync=`/`dns=`/boot-counter fields
+  came from live-replacing the running `kiosk-soak` binary with the build from PR #40 / commit
+  `ef834cf` (branch `soak-clock-instrument`), which is **not yet merged and not yet in the prod
+  image build**. That data reflects the instrument under test, not the board's shipped code, and
+  should not be read as validating anything about the currently-imaged prod build beyond the
+  journal-derived NTP-contact figures below (which came from the shipped image's own
+  `systemd-timesyncd`, not the hot-swapped binary).
 
 ## Metrics
 
@@ -154,6 +185,25 @@ Three candidate fixes were weighed against the measured data:
    rootfs, is a rootfs-postprocess step that points `timesyncd`'s state path at `/data` instead of
    `/var/lib` — the same technique already proven for exactly this class of problem on this image.
    **Recommended as the primary fix.**
+
+   **Must-resolve before implementation, not covered by the resolv.conf analogy:**
+   `systemd-timesyncd.service` ships `ProtectSystem=strict` with no `ReadWritePaths=` or
+   `BindPaths=` declared. That sandbox remounts the rootfs read-only inside the unit's private
+   mount namespace except for paths it explicitly manages (`StateDirectory=`, `RuntimeDirectory=`,
+   and anything listed in `ReadWritePaths=`/`BindPaths=`) — `/data` is not on that list today.
+   `resolv.conf` tolerates a bare symlink because timesyncd only *reads* it; the clock state file
+   is different — it is *written* on every sync, on the ~60 s `SaveIntervalSec` timer, and at
+   shutdown. A write outside the sandbox's writable set fails `EROFS`, and both
+   `manager_save_time_and_rearm()` and `load_clock_timestamp()` in systemd's
+   `timesyncd-manager.c`/`timesyncd.c` swallow that failure at `log_debug` level — no warning, no
+   visible error. A bare rootfs symlink at the target path, with `StateDirectory=`/
+   `ProtectSystem=strict` otherwise left unchanged, risks being a **silent no-op**: the board boots
+   fine, looks fixed, and the state file is never actually persisted to `/data` — reproducing the
+   exact epoch-restart failure this fix exists to close, just without even a log line to notice it
+   by. The fix must grant write access to the new location explicitly — a drop-in adding
+   `ReadWritePaths=`/`BindPaths=` for the `/data` path (e.g.
+   `BindPaths=/data/systemd-timesync:/var/lib/systemd/timesync`), or an equivalent mount-unit
+   ordered ahead of the service — not a bare symlink assumed to behave like the resolv.conf case.
 3. **Enable `systemd-time-wait-sync` and order clock-dependent consumers after `time-sync.target`.**
    This changes *ordering*, not the window's length: nothing boots faster or syncs sooner, units
    ordered after the target simply wait rather than run against a wrong clock. It is a correctness
