@@ -94,6 +94,7 @@ fi
 # runs this script, so a syntax error in it disarms every guard here.
 scan3="meta-wisekiosk/recipes-core/kiosk-netcheck/files/kiosk-netcheck \
        meta-wisekiosk/recipes-core/kiosk-provision/files/kiosk-provision \
+       meta-wisekiosk/recipes-core/kiosk-recover/files/kiosk-recover \
        meta-wisekiosk/recipes-core/kiosk-session/files/kiosk-launch \
        .githooks/pre-commit"
 missing3=""
@@ -258,6 +259,40 @@ else
         else
             ok "every auto-enabled service recipe is reachable from an image"
         fi
+    fi
+fi
+
+# --- 8. the recovery script must be wired into the /data placement path ----
+# The kiosk-recover script (issue #28) lives on /data, not the rootfs, so guard
+# 7 -- which polices auto-enabled rootfs SERVICES reaching an image -- is blind
+# to it by construction: no service, in no IMAGE_INSTALL. Its own reachability
+# check is that tools/provision.sh (the /data placement path) actually copies
+# it. Two ways this silently breaks and both fail here: the script goes missing
+# from its recipe home, or provision.sh stops referencing it (a rename, a
+# refactor). Paths are existence-checked first, as 1b/3/7, so neither can read
+# green by disappearing.
+recover_src="meta-wisekiosk/recipes-core/kiosk-recover/files/kiosk-recover"
+recover_placer="tools/provision.sh"
+if [ ! -f "$recover_src" ]; then
+    bad "guard 8: recovery script missing at $recover_src -- nothing to place on /data"
+elif [ ! -f "$recover_placer" ]; then
+    bad "guard 8: $recover_placer missing -- the /data placement path is gone"
+else
+    # Not "is the path named" -- a comment or the RECOVER_SRC= assignment would
+    # satisfy that -- but "is the script actually placed": a non-comment
+    # install/cp command whose target is RECOVER.sh. Comments are stripped first
+    # so a mention in prose cannot green the guard. grep -c, not `| grep -q`
+    # (pipefail inverts a match -- see the note above), counts placement commands.
+    # Heuristic: recognizes install/cp (a tar/cat placement would need this
+    # widened). The real backstop is provision.sh's own delivery verify -- both
+    # card and device modes read RECOVER.sh back -- so a miss here fails at
+    # provision time, not silently.
+    placements=$(grep -vE '^[[:space:]]*#' "$recover_placer" \
+        | grep -cE '(install|cp)[[:space:]].*RECOVER\.sh')
+    if [ "$placements" -eq 0 ]; then
+        bad "guard 8: $recover_placer names but does not place the recovery script (no install/cp of RECOVER.sh) -- not wired onto /data"
+    else
+        ok "recovery script is wired into the /data placement path"
     fi
 fi
 

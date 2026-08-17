@@ -145,6 +145,28 @@ Losing `/data` is a re-provisioning, not a restore. `tools/provision.sh` writes 
 again from `secrets.yaml`, and a machine-id not recorded there comes back as a new one; there is no
 multi-GB image to put back.
 
+## Recovery
+
+`kiosk-recover` reverses `kiosk-hardware`'s boot trims for a debugging session: it unmasks the DNS
+resolver, login/session and userdb units, deletes the masked udev rule symlinks, re-enables
+Bluetooth, restores the `/etc/resolv.conf` symlink into `/data`, and reboots.
+
+It is **not a boot un-bricker**: it runs on a slot that already gives a shell; a slot that does not is
+an A/B rollback (`just kiosk-rollback`). It is idempotent, touches neither `/boot`, `sshd`, networkd
+nor `wpa_supplicant`, has no timer/deadman/auto-revert, and leaves `zram.service` masked (issue #17:
+that mask is a defect workaround, not a trim).
+
+It lives on **`/data`** (placed at `/data/RECOVER.sh` by `tools/provision.sh`; source in the
+[`kiosk-recover`](meta-wisekiosk/recipes-core/kiosk-recover/) recipe), so it survives an A/B flip and
+a reflash. On the device:
+
+```sh
+/data/RECOVER.sh --dry-run   # list exactly what would change; touch nothing
+/data/RECOVER.sh             # apply and reboot
+```
+
+Run `--dry-run` first to confirm targeting.
+
 ## Upstream fixes
 
 Two changes to upstream cannot be expressed from a downstream layer and live as patches in

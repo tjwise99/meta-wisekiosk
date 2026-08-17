@@ -1,0 +1,102 @@
+#!/bin/sh
+# kiosk-recover -- reverse kiosk-hardware's boot trims for a debugging session,
+# then reboot. Not a boot un-bricker: it runs on a slot that already gives a
+# shell; a dead slot is an A/B rollback. Idempotent. Touches neither /boot, sshd,
+# networkd nor wpa_supplicant. No timer/deadman/auto-revert -- runs only by hand.
+# Lives on /data (tools/provision.sh), so it survives an A/B flip and a reflash.
+#
+# Usage: kiosk-recover [--dry-run]   # --dry-run prints changes, touches nothing
+
+set -u
+
+DRY=0
+case "${1:-}" in
+    --dry-run) DRY=1 ;;
+    "")        ;;
+    *) echo "usage: kiosk-recover [--dry-run]" >&2; exit 2 ;;
+esac
+
+log()  { echo "kiosk-recover: $*"; }
+act()  { if [ "$DRY" -eq 1 ]; then echo "  would: $*"; else "$@"; fi; }
+
+# --- 1. unmask the boot-trim units ----------------------------------------
+# Remove only a mask (a symlink -> /dev/null), never a real unit. zram.service is
+# excluded on purpose: its mask is a defect workaround (issue #17), not a boot
+# trim -- unmasking restores a unit that fails every boot and sizes swap at 90%
+# of RAM. Do not add it here.
+for u in systemd-resolved.service systemd-logind.service \
+         systemd-userdbd.service systemd-userdbd.socket; do
+    p="/etc/systemd/system/$u"
+    if [ -L "$p" ] && [ "$(readlink "$p")" = /dev/null ]; then
+        act rm -f "$p"
+        log "unmasked $u"
+    else
+        log "already unmasked $u"
+    fi
+done
+
+# --- 2. delete the udev rule masks ----------------------------------------
+# Symlinks to /dev/null only. -type l is load-bearing: /etc/udev/rules.d is
+# FILES:${PN}, so a real *.rules file there is a shipped file -- never widen to a
+# *.rules glob. The -> /dev/null check spares any non-mask symlink placed here.
+if [ -d /etc/udev/rules.d ]; then
+    find /etc/udev/rules.d -maxdepth 1 -type l | while IFS= read -r l; do
+        [ "$(readlink "$l")" = /dev/null ] || continue
+        act rm -f "$l"
+        log "removed udev mask $(basename "$l")"
+    done
+fi
+
+# --- 3. re-enable Bluetooth ------------------------------------------------
+# Bluetooth is the third pass of the combined kiosk-blacklist.conf, not a
+# separate file. Comment only the six install/blacklist lines for
+# hci_uart/btbcm/bluetooth; pass 1 (camera/codec) and pass 2 (vc_sm_cma) must
+# survive, so match those three tokens exactly. Never delete the file.
+BL=/etc/modprobe.d/kiosk-blacklist.conf
+if [ -f "$BL" ]; then
+    hits=$(awk '
+        /^[[:space:]]*#/ { next }
+        /^[[:space:]]*(install|blacklist)[[:space:]]+(hci_uart|btbcm|bluetooth)([[:space:]]|$)/ { print }
+    ' "$BL")
+    if [ -n "$hits" ]; then
+        if [ "$DRY" -eq 1 ]; then
+            echo "  would comment out these Bluetooth lines in $BL:"
+            printf '%s\n' "$hits" | sed 's/^/      /'
+        else
+            # cat over the original path (not mv) preserves its mode and owner.
+            awk '
+                /^[[:space:]]*#/ { print; next }
+                /^[[:space:]]*(install|blacklist)[[:space:]]+(hci_uart|btbcm|bluetooth)([[:space:]]|$)/ {
+                    print "# kiosk-recover disabled: " $0; next
+                }
+                { print }
+            ' "$BL" > "$BL.kiosk-recover.tmp" \
+                && cat "$BL.kiosk-recover.tmp" > "$BL" \
+                && rm -f "$BL.kiosk-recover.tmp"
+            log "re-enabled Bluetooth (commented 6 lines in $BL)"
+        fi
+    else
+        log "Bluetooth already re-enabled in $BL"
+    fi
+fi
+
+# --- 4. restore the resolv.conf symlink -----------------------------------
+# Its tmpfiles entry uses 'L', not 'L+', so it will not recreate the symlink once
+# /etc/resolv.conf exists -- what this writes is what stays.
+WANT=/data/config/resolv.conf
+CUR=$(readlink /etc/resolv.conf 2>/dev/null || true)
+if [ "$CUR" = "$WANT" ]; then
+    log "resolv.conf already -> $WANT"
+else
+    act rm -f /etc/resolv.conf
+    act ln -s "$WANT" /etc/resolv.conf
+    log "resolv.conf -> $WANT"
+fi
+
+# --- 5. reboot ------------------------------------------------------------
+if [ "$DRY" -eq 1 ]; then
+    log "dry-run: no changes made, not rebooting"
+    exit 0
+fi
+log "rebooting"
+reboot
