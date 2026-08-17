@@ -147,30 +147,25 @@ multi-GB image to put back.
 
 ## Recovery
 
-`kiosk-hardware` trims the boot to the point of a display behind glass: no DNS resolver, no
-`logind`/`userdbd`, no Bluetooth input, masked udev rules. That is correct for the wall but hostile to
-a debugging session. `kiosk-recover` reverses those trims — it unmasks the resolver, login/session and
-userdb units, deletes the masked udev rule symlinks, re-enables Bluetooth, restores the
-`/etc/resolv.conf` symlink into `/data`, and reboots into an interactively-debuggable box.
+`kiosk-recover` reverses `kiosk-hardware`'s boot trims for a debugging session: it unmasks the DNS
+resolver, login/session and userdb units, deletes the masked udev rule symlinks, re-enables
+Bluetooth, restores the `/etc/resolv.conf` symlink into `/data`, and reboots.
 
-It is **not a boot un-bricker.** It runs on a slot that already boots far enough to give a shell; a
-slot that does not is an A/B rollback (`just kiosk-rollback`), not this. It is idempotent, touches
-neither `/boot`, `sshd`, networkd nor `wpa_supplicant`, and has no timer, deadman or auto-revert —
-this recovery machinery is itself untested, so it runs only when a human runs it. It deliberately
-leaves `zram.service` masked (issue #17: that mask is a defect workaround, not a boot trim).
+It is **not a boot un-bricker**: it runs on a slot that already gives a shell; a slot that does not is
+an A/B rollback (`just kiosk-rollback`). It is idempotent, touches neither `/boot`, `sshd`, networkd
+nor `wpa_supplicant`, has no timer/deadman/auto-revert, and leaves `zram.service` masked (issue #17:
+that mask is a defect workaround, not a trim).
 
-The script lives on **`/data`**, not the rootfs, so it survives an A/B flip and a reflash and is
-present regardless of which image booted. `tools/provision.sh` places it at `/data/RECOVER.sh`
-alongside the site config; its source of truth is the
-[`kiosk-recover`](meta-wisekiosk/recipes-core/kiosk-recover/) recipe. On the device:
+It lives on **`/data`** (placed at `/data/RECOVER.sh` by `tools/provision.sh`; source in the
+[`kiosk-recover`](meta-wisekiosk/recipes-core/kiosk-recover/) recipe), so it survives an A/B flip and
+a reflash. On the device:
 
 ```sh
-/data/RECOVER.sh --dry-run   # print exactly what would change; touch nothing; no reboot
+/data/RECOVER.sh --dry-run   # list exactly what would change; touch nothing
 /data/RECOVER.sh             # apply and reboot
 ```
 
-Always `--dry-run` first: it lists the exact unit masks, udev symlinks and modprobe lines it would
-touch, so targeting is confirmed before anything changes.
+Run `--dry-run` first to confirm targeting.
 
 ## Upstream fixes
 
