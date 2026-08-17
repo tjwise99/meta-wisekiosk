@@ -12,6 +12,7 @@
 | [`issue_investigation/surf_memory_soak/`](issue_investigation/surf_memory_soak/README.md) | Does a fitted slope over the soak log tell you whether the browser is leaking? |
 | [`issue_investigation/screenshot_capture_fbgrab/`](issue_investigation/screenshot_capture_fbgrab/README.md) | Which framebuffer capture path produces a screenshot that can be trusted as a liveness check? |
 | [`issue_investigation/webkit_dependency_trims/`](issue_investigation/webkit_dependency_trims/README.md) | Can the accessibility stack be taken out of the image, from the build side or at runtime? |
+| [`issue_investigation/clock_timesync/`](issue_investigation/clock_timesync/README.md) | Which link in the boot-to-sync path is actually fragile, and what does losing the clock every OTA cost? |
 
 Each investigation is a directory whose `README.md` carries exactly four sections in this order —
 *Configuration under test*, *How the test was performed*, *Metrics*, *Changes configured as a
