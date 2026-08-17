@@ -118,14 +118,22 @@ case "$MODE" in
     mode=$(stat -c %a "$DEST/config/wpa_supplicant.conf")
     [ "$mode" = "600" ] || say "wpa_supplicant.conf is mode $mode, must be 600"
 
-    # RECOVER.sh delivery is a thing the write can get wrong (a full or ro card),
-    # and the device branch already reads it back -- verify it here too.
-    [ -f "$DEST/RECOVER.sh" ] || say "RECOVER.sh not delivered to $DEST -- recovery script missing"
-    for f in "$DEST/config/"* "$DEST/etc/machine-id" "$DEST/RECOVER.sh"; do
-        [ -e "$f" ] || continue
+    for f in "$DEST/config/"* "$DEST/etc/machine-id"; do
         own=$(stat -c %u:%g "$f")
         [ "$own" = "0:0" ] || say "$f is owned by $own, must be 0:0 -- re-run as root"
     done
+
+    # RECOVER.sh delivery is a thing the write can get wrong (a full or ro card);
+    # the device branch reads it back, so verify it here too. Checked on its own,
+    # not folded into the loop above: a missing file gives a clean VERIFY FAIL
+    # rather than a stat crash, and the loop keeps its loud failure on any other
+    # missing literal path (machine-id).
+    if [ -f "$DEST/RECOVER.sh" ]; then
+        own=$(stat -c %u:%g "$DEST/RECOVER.sh")
+        [ "$own" = "0:0" ] || say "$DEST/RECOVER.sh is owned by $own, must be 0:0 -- re-run as root"
+    else
+        say "RECOVER.sh not delivered to $DEST -- recovery script missing"
+    fi
 
     if [ "$bad" -ne 0 ]; then
         echo "NOT provisioned -- do not boot this card" >&2
