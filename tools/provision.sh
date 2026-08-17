@@ -118,7 +118,11 @@ case "$MODE" in
     mode=$(stat -c %a "$DEST/config/wpa_supplicant.conf")
     [ "$mode" = "600" ] || say "wpa_supplicant.conf is mode $mode, must be 600"
 
-    for f in "$DEST/config/"* "$DEST/etc/machine-id"; do
+    # RECOVER.sh delivery is a thing the write can get wrong (a full or ro card),
+    # and the device branch already reads it back -- verify it here too.
+    [ -f "$DEST/RECOVER.sh" ] || say "RECOVER.sh not delivered to $DEST -- recovery script missing"
+    for f in "$DEST/config/"* "$DEST/etc/machine-id" "$DEST/RECOVER.sh"; do
+        [ -e "$f" ] || continue
         own=$(stat -c %u:%g "$f")
         [ "$own" = "0:0" ] || say "$f is owned by $own, must be 0:0 -- re-run as root"
     done

@@ -283,6 +283,10 @@ else
     # install/cp command whose target is RECOVER.sh. Comments are stripped first
     # so a mention in prose cannot green the guard. grep -c, not `| grep -q`
     # (pipefail inverts a match -- see the note above), counts placement commands.
+    # Heuristic: recognizes install/cp (a tar/cat placement would need this
+    # widened). The real backstop is provision.sh's own delivery verify -- both
+    # card and device modes read RECOVER.sh back -- so a miss here fails at
+    # provision time, not silently.
     placements=$(grep -vE '^[[:space:]]*#' "$recover_placer" \
         | grep -cE '(install|cp)[[:space:]].*RECOVER\.sh')
     if [ "$placements" -eq 0 ]; then
