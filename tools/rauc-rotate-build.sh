@@ -24,18 +24,16 @@ KCONFIG=${2:-kiosk-zero-w.yaml}
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 cd "$REPO"
 
-# The OLD key is whatever the fleet currently trusts -- the transition bundle must
-# be signed with it or no device will accept it. That is the live fleet key, NOT
-# upstream's development key, which was retired and which no device trusts.
+# The OLD key is the one the fleet trusts -- the transition bundle must be signed
+# with it or no device accepts it. Not upstream's retired development key.
 #
-# No default: the fleet key name lives in the root Justfile as fleet-key, and
-# 'just rotate-build' passes it in. Defaulting it here would be a second copy of
-# that name, free to drift the moment the fleet rotates.
+# No default: the name lives in the root Justfile as fleet-key and
+# 'just rotate-build' passes it in. A default here is a second copy of that name,
+# free to drift the moment the fleet rotates.
 #
-# Checked with an explicit test rather than ${OLD_KEYDIR:?msg}: the word after
-# :? is expanded, so a backtick or $(...) in the message RUNS -- which for a
-# message naming this script's own just recipe means the failure path silently
-# invokes a build. An echo keeps the text inert.
+# Explicit test rather than ${OLD_KEYDIR:?msg}: the word after :? is expanded, so
+# a backtick or $(...) in a message naming this script's own just recipe would
+# make the failure path silently invoke a build. An echo keeps the text inert.
 if [ -z "${OLD_KEYDIR:-}" ]; then
     echo "OLD_KEYDIR not set -- run 'just rotate-build <new-key-name>', or set it" >&2
     echo "to the keydir holding the key the fleet currently trusts." >&2
@@ -49,11 +47,11 @@ test -f "$NEW_KEYDIR/signing.cert.pem" || { echo "no signing.cert.pem in $NEW_KE
 test -f "$OLD_KEY"  || { echo "current fleet key not found ($OLD_KEY) -- set OLD_KEYDIR" >&2; exit 1; }
 test -f "$OLD_CERT" || { echo "current fleet cert not found ($OLD_CERT) -- set OLD_KEYDIR" >&2; exit 1; }
 
-# Rotating a key to itself produces two bundles signed by the SAME key: the
-# "transition" bundle is not a transition, and the baked-keyring self-check below
-# passes trivially because old and new cert are one file. That looks like a
-# successful rotation build and ships nothing of the kind. Compare resolved paths
-# so local/keys/x and ./local/keys/x are recognised as the same directory.
+# Rotating a key to itself yields two bundles signed by the SAME key: the
+# "transition" bundle transitions nothing, and the baked-keyring self-check below
+# passes trivially because old and new cert are one file -- a build that looks
+# successful and ships nothing of the kind. Resolved paths, so local/keys/x and
+# ./local/keys/x are recognised as one directory.
 if [ "$(realpath -- "$NEW_KEYDIR")" = "$(realpath -- "$OLD_KEYDIR")" ]; then
     echo "refusing: new keydir and old keydir are the same directory" >&2
     echo "  both resolve to $(realpath -- "$NEW_KEYDIR")" >&2
@@ -62,12 +60,12 @@ if [ "$(realpath -- "$NEW_KEYDIR")" = "$(realpath -- "$OLD_KEYDIR")" ]; then
     exit 1
 fi
 
-# Stage both keys into one directory under build/ (gitignored) so a single
-# AUTONOMOS_RAUC_KEY_DIR can name the old signer and the new one, which is the
-# pairing the transition bundle needs and the ordinary build has no way to
-# express. Referenced as ${TOPDIR}/... so it resolves identically inside and
-# outside the container regardless of the mount layout. This is scratch space,
-# not a key home -- the key home is local/keys/<name>.
+# Both keys go in one directory under build/ (gitignored) so a single
+# AUTONOMOS_RAUC_KEY_DIR names the old signer and the new keyring -- the pairing
+# the transition bundle needs and the ordinary build cannot express. Referenced
+# as ${TOPDIR}/... so it resolves identically inside and outside the container
+# whatever the mount layout. Scratch space, not a key home: that is
+# local/keys/<name>.
 OUT="build/rotation"
 STAGE="$OUT/keydir"
 mkdir -p "$STAGE"
@@ -84,10 +82,9 @@ BUNDLE_LINK="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-
 # $1 out-file  $2 signing-key filename  $3 signing-cert filename. The keyring
 # baked into the rootfs is always the NEW cert; only the signer differs.
 #
-# kas emits local_conf_header blocks sorted by key, and a later block overrides
-# an earlier one. The zz- prefix is what makes this override the image config's
-# key settings -- it sorts after any ordinary block name, rather than depending
-# on "rauc" < "rauc-rotation" happening to hold.
+# kas emits local_conf_header blocks sorted by key, later overriding earlier. The
+# zz- prefix is what makes this beat the image config's key settings: it sorts
+# after any ordinary block name, rather than relying on "rauc" < "rauc-rotation".
 gen_override() {
     cat > "$1" <<YAML
 header:

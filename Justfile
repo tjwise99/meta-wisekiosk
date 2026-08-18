@@ -33,25 +33,19 @@ kiosk-host := env('KIOSK_HOST', '')
 # Directory for RAUC bundles
 rauc-bundle-dir := "build/bundles"
 
-# The key the fleet currently trusts. Single source for every just-side consumer
-# (the `flash` keyring guard, the rotation recipes' old-key default), so a
-# rotation changes one literal here rather than several in step.
-#
-# kiosk-zero-w.yaml spells the same name out separately because bitbake cannot
-# read a just variable -- that is the ONE site this cannot cover, and
-# docs/rauc-key-rotation.md lists both under "Rotating to a new key".
+# The key the fleet trusts. Single source for the just side (the `flash` keyring
+# guard, the rotation recipes' old-key default). kiosk-zero-w.yaml repeats the
+# name because bitbake cannot read a just variable -- the ONE site this cannot
+# cover; docs/rauc-key-rotation.md lists both under "Rotating to a new key".
 fleet-key := "kiosk-2026"
 
-# These feed ONLY `rauc-to-casync` in ota.just, which is disabled
-# (RAUC_CASYNC_BUNDLE = "0"; the chunker was removed with #29). They are NOT the
-# fleet signing path: every ordinary build signs with, and bakes the keyring of,
-# the fleet-key dir under local/keys, via kiosk-zero-w.yaml's AUTONOMOS_RAUC_*.
-#
-# They still name upstream's retired example keys, which no device trusts. If the
-# casync path is ever revived, point RAUC_CERT/RAUC_KEY/RAUC_KEYRING at the fleet
-# key rather than these -- a casync bundle signed with the dev key installs
-# nowhere. The paths exist only after `kas-container checkout` has populated
-# sources/.
+# Consumed ONLY by `rauc-to-casync` in ota.just, which is disabled
+# (RAUC_CASYNC_BUNDLE = "0"; chunker removed with #29). NOT the fleet signing
+# path -- that is kiosk-zero-w.yaml's AUTONOMOS_RAUC_*, pointed at the fleet-key
+# dir under local/keys. These name upstream's retired example keys, which no
+# device trusts, and exist only after `kas-container checkout` populates
+# sources/. Reviving casync means repointing RAUC_CERT/RAUC_KEY/RAUC_KEYRING at
+# the fleet key: a dev-key-signed bundle installs nowhere.
 rauc-cert := env('RAUC_CERT', 'sources/meta-autonomos/meta-autonomos-core/files/rauc-example-keys/development.cert.pem')
 rauc-key := env('RAUC_KEY', 'sources/meta-autonomos/meta-autonomos-core/files/rauc-example-keys/development.key.pem')
 rauc-keyring := env('RAUC_KEYRING', 'sources/meta-autonomos/meta-autonomos-core/files/rauc-example-keys/development.cert.pem')

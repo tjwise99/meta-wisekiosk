@@ -178,21 +178,20 @@ local_conf_header:
     # convert step that can fail after the image itself is already built.
     RAUC_CASYNC_BUNDLE:pn-update-bundle = "0"
 
-    # Upstream's development key is retired: no device trusts it, and its
-    # private half is committed in a public repository. The fleet signs with,
-    # and bakes the keyring of, the one WiseKiosk 2026 key. That key lives in
-    # local/, which is gitignored -- INSIDE the working tree, because
-    # kas-container mounts the repo root and the build has to read the key,
-    # but never committed. Reached through TOPDIR for that same mount.
+    # The fleet signs with, and bakes the keyring of, the one WiseKiosk 2026
+    # key. Unset AUTONOMOS_RAUC_KEY_DIR falls back to upstream's development
+    # key, whose private half is committed in a public repository and which no
+    # device trusts. The key lives in the gitignored local/ -- INSIDE the
+    # working tree, because kas-container mounts the repo root and the build
+    # has to read the key. Reached through TOPDIR for that same mount.
     #
-    # These four are read by BOTH update-bundle.bb (which signs the bundle)
-    # and rauc-conf.bbappend (which bakes /etc/rauc/keyring.pem into the
-    # rootfs), so signer and trusted keyring cannot drift apart. Leaving
-    # AUTONOMOS_RAUC_KEY_DIR unset falls back to the dev keys on both counts.
+    # BOTH update-bundle.bb (signs the bundle) and rauc-conf.bbappend (bakes
+    # /etc/rauc/keyring.pem into the rootfs) read these four, so signer and
+    # trusted keyring cannot drift apart.
     #
     # The key NAME is spelled out here because bitbake cannot read a just
-    # variable. It is one of two places a rotation must be edited by hand;
-    # docs/rauc-key-rotation.md lists them under "Rotating to a new key".
+    # variable; it is one of the two sites a rotation must edit by hand, listed
+    # in docs/rauc-key-rotation.md under "Rotating to a new key".
     #
     # A rotation build overrides these: kas emits local_conf_header blocks
     # sorted by key, and rauc-rotate-build.sh names its fragment

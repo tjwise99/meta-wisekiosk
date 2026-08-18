@@ -12,16 +12,15 @@
 #
 # Why the order matters is written up in docs/rauc-key-rotation.md.
 #
-# `name` selects a dir under local/keys, which is gitignored -- the key is never
-# committed, but it must live inside the project tree because that tree is what
+# `name` selects a dir under the gitignored local/keys. The key is never
+# committed but must live inside the project tree: that tree is what
 # kas-container mounts, and kiosk-zero-w.yaml reads the fleet key from there to
-# sign every ordinary build. Generating a key anywhere else leaves the build
-# unable to find one. justfile_directory() keeps this absolute, so the recipes
-# work from any cwd.
+# sign every ordinary build, so a key generated elsewhere is invisible to it.
+# justfile_directory() keeps the path absolute, so the recipes work from any cwd.
 #
-# The key NAME comes from `fleet-key` in the root Justfile. Completing a rotation
-# means updating that and kiosk-zero-w.yaml -- see "Rotating to a new key" in
-# docs/rauc-key-rotation.md.
+# The key NAME defaults from `fleet-key` in the root Justfile. Completing a
+# rotation means updating that and kiosk-zero-w.yaml -- see "Rotating to a new
+# key" in docs/rauc-key-rotation.md.
 
 keys-root := justfile_directory() / "local/keys"
 
@@ -42,11 +41,10 @@ rotate-provision-ssh host=kiosk-host:
 # Build the transition (old-signed) and end-state (new-signed) bundles from the
 # named key. Incremental on a warm build tree.
 #
-# `name` is the NEW key, so it must be named explicitly: the default is the key
-# the fleet already trusts, and rotating a key to itself is refused rather than
-# quietly producing two identically-signed bundles and a meaningless
-# "transition". OLD_KEYDIR is passed from fleet-key so the old signer is not a
-# second literal that can drift.
+# `name` is the NEW key and must be given: the default is the key the fleet
+# already trusts, and rotating a key to itself is refused rather than producing
+# two identically-signed bundles and a meaningless "transition". OLD_KEYDIR comes
+# from fleet-key, so the old signer is not a second literal free to drift.
 [group('rotate')]
 [doc("Build the transition and end-state bundles for a rotation")]
 rotate-build name=fleet-key:

@@ -93,10 +93,10 @@ just flash /dev/sdX                 # writes build/.../*.wic.bz2, re-reads the p
 just provision-fresh-card /dev/sdX  # mounts partition 4, writes the site config, unmounts
 ```
 
-`flash` refuses to write an image that does not bake the fleet signing keyring, and refuses when the
-image and rootfs come from different builds. A reflash is the only way to un-rotate a unit — RAUC
-never touches the boot partition, so a card written with the wrong keyring cannot be repaired over
-the air. See [`docs/rauc-key-rotation.md`](docs/rauc-key-rotation.md) for the key prerequisite.
+`flash` refuses an image that does not bake the fleet signing keyring, or whose image and rootfs come
+from different builds: RAUC never touches the boot partition, so a card written with the wrong
+keyring is repairable only by another reflash. The signing key is a build prerequisite — see
+[`docs/rauc-key-rotation.md`](docs/rauc-key-rotation.md).
 
 The card must be provisioned before it boots. WiFi credentials are what let you reach the device, so
 the first write cannot come over the network.
@@ -212,10 +212,10 @@ Two more fixes belong upstream but did not need a patch, because a downstream la
 
 - **Rollback has never been exercised.** RAUC reports healthy slots; that is not the same as proving
   a bad update rolls back, or that a slow-but-healthy boot does *not* trigger one.
-- **The retired development key is still in the public git history.** The fleet and the build both
-  use the WiseKiosk 2026 key, which lives in the gitignored `local/` — inside the checkout, never
-  committed. Rotation is what removed the old key's reach; purging the history is a separate step
-  that does not undo the exposure. See [`docs/rauc-key-rotation.md`](docs/rauc-key-rotation.md).
+- **The retired development key is in the public git history.** Fleet and build both use the
+  WiseKiosk 2026 key, kept in the gitignored `local/` — inside the checkout, never committed.
+  Rotation is what removed the old key's reach; purging history is a separate step that does not
+  undo the exposure. See [`docs/rauc-key-rotation.md`](docs/rauc-key-rotation.md).
 - **Root login is unauthenticated.** The image carries `debug-tweaks`, so root has an empty password.
   Deferred deliberately while a second device still depends on unauthenticated access; tracked as
   issue #7 debug-tweaks empty root password, which carries the detail.
