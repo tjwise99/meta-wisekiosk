@@ -4,16 +4,18 @@ useDefault = true
 # One known finding is allowlisted here so that CI gates NEW leaks. A check that
 # is red on every run gets ignored, and then it gates nothing at all.
 #
-# This is NOT a statement that the finding is a false positive. It is real:
-# development.key.pem is a genuine RSA private key in a PUBLIC repository, and
-# development.cert.pem beside it is the certificate in the device's RAUC keyring
-# -- so anyone can sign an update bundle the kiosk will accept as authentic.
+# This is NOT a statement that the finding is a false positive. development.key.pem
+# is a genuine RSA private key in a PUBLIC repository, and it arrived with the
+# upstream AutonomOS tree (c2d73ed3, 2026-01-04) rather than with the Zero W port.
 #
-# It arrived with the upstream AutonomOS tree (c2d73ed3, 2026-01-04) rather than
-# with the Zero W port. Rotating it is a sequenced operation, not a deletion:
-# the new keyring has to reach the device in a bundle signed by the OLD key, or
-# the device can no longer verify anything and OTA is dead. Tracked as an issue
-# rather than silently carried.
+# Its REACH is gone: the fleet was rotated onto the WiseKiosk 2026 key, no device
+# trusts development.cert.pem any longer, and the build signs with and bakes only
+# the rotated key (kiosk-zero-w.yaml, AUTONOMOS_RAUC_KEY_DIR). A bundle signed
+# with this key installs nowhere. See docs/rauc-key-rotation.md.
+#
+# The allowlist entry stays because the file is still in the tree and in history,
+# and rewriting history does not unpublish an already-public key. It goes when the
+# file leaves the upstream tree, not before.
 [allowlist]
-description = "Known, tracked: upstream RAUC development signing key"
+description = "Retired upstream RAUC development signing key, still present in-tree"
 paths = ['''meta-autonomos-core/files/rauc-example-keys/development\.key\.pem''']

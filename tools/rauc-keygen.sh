@@ -1,8 +1,10 @@
 #!/bin/bash
-# Generate a per-project RAUC signing key + self-signed certificate, kept OUT of
-# the repository. The certificate becomes the device keyring (what RAUC trusts);
-# the key signs update bundles. Rotating means generating a fresh pair here and
-# driving it onto the devices with `just rotate-run` -- never committing either.
+# Generate a per-project RAUC signing key + self-signed certificate under
+# local/keys/<name>, which is gitignored: inside the working tree, because that
+# tree is what kas-container mounts and the build must read the key, but never
+# committed. The certificate becomes the device keyring (what RAUC trusts); the
+# key signs update bundles. Rotating means generating a fresh pair here and
+# driving it onto the devices with 'just rotate-run' -- never committing either.
 #
 # Usage: rauc-keygen.sh <outdir> [common-name]
 #   outdir  - directory to create the pair in (refused if it already holds one)

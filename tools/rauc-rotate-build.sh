@@ -24,18 +24,50 @@ KCONFIG=${2:-kiosk-zero-w.yaml}
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 cd "$REPO"
 
-OLD_KEY="sources/meta-autonomos/meta-autonomos-core/files/rauc-example-keys/development.key.pem"
-OLD_CERT="sources/meta-autonomos/meta-autonomos-core/files/rauc-example-keys/development.cert.pem"
+# The OLD key is whatever the fleet currently trusts -- the transition bundle must
+# be signed with it or no device will accept it. That is the live fleet key, NOT
+# upstream's development key, which was retired and which no device trusts.
+#
+# No default: the fleet key name lives in the root Justfile as fleet-key, and
+# 'just rotate-build' passes it in. Defaulting it here would be a second copy of
+# that name, free to drift the moment the fleet rotates.
+#
+# Checked with an explicit test rather than ${OLD_KEYDIR:?msg}: the word after
+# :? is expanded, so a backtick or $(...) in the message RUNS -- which for a
+# message naming this script's own just recipe means the failure path silently
+# invokes a build. An echo keeps the text inert.
+if [ -z "${OLD_KEYDIR:-}" ]; then
+    echo "OLD_KEYDIR not set -- run 'just rotate-build <new-key-name>', or set it" >&2
+    echo "to the keydir holding the key the fleet currently trusts." >&2
+    exit 1
+fi
+OLD_KEY="$OLD_KEYDIR/signing.key.pem"
+OLD_CERT="$OLD_KEYDIR/signing.cert.pem"
 
 test -f "$NEW_KEYDIR/signing.key.pem"  || { echo "no signing.key.pem in $NEW_KEYDIR" >&2; exit 1; }
 test -f "$NEW_KEYDIR/signing.cert.pem" || { echo "no signing.cert.pem in $NEW_KEYDIR" >&2; exit 1; }
-test -f "$OLD_KEY"  || { echo "old dev key not found ($OLD_KEY) -- run kas checkout first" >&2; exit 1; }
-test -f "$OLD_CERT" || { echo "old dev cert not found ($OLD_CERT)" >&2; exit 1; }
+test -f "$OLD_KEY"  || { echo "current fleet key not found ($OLD_KEY) -- set OLD_KEYDIR" >&2; exit 1; }
+test -f "$OLD_CERT" || { echo "current fleet cert not found ($OLD_CERT) -- set OLD_KEYDIR" >&2; exit 1; }
 
-# kas-container only mounts the project tree, so a keydir under ~/.config is
-# invisible to the build. Stage one inside build/ (gitignored, never a commit
-# candidate) and reference it as ${TOPDIR}/... which resolves identically inside
-# and outside the container regardless of the mount layout.
+# Rotating a key to itself produces two bundles signed by the SAME key: the
+# "transition" bundle is not a transition, and the baked-keyring self-check below
+# passes trivially because old and new cert are one file. That looks like a
+# successful rotation build and ships nothing of the kind. Compare resolved paths
+# so local/keys/x and ./local/keys/x are recognised as the same directory.
+if [ "$(realpath -- "$NEW_KEYDIR")" = "$(realpath -- "$OLD_KEYDIR")" ]; then
+    echo "refusing: new keydir and old keydir are the same directory" >&2
+    echo "  both resolve to $(realpath -- "$NEW_KEYDIR")" >&2
+    echo "a rotation needs a NEW key -- generate one with 'just rotate-keygen <name>'," >&2
+    echo "then 'just rotate-build <name>'." >&2
+    exit 1
+fi
+
+# Stage both keys into one directory under build/ (gitignored) so a single
+# AUTONOMOS_RAUC_KEY_DIR can name the old signer and the new one, which is the
+# pairing the transition bundle needs and the ordinary build has no way to
+# express. Referenced as ${TOPDIR}/... so it resolves identically inside and
+# outside the container regardless of the mount layout. This is scratch space,
+# not a key home -- the key home is local/keys/<name>.
 OUT="build/rotation"
 STAGE="$OUT/keydir"
 mkdir -p "$STAGE"
@@ -51,12 +83,17 @@ BUNDLE_LINK="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-
 
 # $1 out-file  $2 signing-key filename  $3 signing-cert filename. The keyring
 # baked into the rootfs is always the NEW cert; only the signer differs.
+#
+# kas emits local_conf_header blocks sorted by key, and a later block overrides
+# an earlier one. The zz- prefix is what makes this override the image config's
+# key settings -- it sorts after any ordinary block name, rather than depending
+# on "rauc" < "rauc-rotation" happening to hold.
 gen_override() {
     cat > "$1" <<YAML
 header:
   version: $HDR_VERSION
 local_conf_header:
-  rauc-rotation: |
+  zz-rauc-rotation: |
     AUTONOMOS_RAUC_KEY_DIR = "\${TOPDIR}/rotation/keydir"
     AUTONOMOS_RAUC_KEY_FILE = "$2"
     AUTONOMOS_RAUC_CERT_FILE = "$3"
