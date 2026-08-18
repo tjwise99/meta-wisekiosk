@@ -229,19 +229,19 @@ kiosk-install host=kiosk-host:
     SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
     echo "== before"
     $SSH {{host}} 'fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT; rauc status 2>&1 | grep -E "Booted|Activated|boot status"'
-    echo "== clock sanity: RAUC rejects a bundle whose cert is not yet valid"
-    # This board has NO RTC and NO fake-hwclock, so every boot starts in the
-    # past and only NTP moves it forward. An install that races NTP fails with
-    # "certificate is not yet valid", which reads like a broken bundle and is
-    # not. Cost a confusing failure on 2026-08-13 after a clean 119 MB transfer.
+    # The host force-setting the clock is retired: it now persists on /data
+    # across an OTA (kiosk-timesync-persist), so a fresh slot boots inside the
+    # cert's validity window on its own. See the #31 investigation. The skew is
+    # still REPORTED, not corrected -- if persistence ever fails, a cold clock is
+    # the documented cause of a "certificate is not yet valid" refusal
+    # (2026-08-13), and this line is where that shows without the host masking it.
     DEV_EPOCH=$($SSH {{host}} 'date +%s')
     HOST_EPOCH=$(date +%s)
     SKEW=$(( HOST_EPOCH - DEV_EPOCH ))
-    echo "   device epoch $DEV_EPOCH, host $HOST_EPOCH, skew ${SKEW}s"
+    echo "== clock: device epoch $DEV_EPOCH, host $HOST_EPOCH, skew ${SKEW}s"
     if [ "$SKEW" -gt 3600 ] || [ "$SKEW" -lt -3600 ]; then
-        echo "   device clock is off by ${SKEW}s -- setting it from this host before installing"
-        $SSH {{host}} "date -u -s '$(date -u '+%Y-%m-%d %H:%M:%S')'"
-        echo "   device now: $($SSH {{host}} date)"
+        echo "   WARNING: device clock off by ${SKEW}s -- if rauc rejects the cert below,"
+        echo "            this is why: clock persistence may have failed (see #31)."
     fi
     echo "== verifying bundle signature against the device keyring"
     $SSH {{host}} 'rauc info /data/update.raucb' || { echo "bundle did not verify -- refusing to install"; exit 1; }

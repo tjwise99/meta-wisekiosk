@@ -109,7 +109,7 @@ local_conf_header:
     # imagemagick is here for `import -window root`, the only screenshot path
     # this image has: fbgrab was dropped on a misdiagnosis and never restored.
     # See docs/issue_investigation/screenshot_capture_fbgrab/README.md.
-    IMAGE_INSTALL:append = " surf kiosk-session kiosk-soak kiosk-journal kiosk-hardware kiosk-netcheck kiosk-bootprof zram wpa-supplicant-service packagegroup-core-x11 xwininfo xprop ttf-roboto imagemagick tzdata-core tzdata-americas"
+    IMAGE_INSTALL:append = " surf kiosk-session kiosk-soak kiosk-journal kiosk-timesync-persist kiosk-hardware kiosk-netcheck kiosk-bootprof zram wpa-supplicant-service packagegroup-core-x11 xwininfo xprop ttf-roboto imagemagick tzdata-core tzdata-americas"
 
     # kiosk-provision: applies /data/config over the image defaults at boot --
     # sets the hostname into the kernel (nothing reads a hostname file) and
