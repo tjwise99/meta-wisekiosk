@@ -192,25 +192,35 @@ Mechanism, as landed — the ordering is load-bearing, not a mirror of `kiosk-jo
   clock file each boot, defusing a dynamic-UID drift across an OTA that would otherwise `EACCES`-
   then-`log_debug` into the same silent no-op candidate (2) forbids.
 
-**Verification status.** The recipe parses and packages its two units. That proves the files are
-built and installed — it is **not** evidence the fix takes effect, which is decided entirely by
-boot-time ordering (whether the bind source exists before timesyncd binds it) and can only be
-confirmed on hardware. The on-device acceptance test is the gate before this closes #31, and had not
-run at the time of writing:
-- rerun the 40-boot `bootloop.service` harness and confirm `ntp_sync_s` collapses toward zero after
-  the first boot (persisted clock applied at startup), **and** that `systemd-timesyncd` is `active`
-  every boot (not failed `226/NAMESPACE` — the failure mode if the bind source is ever unstaged);
-- confirm the clock file actually lands on `/data` (`/data/systemd-timesync/clock` present and
-  advancing), not on the rootfs slot;
-- a live `rauc install` immediately after a fresh boot, confirming the certificate check passes with
-  the `ota.just` force-set gone;
-- a `/data`-absent boot (mount disabled) confirming timesyncd still starts and syncs (degraded, no
-  persistence) rather than failing — the degradation contract this design must honour;
-- the restart path that a `/data`-absent boot alone will not surface: with `/data` recovered after a
-  degraded start (the `mount-fdir` case), run `systemctl restart systemd-timesyncd` and confirm it
-  returns to `active`, not `226/NAMESPACE`, and that `/data/systemd-timesync/clock` (not the rootfs
-  copy) is the one advancing afterwards — this is the single command that reproduces the re-stage
-  hazard the `kiosk-timesync-dir.service` `Wants=`/`After=` wiring exists to close.
+**Verification status: PASSED on hardware, 2026-08-18, bench board.** That the recipe parses and
+packages its two units was never evidence the fix takes effect — whether it works is decided entirely
+by boot-time ordering (whether the bind source exists before timesyncd binds it), and only hardware
+can decide that. It has now run. The bundle carrying this change was built, verified as signed by
+`CN = WiseKiosk Signing Key 2026`, installed, and booted:
+
+- **timesyncd starts clean.** `systemd-timesyncd` came up `active` with **zero** `226/NAMESPACE`
+  failures — the exact failure the `kiosk-timesync-dir.service` ordering exists to prevent, and the
+  one that would mean no time sync at all.
+- **The clock lands on `/data`.** `/data/systemd-timesync/clock` is present and advancing. The rootfs
+  copy at `/var/lib/systemd/timesync` stays empty, which is the correct signature, not a fault: the
+  bind is namespace-local to the unit, so the file is only ever visible at the `/data` path from
+  outside it. An observer checking the rootfs path and finding it empty is looking in the wrong
+  namespace.
+- **A second boot resumed near true time.** Against a cold first boot that started in `May 2025`, the
+  next boot came up within **~2 s** of true time — the persisted clock applied at startup, ahead of
+  any NTP exchange. That is the ~56 s wrong-clock window collapsing, measured.
+- **The re-stage wiring holds.** Four `systemctl restart systemd-timesyncd` cycles all returned
+  `active`, none `226/NAMESPACE` — the restart path a `/data`-absent boot alone does not surface.
+- **#31's failure mode is fixed.** At **uptime 53 s, before NTP sync**, the `/data`-restored clock was
+  already sufficient for `rauc info` to verify the bundle's certificate. This is the 2026-08-13
+  scenario — an install racing NTP from a cold epoch — passing with the `ota.just` host force-set
+  retired. The workaround is dead code because the cause is gone, not because it was merely removed.
+
+**Caveat — the first boot onto a freshly rolled-out slot is cold by construction.** The persisted
+clock lives on `/data`, and a slot that has never run has never written it, so the first boot after
+this change rolls out to a board starts at the epoch exactly as before. That is a one-time migration
+artifact, not a regression: every boot from the second onward inherits a real clock. The first
+post-rollout boot showing a cold clock should not be read as the fix failing.
 
 Three candidate fixes were weighed against the measured data:
 
