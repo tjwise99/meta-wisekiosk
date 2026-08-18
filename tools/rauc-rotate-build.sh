@@ -69,9 +69,12 @@ fi
 OUT="build/rotation"
 STAGE="$OUT/keydir"
 mkdir -p "$STAGE"
+# Both staged keys are private keys the live fleet trusts; old.key.pem is a
+# byte copy of the fleet signing key. 700/600, matching local/keys/<name>.
+chmod 700 "$STAGE"
 install -m600 "$NEW_KEYDIR/signing.key.pem"  "$STAGE/signing.key.pem"
 install -m644 "$NEW_KEYDIR/signing.cert.pem" "$STAGE/signing.cert.pem"
-install -m644 "$OLD_KEY"  "$STAGE/old.key.pem"
+install -m600 "$OLD_KEY"  "$STAGE/old.key.pem"
 install -m644 "$OLD_CERT" "$STAGE/old.cert.pem"
 
 HDR_VERSION=$(sed -n 's/^[[:space:]]*version:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$KCONFIG" | head -1)

@@ -3,6 +3,8 @@
 # Required variables (set by importing Justfile):
 #   machine     - Target machine (e.g., raspberrypi0-wifi)
 #   image-name  - Image base name (e.g., core-image-base)
+#   fleet-key   - Signing key name the fleet trusts; the flash guard's keyring check
+#   keys-root   - Key directory root, provided by the sibling rotate.just import
 
 # Flash WIC image to SD card
 [group('deploy')]
