@@ -160,8 +160,57 @@ run long enough yet to produce a verdict.
 
 ## Changes configured as a result
 
-None yet. This document is a draft for owner review; nothing described below has been implemented,
-and the fix is the owner's decision to make, not this investigation's.
+**Implemented: fix (2).** A new recipe
+[`kiosk-timesync-persist`](../../../meta-wisekiosk/recipes-core/kiosk-timesync-persist/) redirects
+`systemd-timesyncd`'s state onto `/data`, added to the `kiosk-zero-w` image. In the same change the
+`justfiles/ota.just` host force-set of the clock is retired (the skew is still reported as a
+diagnostic), since a fresh slot now inherits a real clock. Candidate `(1)` was rejected.
+
+Candidate `(3)` (`systemd-time-wait-sync`) was **dropped after review, not shipped**: its two clauses
+are "enable the unit *and order clock-dependent consumers after* `time-sync.target`", and this image
+has no in-boot clock consumer to order — the only clock-sensitive step is the OTA install, which runs
+over SSH, not as a boot unit. Enabling the unit alone gates nothing and, because a restored saved
+clock does not clear `STA_UNSYNC` (only a live NTP exchange does), it sits `activating` until a real
+sync, leaving `systemctl is-system-running` at `starting` on any board whose uplink is down. A
+mechanism with no consumer and a downside was not worth shipping; if a boot-time consumer is added
+later, enable it then.
+
+Mechanism, as landed — the ordering is load-bearing, not a mirror of `kiosk-journal`'s tmpfiles half:
+- `10-persist-clock.conf` — a `systemd-timesyncd.service.d` drop-in with
+  `BindPaths=/data/systemd-timesync:/var/lib/systemd/timesync` and `After=data.mount`. **BindPaths,
+  not a symlink**, because of the `ProtectSystem=strict` silent-`EROFS` no-op under candidate (2):
+  confirmed against the built unit, which ships `ProtectSystem=strict` + `StateDirectory=systemd/timesync`
+  + `User=systemd-timesync`. `After=`, not `RequiresMountsFor=`/`Requires=`: a failed `/data` must
+  leave NTP running (non-persistent), per the image's degradation contract.
+- `kiosk-timesync-dir.service` — a oneshot (`DefaultDependencies=no`, `After=data.mount`,
+  `Before=systemd-timesyncd.service`) that creates and `chown -R`s the `/data/systemd-timesync` bind
+  source. This ordering is the fix's linchpin: a tmpfiles `d` entry cannot guarantee the source
+  exists before timesyncd binds it (`/data` is `nofail`, so nothing orders tmpfiles-setup after the
+  mount), and a missing source fails timesyncd `226/NAMESPACE` into its restart limit — no time sync
+  at all. `kiosk-journal` ships only the tmpfiles half and survives solely because its failure is
+  soft (journal stays volatile); a written clock has no such slack. The `chown -R` also re-owns the
+  clock file each boot, defusing a dynamic-UID drift across an OTA that would otherwise `EACCES`-
+  then-`log_debug` into the same silent no-op candidate (2) forbids.
+
+**Verification status.** The recipe parses and packages its two units. That proves the files are
+built and installed — it is **not** evidence the fix takes effect, which is decided entirely by
+boot-time ordering (whether the bind source exists before timesyncd binds it) and can only be
+confirmed on hardware. The on-device acceptance test is the gate before this closes #31, and had not
+run at the time of writing:
+- rerun the 40-boot `bootloop.service` harness and confirm `ntp_sync_s` collapses toward zero after
+  the first boot (persisted clock applied at startup), **and** that `systemd-timesyncd` is `active`
+  every boot (not failed `226/NAMESPACE` — the failure mode if the bind source is ever unstaged);
+- confirm the clock file actually lands on `/data` (`/data/systemd-timesync/clock` present and
+  advancing), not on the rootfs slot;
+- a live `rauc install` immediately after a fresh boot, confirming the certificate check passes with
+  the `ota.just` force-set gone;
+- a `/data`-absent boot (mount disabled) confirming timesyncd still starts and syncs (degraded, no
+  persistence) rather than failing — the degradation contract this design must honour;
+- the restart path that a `/data`-absent boot alone will not surface: with `/data` recovered after a
+  degraded start (the `mount-fdir` case), run `systemctl restart systemd-timesyncd` and confirm it
+  returns to `active`, not `226/NAMESPACE`, and that `/data/systemd-timesync/clock` (not the rootfs
+  copy) is the one advancing afterwards — this is the single command that reproduces the re-stage
+  hazard the `kiosk-timesync-dir.service` `Wants=`/`After=` wiring exists to close.
 
 Three candidate fixes were weighed against the measured data:
 
