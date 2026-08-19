@@ -183,11 +183,12 @@ local_conf_header:
     # key, whose private half is committed in a public repository and which no
     # device trusts. The key lives in the gitignored local/ -- INSIDE the
     # working tree, because kas-container mounts the repo root and the build
-    # has to read the key. Reached through TOPDIR for that same mount.
+    # has to read the key; gitignored is what keeps it uncommitted. Reached
+    # through TOPDIR for that same mount.
     #
-    # BOTH update-bundle.bb (signs the bundle) and rauc-conf.bbappend (bakes
-    # /etc/rauc/keyring.pem into the rootfs) read these four, so signer and
-    # trusted keyring cannot drift apart.
+    # BOTH update-bundle.bb (signs the bundle) and meta-autonomos-core's
+    # rauc-conf.bbappend (bakes /etc/rauc/keyring.pem into the rootfs) read
+    # these, so signer and trusted keyring cannot drift apart.
     #
     # The key NAME is spelled out here because bitbake cannot read a just
     # variable; it is one of the two sites a rotation must edit by hand, listed

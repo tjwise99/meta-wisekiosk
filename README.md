@@ -212,10 +212,11 @@ Two more fixes belong upstream but did not need a patch, because a downstream la
 
 - **Rollback has never been exercised.** RAUC reports healthy slots; that is not the same as proving
   a bad update rolls back, or that a slow-but-healthy boot does *not* trigger one.
-- **The retired development key is in the public git history.** Fleet and build both use the
-  WiseKiosk 2026 key, kept in the gitignored `local/` — inside the checkout, never committed.
-  Rotation removed the old key's reach; purging history is a separate step that does not undo the
-  exposure. See [`docs/rauc-key-rotation.md`](docs/rauc-key-rotation.md).
+- **The retired development key is in the public git history** (issue #6 RAUC signing private key is
+  committed in this public repository). Fleet and build both use the WiseKiosk 2026 key, which lives
+  in the gitignored `local/` — inside the checkout, never committed, and so not restorable by git:
+  back it up. Rotation removed the old key's reach; purging history is a separate step that does not
+  undo the exposure. See [`docs/rauc-key-rotation.md`](docs/rauc-key-rotation.md).
 - **Root login is unauthenticated.** The image carries `debug-tweaks`, so root has an empty password.
   Deferred deliberately while a second device still depends on unauthenticated access; tracked as
   issue #7 debug-tweaks empty root password, which carries the detail.
