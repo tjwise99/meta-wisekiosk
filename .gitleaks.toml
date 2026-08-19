@@ -17,5 +17,5 @@ useDefault = true
 # only if the history is rewritten -- which is not worth doing, since rewriting
 # does not unpublish an already-public key.
 [allowlist]
-description = "Retired upstream RAUC development signing key, still present in-tree"
+description = "Retired upstream RAUC development signing key, still in this repo's git history"
 paths = ['''meta-autonomos-core/files/rauc-example-keys/development\.key\.pem''']

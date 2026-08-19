@@ -91,7 +91,7 @@ failing aborts with recovery guidance, short of the second slot.
    Name it explicitly: `name` defaults to the key the fleet already trusts, which a rotation never
    wants. Both recipes refuse that rather than doing something plausible — `rotate-keygen` will not
    overwrite an existing pair, `rotate-build` will not rotate a key to itself. Convention is the
-   year, e.g. `kiosk-2027`.
+   year, e.g. `kiosk-2027`; the CN drops the prefix, so that mints `WiseKiosk Signing Key 2027`.
 
 2. Build the two bundles:
 

@@ -25,11 +25,12 @@
 keys-root := justfile_directory() / "local/keys"
 
 # Generate a fresh signing key + self-signed cert. Never overwrites an existing
-# pair -- rotation always makes a NEW one.
+# pair -- rotation always makes a NEW one. The CN is derived by rauc-keygen.sh
+# from the directory name; passing one from here was a second copy of the format.
 [group('rotate')]
 [doc("Generate a new RAUC signing key (gitignored, never committed)")]
 rotate-keygen name=fleet-key:
-    tools/rauc-keygen.sh "{{keys-root}}/{{name}}" "WiseKiosk Signing Key {{name}}"
+    tools/rauc-keygen.sh "{{keys-root}}/{{name}}"
 
 # Install this host's SSH pubkey on a device so the OTA recipes' key auth works
 # without relying on the debug-tweaks empty-root-password path.

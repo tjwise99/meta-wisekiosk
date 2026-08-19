@@ -12,7 +12,14 @@
 set -euo pipefail
 
 OUTDIR=${1:?usage: rauc-keygen.sh <outdir> [common-name]}
-CN=${2:-"WiseKiosk Signing $(basename "$OUTDIR")"}
+
+# The CN format lives here and only here -- a second copy in the just recipe was
+# free to drift, and did: it minted "WiseKiosk Signing Key kiosk-2027" where the
+# fielded 2026 cert reads "WiseKiosk Signing Key 2026". A leading "kiosk-" is
+# stripped from the directory name so the year alone reaches the CN; a name
+# without the prefix is used as given.
+NAME=$(basename "$OUTDIR")
+CN=${2:-"WiseKiosk Signing Key ${NAME#kiosk-}"}
 
 KEY="$OUTDIR/signing.key.pem"
 CERT="$OUTDIR/signing.cert.pem"
