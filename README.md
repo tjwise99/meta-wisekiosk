@@ -214,8 +214,8 @@ Two more fixes belong upstream but did not need a patch, because a downstream la
   a bad update rolls back, or that a slow-but-healthy boot does *not* trigger one.
 - **The retired development key is in the public git history.** Fleet and build both use the
   WiseKiosk 2026 key, kept in the gitignored `local/` — inside the checkout, never committed.
-  Rotation is what removed the old key's reach; purging history is a separate step that does not
-  undo the exposure. See [`docs/rauc-key-rotation.md`](docs/rauc-key-rotation.md).
+  Rotation removed the old key's reach; purging history is a separate step that does not undo the
+  exposure. See [`docs/rauc-key-rotation.md`](docs/rauc-key-rotation.md).
 - **Root login is unauthenticated.** The image carries `debug-tweaks`, so root has an empty password.
   Deferred deliberately while a second device still depends on unauthenticated access; tracked as
   issue #7 debug-tweaks empty root password, which carries the detail.
