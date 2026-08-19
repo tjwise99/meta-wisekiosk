@@ -1,21 +1,19 @@
 [extend]
 useDefault = true
 
-# One known finding is allowlisted so CI gates NEW leaks; a check that is red on
-# every run gates nothing.
+# One known finding is allowlisted so CI gates NEW leaks; a check red on every
+# run gates nothing. Not a false positive: development.key.pem is a genuine RSA
+# private key in a PUBLIC repository -- upstream AutonomOS material, vendored
+# here by c2d73ed3 (2026-01-04), not written for the Zero W port. Its reach is
+# nil: fleet and build both use the WiseKiosk 2026 key (kiosk-zero-w.yaml,
+# AUTONOMOS_RAUC_KEY_DIR), so a dev-key-signed bundle installs nowhere.
 #
-# Not a false positive: development.key.pem is a genuine RSA private key in a
-# PUBLIC repository -- upstream AutonomOS material, vendored here by c2d73ed3
-# (2026-01-04), not written for the Zero W port. Its reach is nil: fleet and build
-# both use the WiseKiosk 2026 key (kiosk-zero-w.yaml, AUTONOMOS_RAUC_KEY_DIR), so
-# a bundle signed with the dev key installs nowhere. See docs/rauc-key-rotation.md.
-#
-# The path below is the VENDORED one, and it is deliberate. `gitleaks detect`
-# scans git HISTORY, not the worktree, and that is where the blob still is; the
-# worktree copy went when meta-autonomos became a kas-fetched repo, and the
-# fetched copy under sources/ is gitignored and never scanned. So the entry goes
-# only if the history is rewritten -- which is not worth doing, since rewriting
-# does not unpublish an already-public key.
+# The path is the VENDORED one, deliberately. `gitleaks detect` scans git
+# HISTORY, not the worktree, and that is where the blob still is; the worktree
+# copy went when meta-autonomos became kas-fetched, and the fetched copy under
+# sources/ is gitignored, never scanned. So the entry goes only on a history
+# rewrite -- not worth doing, since it does not unpublish a public key.
+# See docs/rauc-key-rotation.md.
 [allowlist]
 description = "Retired upstream RAUC development signing key, still in this repo's git history"
 paths = ['''meta-autonomos-core/files/rauc-example-keys/development\.key\.pem''']

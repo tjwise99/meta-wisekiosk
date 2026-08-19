@@ -93,13 +93,8 @@ just flash /dev/sdX                 # writes build/.../*.wic.bz2, re-reads the p
 just provision-fresh-card /dev/sdX  # mounts partition 4, writes the site config, unmounts
 ```
 
-`flash` refuses an image that does not bake the fleet signing keyring, or whose image and rootfs come
-from different builds: RAUC never touches the boot partition, so a card written with the wrong
-keyring is repairable only by another reflash. The signing key is a build prerequisite — see
-[`docs/rauc-key-rotation.md`](docs/rauc-key-rotation.md).
-
-The card must be provisioned before it boots. WiFi credentials are what let you reach the device, so
-the first write cannot come over the network.
+`flash` refuses an image not baking the fleet signing keyring, or one mixing builds: a wrong keyring
+is repairable only by another reflash. Provision before first boot — WiFi credentials are the way in.
 
 `/data` is the **fourth** partition, and nothing on the card says so — the layout is boot, rootfs-a,
 rootfs-b, data. `provision-fresh-card` derives it; provisioning by hand instead
@@ -138,9 +133,8 @@ reachable device; the device reads it at boot.
 
 The tracked `secrets.yaml.tmpl` carries names with empty values only. `tools/ci-guards.sh` — run by
 CI and by the pre-commit hook — rejects a `secrets.yaml` at the repository root (the only place kas
-would pick one up), and fails if any of
-those value names becomes a build input again in the kas config, the layer, `includes/` or
-`patches/`. Install the hook with `just install-hooks`.
+would pick one up), and fails if any of those value names becomes a build input again in the kas
+config, the layer, `includes/` or `patches/`. Install the hook with `just install-hooks`.
 
 **kas merges `local_conf_header` by block name and the top-level file wins**, so a block named the
 same as one in `kiosk-zero-w.yaml` is discarded silently — no warning, no error, variables that never
@@ -212,11 +206,9 @@ Two more fixes belong upstream but did not need a patch, because a downstream la
 
 - **Rollback has never been exercised.** RAUC reports healthy slots; that is not the same as proving
   a bad update rolls back, or that a slow-but-healthy boot does *not* trigger one.
-- **The retired development key is in the public git history** (issue #6 RAUC signing private key is
-  committed in this public repository). Fleet and build both use the WiseKiosk 2026 key, which lives
-  in the gitignored `local/` — inside the checkout, never committed, and so not restorable by git:
-  back it up. Rotation removed the old key's reach; purging history is a separate step that does not
-  undo the exposure. See [`docs/rauc-key-rotation.md`](docs/rauc-key-rotation.md).
+- **Issue #6 RAUC signing private key is committed in this public repository** — closed by rotation;
+  history keeps the dev key and purging it undoes nothing. Its replacement, the WiseKiosk 2026 key,
+  is uncommitted in gitignored `local/` — back it up, git cannot. [rotation](docs/rauc-key-rotation.md)
 - **Root login is unauthenticated.** The image carries `debug-tweaks`, so root has an empty password.
   Deferred deliberately while a second device still depends on unauthenticated access; tracked as
   issue #7 debug-tweaks empty root password, which carries the detail.
