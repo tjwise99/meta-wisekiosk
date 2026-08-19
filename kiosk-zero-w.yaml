@@ -178,6 +178,30 @@ local_conf_header:
     # convert step that can fail after the image itself is already built.
     RAUC_CASYNC_BUNDLE:pn-update-bundle = "0"
 
+    # The fleet signs with, and bakes the keyring of, the one WiseKiosk 2026
+    # key. Unset AUTONOMOS_RAUC_KEY_DIR falls back to upstream's development
+    # key, whose private half is committed in a public repository and which no
+    # device trusts. The key lives in the gitignored local/ -- INSIDE the
+    # working tree, because kas-container mounts the repo root and the build
+    # has to read the key; gitignored is what keeps it uncommitted. Reached
+    # through TOPDIR for that same mount.
+    #
+    # BOTH update-bundle.bb (signs the bundle) and meta-autonomos-core's
+    # rauc-conf.bbappend (bakes /etc/rauc/keyring.pem into the rootfs) read
+    # these, so signer and trusted keyring cannot drift apart.
+    #
+    # The key NAME is spelled out here because bitbake cannot read a just
+    # variable; it is one of the two sites a rotation must edit by hand, listed
+    # in docs/rauc-key-rotation.md under "Rotating to a new key".
+    #
+    # A rotation build overrides these: kas emits local_conf_header blocks
+    # sorted by key, and rauc-rotate-build.sh names its fragment
+    # zz-rauc-rotation so it sorts last whatever this block is called.
+    AUTONOMOS_RAUC_KEY_DIR = "${TOPDIR}/../local/keys/kiosk-2026"
+    AUTONOMOS_RAUC_KEY_FILE = "signing.key.pem"
+    AUTONOMOS_RAUC_CERT_FILE = "signing.cert.pem"
+    AUTONOMOS_RAUC_KEYRING_FILE = "signing.cert.pem"
+
   # Nothing here runs a Wayland compositor, VC4 has no Vulkan, and ptest builds
   # test suites for a board that will never run them. Removing them is free
   # before the first build and costs a rebuild after it.

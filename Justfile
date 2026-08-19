@@ -33,10 +33,19 @@ kiosk-host := env('KIOSK_HOST', '')
 # Directory for RAUC bundles
 rauc-bundle-dir := "build/bundles"
 
-# Development signing keys, used by the casync recipes in ota.just (override
-# RAUC_CERT, RAUC_KEY, RAUC_KEYRING for production). They are upstream's own
-# example keys and live in the meta-autonomos checkout, so these paths exist
-# only after `kas-container checkout kiosk-zero-w.yaml` has populated sources/.
+# The key the fleet trusts. Single source for the just side (the `flash` keyring
+# guard, the rotation recipes' old-key default). kiosk-zero-w.yaml repeats the
+# name because bitbake cannot read a just variable -- the ONE site this cannot
+# cover; docs/rauc-key-rotation.md lists both under "Rotating to a new key".
+fleet-key := "kiosk-2026"
+
+# Consumed ONLY by `rauc-to-casync` in ota.just, which is disabled
+# (RAUC_CASYNC_BUNDLE = "0"; chunker removed with #29). NOT the fleet signing
+# path -- that is kiosk-zero-w.yaml's AUTONOMOS_RAUC_*, pointed at the fleet-key
+# dir under local/keys. These name upstream's retired example keys, which no
+# device trusts, and exist only after `kas-container checkout` populates
+# sources/. Reviving casync means repointing RAUC_CERT/RAUC_KEY/RAUC_KEYRING at
+# the fleet key: a dev-key-signed bundle installs nowhere.
 rauc-cert := env('RAUC_CERT', 'sources/meta-autonomos/meta-autonomos-core/files/rauc-example-keys/development.cert.pem')
 rauc-key := env('RAUC_KEY', 'sources/meta-autonomos/meta-autonomos-core/files/rauc-example-keys/development.key.pem')
 rauc-keyring := env('RAUC_KEYRING', 'sources/meta-autonomos/meta-autonomos-core/files/rauc-example-keys/development.cert.pem')

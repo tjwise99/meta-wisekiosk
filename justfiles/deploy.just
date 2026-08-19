@@ -3,6 +3,8 @@
 # Required variables (set by importing Justfile):
 #   machine     - Target machine (e.g., raspberrypi0-wifi)
 #   image-name  - Image base name (e.g., core-image-base)
+#   fleet-key   - Signing key name the fleet trusts; the flash guard's keyring check
+#   keys-root   - Key directory root, provided by the sibling rotate.just import
 
 # Flash WIC image to SD card
 [group('deploy')]
@@ -26,6 +28,84 @@ flash device:
         echo "Did you run 'just build' first?"
         exit 1
     fi
+
+    # Reflash is the one path that can silently UN-ROTATE a wall-mounted unit: a
+    # device trusts only the keyring baked into the slot it boots, and RAUC never
+    # touches the FAT partition, so an image built without the fleet key strands
+    # the unit until someone pulls the card. Fails CLOSED -- anything unproven
+    # refuses the write.
+    FLEET_CERT="{{keys-root}}/{{fleet-key}}/signing.cert.pem"
+    ROOTFS="build/tmp-{{machine}}/deploy/images/{{machine}}/{{image-name}}-{{machine}}.rootfs.ext4"
+    test -f "$FLEET_CERT" || { echo "Error: fleet cert not found: $FLEET_CERT" >&2; exit 1; }
+    test -f "$ROOTFS"     || { echo "Error: rootfs not found: $ROOTFS" >&2; exit 1; }
+    command -v debugfs >/dev/null 2>&1 || { echo "Error: debugfs missing -- cannot verify the keyring; refusing to flash" >&2; exit 1; }
+
+    # debugfs cannot address a filesystem inside the partitioned, compressed
+    # .wic.bz2 that is written, so the keyring is read from the .ext4 and the
+    # shared build timestamp is what makes it evidence about the .wic.bz2 --
+    # without it this verifies one artifact and flashes another.
+    #
+    # ASSUMPTION: wic populates the rootfs partition from IMAGE_ROOTFS, the tree
+    # the .ext4 is generated from. A WKS_FILE using rawcopy or another image
+    # breaks that link, and this check would have to loop-mount the .wic instead.
+    IMG_STAMP=$(basename "$(readlink -f "$IMAGE")"  | sed -n 's/.*rootfs-\([0-9]\{8,\}\)\..*/\1/p')
+    EXT_STAMP=$(basename "$(readlink -f "$ROOTFS")" | sed -n 's/.*rootfs-\([0-9]\{8,\}\)\..*/\1/p')
+    if [ -z "$IMG_STAMP" ] || [ "$IMG_STAMP" != "$EXT_STAMP" ]; then
+        echo "Error: cannot tie the rootfs to the image being flashed" >&2
+        echo "  image  build: ${IMG_STAMP:-unknown}" >&2
+        echo "  rootfs build: ${EXT_STAMP:-unknown}" >&2
+        echo "One is stale. Re-run 'just build' so both come from one build." >&2
+        exit 1
+    fi
+
+    # errexit off: `VAR=$(cmd)` takes cmd's status, so an unparseable cert or a
+    # non-ext4 rootfs would abort here with nothing but "recipe `flash` failed
+    # with exit code 1", and the empty-result branches below would be
+    # unreachable. Either input can be the broken one; the operator has to be
+    # told which.
+    set +e
+    WANT_FP=$(openssl x509 -in "$FLEET_CERT" -noout -fingerprint -sha256 2>/dev/null | sed 's/.*=//')
+    BAKED_PEM=$(debugfs -R "cat /etc/rauc/keyring.pem" "$ROOTFS" 2>/dev/null)
+    BAKED_FP=$(printf '%s\n' "$BAKED_PEM" \
+        | openssl x509 -noout -fingerprint -sha256 2>/dev/null | sed 's/.*=//')
+    set -e
+
+    # Tool output first, explanation LAST: an operator scanning the tail reads
+    # what was printed last, and openssl/debugfs each emit several lines. head
+    # bounds them; `|| true` keeps pipefail from turning the deliberately-failing
+    # diagnostic into an abort.
+    if [ -z "$WANT_FP" ]; then
+        echo "-- openssl reported: --" >&2
+        { openssl x509 -in "$FLEET_CERT" -noout -fingerprint -sha256 2>&1 >/dev/null | head -3 >&2; } || true
+        echo "Error: cannot read a certificate from the fleet cert:" >&2
+        echo "  $FLEET_CERT" >&2
+        echo "Unparseable -- truncated, empty, or not PEM. Refusing to flash: with" >&2
+        echo "no cert there is nothing to verify the card against. Check the file," >&2
+        echo "or that fleet-key in the Justfile names the right key." >&2
+        exit 1
+    fi
+
+    if [ -z "$BAKED_FP" ]; then
+        echo "-- debugfs reported: --" >&2
+        { debugfs -R "cat /etc/rauc/keyring.pem" "$ROOTFS" 2>&1 >/dev/null | head -3 >&2; } || true
+        echo "Error: no readable certificate at /etc/rauc/keyring.pem in:" >&2
+        echo "  $ROOTFS" >&2
+        echo "Truncated, not an ext4, or built without the RAUC keyring recipe." >&2
+        echo "Refusing to flash: a wrong keyring cannot be repaired over the air." >&2
+        exit 1
+    fi
+    if [ "$BAKED_FP" != "$WANT_FP" ]; then
+        echo "Error: the image does not bake the fleet keyring -- refusing to flash." >&2
+        echo "  baked   : $BAKED_FP" >&2
+        echo "  expected: $WANT_FP" >&2
+        echo "  expected cert: $FLEET_CERT" >&2
+        echo "This card would boot a unit that rejects every fleet update, with no" >&2
+        echo "OTA repair. Rebuild against the fleet key, or check that fleet-key in" >&2
+        echo "the Justfile still names the key the fleet trusts." >&2
+        exit 1
+    fi
+    echo "verified: image bakes the fleet keyring ($BAKED_FP)"
+
     echo "Flashing $IMAGE to {{device}}..."
     echo "WARNING: This will overwrite all data on {{device}}!"
     # `|| true`: read exits non-zero at EOF, which errexit would turn into an

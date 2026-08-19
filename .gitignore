@@ -4,9 +4,9 @@ sources/
 .kas_shell_history
 secrets.yaml
 
-# Operator notes about the physical units: serials, MACs, addresses, one-off
-# readings. Individually harmless, together a fingerprint of one network, and
-# this repository is public.
+# Operator notes -- serials, MACs, addresses, readings -- which together
+# fingerprint one network, and local/keys, the RAUC key the fleet trusts. Both
+# must live in the tree, so NOT COMMITTING them is the whole protection.
 local/
 
 # The skills under .claude/ are tracked; these two are per-checkout machine

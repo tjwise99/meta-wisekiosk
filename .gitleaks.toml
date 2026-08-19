@@ -1,19 +1,19 @@
 [extend]
 useDefault = true
 
-# One known finding is allowlisted here so that CI gates NEW leaks. A check that
-# is red on every run gets ignored, and then it gates nothing at all.
+# One known finding is allowlisted so CI gates NEW leaks; a check red on every
+# run gates nothing. Not a false positive: development.key.pem is a genuine RSA
+# private key in a PUBLIC repository -- upstream AutonomOS material, vendored
+# here by c2d73ed3 (2026-01-04), not written for the Zero W port. Its reach is
+# nil: fleet and build both use the WiseKiosk 2026 key (kiosk-zero-w.yaml,
+# AUTONOMOS_RAUC_KEY_DIR), so a dev-key-signed bundle installs nowhere.
 #
-# This is NOT a statement that the finding is a false positive. It is real:
-# development.key.pem is a genuine RSA private key in a PUBLIC repository, and
-# development.cert.pem beside it is the certificate in the device's RAUC keyring
-# -- so anyone can sign an update bundle the kiosk will accept as authentic.
-#
-# It arrived with the upstream AutonomOS tree (c2d73ed3, 2026-01-04) rather than
-# with the Zero W port. Rotating it is a sequenced operation, not a deletion:
-# the new keyring has to reach the device in a bundle signed by the OLD key, or
-# the device can no longer verify anything and OTA is dead. Tracked as an issue
-# rather than silently carried.
+# The path is the VENDORED one, deliberately. `gitleaks detect` scans git
+# HISTORY, not the worktree, and that is where the blob still is; the worktree
+# copy went when meta-autonomos became kas-fetched, and the fetched copy under
+# sources/ is gitignored, never scanned. So the entry goes only on a history
+# rewrite -- not worth doing, since it does not unpublish a public key.
+# See docs/rauc-key-rotation.md.
 [allowlist]
-description = "Known, tracked: upstream RAUC development signing key"
+description = "Retired upstream RAUC development signing key, still in this repo's git history"
 paths = ['''meta-autonomos-core/files/rauc-example-keys/development\.key\.pem''']
