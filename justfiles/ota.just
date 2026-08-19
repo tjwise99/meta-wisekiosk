@@ -147,13 +147,28 @@ kiosk-bundle kconfig="kiosk-zero-w.yaml":
 # transfer completes, or does not surface at all.
 [group('ota')]
 [script('bash')]
-[doc("Refuse a delivery that cannot work: slot size, stale bundle, /data space")]
+[doc("Refuse a delivery that cannot work: image stamp, slot size, stale staged copy, /data space")]
 kiosk-preflight image="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/core-image-base-raspberrypi0-wifi.rootfs.ext4" bundle="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb" host=kiosk-host:
     set -euo pipefail
     SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
 
     test -f "{{image}}"  || { echo "no rootfs image at {{image}}"; exit 1; }
     test -f "{{bundle}}" || { echo "no bundle at {{bundle}}"; exit 1; }
+    # An image that cannot name its source commit installs a slot nobody can
+    # attribute afterwards. Fail-closed here, before the ~114MB transfer.
+    #
+    # ASSUMPTION: the bundle packages the rootfs this .ext4 was made from, so a
+    # green stamp here describes what gets delivered. NOTHING CHECKS THAT. The
+    # stamp is readable from the .ext4 and not from the .raucb, and the two are
+    # deployed by different recipes, so a stale bundle beside a fresh image
+    # passes. The filename tie `just flash` uses (deploy.just:51-59) does NOT
+    # transfer: DATETIME is fixed per bitbake INVOCATION, and `just build` then
+    # `just kiosk-bundle` is two invocations, so matching stamps would refuse the
+    # documented sequence. The honest tie is content-based -- the bundle
+    # manifest's image hash against the .ext4 -- and is tracked as
+    # #48 bundle-image-tie, not solved here.
+    tools/build-stamp-check.sh --require "{{image}}"
+
     IMAGE_B=$(stat -Lc %s "{{image}}")
     BUNDLE_B=$(stat -Lc %s "{{bundle}}")
 

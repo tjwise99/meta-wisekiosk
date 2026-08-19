@@ -29,4 +29,9 @@ kiosk_set_static_resolv() {
     ln -s /data/config/resolv.conf ${IMAGE_ROOTFS}${sysconfdir}/resolv.conf
 }
 
-ROOTFS_POSTPROCESS_COMMAND += "kiosk_set_static_resolv;"
+# No trailing semicolon: a token carrying one is not a variable name, so bitbake
+# resolves it to nothing and this function's BODY reaches no task hash -- editing
+# what it symlinks would leave do_rootfs stamped and the old link shipped. See
+# kiosk-buildstamp.bbclass, which explains the two-parsers mechanism in full, and
+# guard 9 in tools/ci-guards.sh, which now rejects the semicolon form.
+ROOTFS_POSTPROCESS_COMMAND += "kiosk_set_static_resolv"

@@ -49,7 +49,7 @@ meta-wisekiosk/                    <- the repository (project scaffolding)
 │   ├── classes/
 │   └── recipes-*/
 ├── Justfile, justfiles/           build, OTA and device commands
-├── tools/                         provisioning, bundle delivery, device debugging, doc gate, CI guards
+├── tools/                         provisioning, bundle delivery, device debugging, doc gate, build stamp, CI guards
 ├── docs/                          layers-and-kas.md, issue_investigation/
 └── sources/                       gitignored; everything kas fetches lands here
 ```
@@ -60,6 +60,14 @@ a layer is, what kas does with these files, and why the two patches cannot be bb
 
 Every change that was acted on is documented at the recipe carrying it; the per-issue investigations
 behind those changes are indexed in **[docs/README.md](docs/README.md)**.
+
+Every image carries **`/etc/build-info`**: the `meta-wisekiosk` commit it was built from, whether that
+tree was modified, the branch, and the machine/distro. It lives in the rootfs the `.raucb` packages,
+so it should be per-slot — `cat /etc/build-info` on a device naming the build that slot is running is
+the fact an investigation has to be able to quote. Not yet confirmed on a booted device.
+`just build-stamp` reads it back out of the built `.ext4`, and `just flash` and `just kiosk-preflight`
+refuse an artifact that cannot name its commit. See
+[docs/layers-and-kas.md](docs/layers-and-kas.md#what-commit-an-image-was-built-from).
 
 ## Quick start
 
@@ -134,7 +142,9 @@ reachable device; the device reads it at boot.
 The tracked `secrets.yaml.tmpl` carries names with empty values only. `tools/ci-guards.sh` — run by
 CI and by the pre-commit hook — rejects a `secrets.yaml` at the repository root (the only place kas
 would pick one up), and fails if any of those value names becomes a build input again in the kas
-config, the layer, `includes/` or `patches/`. Install the hook with `just install-hooks`.
+config, the layer, `includes/` or `patches/`. It also fails if the build-stamp *wiring* is removed or
+renamed — CI never builds, so it cannot see the baked file. Checking the file itself is
+`just build-stamp`'s job, host-side, against the artifact. Install the hook with `just install-hooks`.
 
 **kas merges `local_conf_header` by block name and the top-level file wins**, so a block named the
 same as one in `kiosk-zero-w.yaml` is discarded silently — no warning, no error, variables that never

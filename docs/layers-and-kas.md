@@ -182,6 +182,60 @@ debugfs -R "cat /etc/systemd/system/wpa_supplicant.service" \
 
 and confirm it reads `/data/config/wpa_supplicant.conf` and requires `data.mount`.
 
+## What commit an image was built from
+
+`meta-wisekiosk/classes/kiosk-buildstamp.bbclass`, globally inherited from `kiosk-zero-w.yaml`,
+writes `/etc/build-info` in a rootfs postprocess:
+
+```
+BUILD_INFO_VERSION="1"
+META_WISEKIOSK_COMMIT="<40 hex>"        META_WISEKIOSK_DIRTY="0|1"
+META_WISEKIOSK_COMMIT_SHORT="<12 hex>"  META_WISEKIOSK_BRANCH="<name>"
+BUILD_MACHINE=  BUILD_DISTRO=  BUILD_DISTRO_VERSION=  BUILD_LAYERS="name:sha …"
+```
+
+Every value is quoted, including those that cannot contain a space: the designed failure value is the
+literal `<unknown>`, and unquoted, `<` `>` are redirection operators — `. /etc/build-info` would die
+on a syntax error, leave the field empty rather than `<unknown>`, and abandon every later line. Only
+`META_WISEKIOSK_DIRTY` answers "was the tree modified"; `BUILD_LAYERS` deliberately carries no dirty
+marker, because OE's per-layer flag is `git diff` (tracked only) and would call a tree clean that
+`DIRTY` calls dirty.
+
+Four things about it are load-bearing:
+
+- **The sha comes from `BBLAYERS`, not `COREBASE`.** `oe.buildcfg.get_scmbasepath` joins `COREBASE`
+  with `meta`, which is why OE's own `METADATA_REVISION` reports poky's HEAD — already pinned in
+  `includes/base.yaml`, and never this repository's commit. `meta-wisekiosk` is the one layer kas
+  does not clone, so git inside it answers with this working tree.
+- **It is captured in configuration space with `:=` and a `[vardepvalue]`**, copying
+  `metadata_scm.bbclass`. A package recipe running `git` in `do_install` instead would produce a task
+  hash bitbake cannot invalidate: sstate would replay the old package and every later image would bake
+  the first commit ever built — a file that exists, parses and is wrong. Image tasks carry
+  `SSTATE_SKIP_CREATION`, so this route has no cache to replay.
+- **The function is appended to `ROOTFS_POSTPROCESS_COMMAND` with no trailing semicolon**, and this
+  is correctness, not style. `image.bbclass` installs that variable's value as its own `vardeps` and
+  bitbake splits it on whitespace, so `kiosk_write_build_info;` is looked up as a variable of that
+  exact name and resolves to nothing — the body, and every value in it, reaches no task hash.
+  `oe/utils.py` meanwhile does `cmds.replace(";", " ")` before executing, so it runs perfectly. Two
+  consumers of one string with opposite parsers: the file is written once and then frozen while the
+  source moves. This shipped, was caught only by a real build, and is now gated by guard 9 across
+  every class in the layer.
+- **`DIRTY` is `git status --porcelain` over the whole repository, so an untracked file counts.**
+  Same scope as the sha above it, which is the repository's HEAD, not the layer's — `kiosk-zero-w.yaml`,
+  `includes/` and `patches/` are build inputs living outside the layer. OE's `is_layer_modified` is
+  `git diff` only, and a new untracked `.bb` is picked up by `BBFILES` — it is in the image while
+  reading clean. A dirty build is recorded, never refused.
+
+`BUILD_LAYERS` narrows but does not close the gap that `sources/` is gitignored: a hand-patched
+upstream layer, or a signing key rotated in `local/keys`, moves the image without moving
+`META_WISEKIOSK_COMMIT`.
+
+Verification splits in two, because CI never builds. `tools/ci-guards.sh` guard 9 checks the wiring
+still exists and that no postprocess function anywhere in the layer carries the semicolon above;
+`tools/build-stamp-check.sh` (`just build-stamp`) reads the file back out of the
+shipped `.ext4` with `debugfs` and rejects the `<unknown>` that git failing inside kas-container
+would leave. `just flash` and `just kiosk-preflight` run it with `--require`.
+
 ## Bumping the upstream pin
 
 Upstream is dormant, and the pin is deliberate — a floating branch would make every rebuild's diff
