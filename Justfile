@@ -91,7 +91,7 @@ spotless: clean
 
 # Run the same checks CI runs. Fast, needs no build.
 [group('guards')]
-[doc("Run repository guards: secrets, template, shell syntax, YAML, gitleaks")]
+[doc("Run repository guards: secrets, template, shell syntax, YAML, gitleaks, build stamp")]
 guards:
     tools/ci-guards.sh
 
@@ -131,6 +131,14 @@ links:
 [doc("Check docs against what the built image ships (skips if unbuilt)")]
 image:
     python3 tools/doc-image.py check
+
+# The commit the built image names, read out of the shipped .ext4. Local-only
+# for the same reason as `image`. `just flash` and `just kiosk-preflight` run it
+# with --require, where an unreadable stamp fails instead of skipping.
+[group('check')]
+[doc("Check the built image names its source commit (skips if unbuilt)")]
+build-stamp:
+    tools/build-stamp-check.sh
 
 # Write per-site config to a device's /data. The image carries none of it.
 [group('provision')]

@@ -163,6 +163,15 @@ local_conf_header:
     # provisioning.
     INHERIT += "kiosk-static-resolv"
 
+    # /etc/build-info: the meta-wisekiosk commit the running slot was built
+    # from. DISTRO_VERSION is a hardcoded "0.1", /etc/os-release derives from
+    # it, and /etc/version is the reproducibility epoch clamp, so without this
+    # no image can name its own source (issue #46). A global INHERIT is
+    # configuration space, re-parsed on every bitbake invocation, so
+    # `just build`, `just kiosk-bundle` and tools/rauc-rotate-build.sh -- which
+    # each reach bitbake by their own route -- all get the stamp.
+    INHERIT += "kiosk-buildstamp"
+
   # update-bundle.bb packages whichever image RAUC_SLOT_rootfs names, and its
   # default is autonomos-devel -- a different image, with no surf and no kiosk
   # unit. Installing that bundle would replace the slot and report success.

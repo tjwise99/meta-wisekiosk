@@ -106,6 +106,12 @@ flash device:
     fi
     echo "verified: image bakes the fleet keyring ($BAKED_FP)"
 
+    # Same .ext4, same fail-closed reason: a card whose image cannot name its
+    # source commit produces an investigation nobody can attribute later. A
+    # DIRTY build is reported and flashed -- refusing that would make the
+    # develop loop hostile.
+    tools/build-stamp-check.sh --require "$ROOTFS"
+
     echo "Flashing $IMAGE to {{device}}..."
     echo "WARNING: This will overwrite all data on {{device}}!"
     # `|| true`: read exits non-zero at EOF, which errexit would turn into an

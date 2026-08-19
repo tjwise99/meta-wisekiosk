@@ -296,6 +296,110 @@ else
     fi
 fi
 
+# --- 9. the build stamp must stay wired into the image --------------------
+# Without /etc/build-info an image cannot name the source it was built from --
+# DISTRO_VERSION is a hardcoded constant, /etc/os-release derives from it, and
+# /etc/version is the reproducibility epoch clamp, so every build looks alike
+# (issue #46). This is the half CI can honestly see: CI never builds, so the
+# baked file itself is checked host-side by tools/build-stamp-check.sh.
+#
+# The realistic regression is not the class breaking, it is the INHERIT going
+# missing while kiosk-zero-w.yaml is trimmed -- after which every build still
+# succeeds and every image is silently unattributable. Paths are
+# existence-checked first, as 1b/3/7/8, so a rename cannot read green.
+stamp_class="meta-wisekiosk/classes/kiosk-buildstamp.bbclass"
+stamp_image="kiosk-zero-w.yaml"
+class_dir9="meta-wisekiosk/classes"
+missing9=""
+[ -f "$stamp_class" ] || missing9="$missing9 $stamp_class"
+[ -f "$stamp_image" ] || missing9="$missing9 $stamp_image"
+[ -d "$class_dir9" ]  || missing9="$missing9 $class_dir9"
+if [ -n "$missing9" ]; then
+    bad "guard 9 cannot scan -- path renamed or removed:$missing9"
+else
+    # grep -c and compare, never `| grep -q` -- pipefail inverts a match (see
+    # the note at guard 7). Comments are stripped first, so the path named in
+    # this class's own header cannot green the check.
+    #
+    # The assignment pattern mirrors guard 7's (:227): the optional [:_]... group
+    # admits :append, :remove, :append:pn-core-image-base and the legacy _append.
+    # All are legal and idiomatic -- OE's own documentation teaches the override
+    # form -- and a guard that rejected them would train the next editor to loosen
+    # it, which is how the checks that do work get weakened.
+    #
+    # The path check is deliberately "names it", not "cat-redirects into it": a
+    # rewrite to printf or a heredoc-free form is legal and must not false-FAIL.
+    # What it polices is the PATH, which docs/issue_investigation/TEMPLATE.md and
+    # README.md both quote; that the write happens at all is the postprocess hook
+    # above it, and that it produced something readable is
+    # tools/build-stamp-check.sh against the artifact.
+    assign9='^[[:space:]]*ROOTFS_POSTPROCESS_COMMAND([:_][A-Za-z0-9._:+-]+)?[[:space:]]*[?:+.]*='
+    body9=$(grep -vE '^[[:space:]]*#' "$stamp_class")
+    hooks9=$(grep -cE "$assign9" <<< "$body9")
+    writes9=$(grep -cE '\$\{sysconfdir\}/build-info' <<< "$body9")
+    inherit9=$(grep -vE '^[[:space:]]*#' "$stamp_image" \
+        | grep -cE '^[[:space:]]*INHERIT[[:space:]]*[?:+.]*=.*kiosk-buildstamp')
+
+    # A postprocess function appended with a semicolon GLUED to its name runs but
+    # is invisible to the task hash. image.bbclass installs the value of
+    # ROOTFS_POSTPROCESS_COMMAND as its own vardeps and bb/data.py splits that on
+    # whitespace, so "kiosk_write_build_info;" is looked up as a variable of that
+    # exact name, resolves to nothing, and contributes neither the function body
+    # nor the variables it references. oe/utils.py meanwhile does
+    # cmds.replace(";", " ") before executing, so it runs perfectly. Two consumers,
+    # one string, opposite parsers: the output is written once and then silently
+    # frozen while the source moves. That is the defect issue #46 shipped and this
+    # check exists to make un-shippable.
+    #
+    # Scanned across every file that can carry build wiring -- classes, recipes,
+    # bbappends and kiosk-zero-w.yaml's local_conf_header -- and across all four
+    # command variables image.bbclass feeds to rootfs_command_variables(), not
+    # just the one this class uses. The trap is a property of the variable, and
+    # the next editor copies whichever sibling file is open; widening the file set
+    # is cheaper than widening the parser.
+    #
+    # Backslash continuations are joined first, because the idiomatic OE form for
+    # a multi-command list puts the functions on their own lines and only the
+    # assignment line would otherwise be inspected. Joining cannot create a false
+    # FAIL: it can only lengthen the value actually assigned to one of these
+    # variables, and a ";" glued to a name anywhere in that value is the defect.
+    #
+    # Flagged when the ";" follows a name character or a "}" -- "${SOME_FUNC};"
+    # expands to a glued token too. NOT flagged after whitespace: OE's own
+    # "func ;" spaced form makes the ";" a separate token, which reaches no hash
+    # but takes nothing with it, and rejecting it would train the next editor to
+    # loosen the guard.
+    cmdvars9='(ROOTFS|IMAGE)_(PRE|POST)PROCESS_COMMAND'
+    semiassign9="^[[:space:]]*${cmdvars9}([:_][A-Za-z0-9._:+-]+)?[[:space:]]*[?:+.]*="
+    mapfile -t scan9 < <(
+        find "$class_dir9" -maxdepth 1 -name '*.bbclass' 2>/dev/null
+        find meta-wisekiosk \( -name '*.bb' -o -name '*.bbappend' \) 2>/dev/null
+        printf '%s\n' "$stamp_image"
+    )
+    semis9=""
+    for file9 in "${scan9[@]}"; do
+        [ -f "$file9" ] || continue
+        glued9=$(sed -e ':a' -e '/\\$/N; s/\\\n//; ta' "$file9" \
+            | grep -vE '^[[:space:]]*#' \
+            | grep -E "$semiassign9" \
+            | sed -E 's/^[^=]*=//; s/#.*//' \
+            | grep -cE '[A-Za-z0-9_}];')
+        [ "$glued9" -gt 0 ] && semis9="$semis9 $file9"
+    done
+
+    if [ "$hooks9" -eq 0 ]; then
+        bad "guard 9: $stamp_class hooks no rootfs postprocess -- nothing runs it"
+    elif [ "$writes9" -eq 0 ]; then
+        bad "guard 9: $stamp_class no longer names \${sysconfdir}/build-info -- README.md and docs/issue_investigation/TEMPLATE.md quote that path"
+    elif [ "$inherit9" -eq 0 ]; then
+        bad "guard 9: $stamp_image does not INHERIT kiosk-buildstamp -- images would ship unattributable"
+    elif [ -n "$semis9" ]; then
+        bad "guard 9: a rootfs/image *PROCESS_COMMAND names a function with a trailing ';' in:$semis9 -- that token reaches no task hash, so the function's output freezes while its inputs move (drop the ';', or space it off the name)"
+    else
+        ok "the build stamp is wired into the image"
+    fi
+fi
+
 if [ "$fail" -ne 0 ]; then
     printf '\nguards FAILED\n'
     exit 1
