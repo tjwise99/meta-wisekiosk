@@ -4,6 +4,7 @@
 |---|---|
 | [`layers-and-kas.md`](layers-and-kas.md) | How does a tree of YAML and recipes become an image, for someone who has not used Yocto? |
 | [`rauc-key-rotation.md`](rauc-key-rotation.md) | How do you replace the RAUC signing key the devices trust, and why must it happen in a fixed order? |
+| [`issue_investigation/TEMPLATE.md`](issue_investigation/TEMPLATE.md) | What shape must an issue investigation take, and what must every test run in it name? |
 | [`issue_investigation/boot_cpu_saturation/`](issue_investigation/boot_cpu_saturation/README.md) | Across a boot, is the single core doing work, waiting on hardware, or queued behind something else? |
 | [`issue_investigation/wlan0_udev_queue/`](issue_investigation/wlan0_udev_queue/README.md) | What occupies the gap between the WiFi chip appearing on the bus and `wlan0` existing, and what is removing it worth? |
 | [`issue_investigation/first_boot_after_ota/`](issue_investigation/first_boot_after_ota/README.md) | What does the first boot of a freshly written slot cost, and how long is the device unreachable? |
@@ -13,6 +14,12 @@
 | [`issue_investigation/screenshot_capture_fbgrab/`](issue_investigation/screenshot_capture_fbgrab/README.md) | Which framebuffer capture path produces a screenshot that can be trusted as a liveness check? |
 | [`issue_investigation/webkit_dependency_trims/`](issue_investigation/webkit_dependency_trims/README.md) | Can the accessibility stack be taken out of the image, from the build side or at runtime? |
 
-Each investigation is a directory whose `README.md` carries exactly four sections in this order —
-*Configuration under test*, *How the test was performed*, *Metrics*, *Changes configured as a
-result* — with any raw captures as siblings beside it; match that shape when adding the next one.
+Each investigation is a directory whose `README.md` is the record of record, with any raw captures
+as siblings beside it. [`issue_investigation/TEMPLATE.md`](issue_investigation/TEMPLATE.md) is the
+authoritative shape — copy it as the new `README.md` and fill every field. It carries three rules:
+
+- **R1** Every test run names its board (role) and the image commit it ran.
+- **R2** Every script put on a board is either shipped (link its recipe/PR) or one-off (committed in
+  the investigation directory beside its `README.md`) — never left only in `local/`.
+- **R3** Runs are never blended: one board × one build × one test = one run, and numbers from
+  different runs never share a table.
