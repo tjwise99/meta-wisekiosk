@@ -296,6 +296,62 @@ else
     fi
 fi
 
+# --- 9. no *_COMMAND may glue a `;` to a function name ---------------------
+# image.bbclass does `d.setVarFlag(var, 'vardeps', d.getVar(var))` over every
+# rootfs/image command variable, and bitbake splits a vardeps value on
+# WHITESPACE into names. `func;` is no name at all, so the function's body never
+# reaches the task hash: edit the function and bitbake replays the sstate rootfs,
+# and the change silently does not ship. oe.utils strips the `;` and runs it
+# either way, so the build succeeds and the form looks correct.
+#
+# `func ;` is legal and NOT flagged -- it splits into `func` and `;`, and `func`
+# is a name. The fix is to drop the character, never to restructure.
+#
+# Scanned over every file bitbake or kas reads here, not just the class that had
+# the bug: nothing about the glued form looks wrong at review, and the only
+# other way to notice it is a rebuild that does not change. Continuations are
+# joined first -- a multi-line command list is the shape most likely to carry
+# one. Paths are existence-checked, as 1b/3/7/8, so a rename cannot read green.
+scan9="meta-wisekiosk includes kiosk-zero-w.yaml"
+missing9=""
+for p in $scan9; do [ -e "$p" ] || missing9="$missing9 $p"; done
+if [ -n "$missing9" ]; then
+    bad "guard 9 cannot scan -- path renamed or removed:$missing9"
+else
+    files9=$( { find meta-wisekiosk -type f \
+                    \( -name '*.bbclass' -o -name '*.bb' -o -name '*.bbappend' -o -name '*.inc' \)
+                find includes -type f \( -name '*.yaml' -o -name '*.yml' \)
+                printf '%s\n' kiosk-zero-w.yaml; } 2>/dev/null | sort -u )
+    if [ -z "$files9" ]; then
+        bad "guard 9 found no bitbake or kas files to scan -- glob broken or layer renamed"
+    else
+        # A whole-line `#` is skipped so a quoted example cannot fail the guard;
+        # mid-line text is NOT stripped, because `#` inside a bitbake string is
+        # literal and stripping it would hide a real hit.
+        hits9=$(
+            while IFS= read -r f; do
+                [ -f "$f" ] || continue
+                awk -v F="$f" '
+                    { if (line == "" && $0 ~ /^[[:space:]]*#/) next
+                      if (line == "") start = NR
+                      line = line $0
+                      if (line ~ /\\$/) { sub(/\\$/, " ", line); next }
+                      if (line ~ /^[[:space:]]*[A-Z][A-Z0-9_]*_(PRE|POST)[A-Z_]*COMMANDS?([:_][A-Za-z0-9._:+-]+)?[[:space:]]*[?:+.]*=/ \
+                          && line ~ /[A-Za-z0-9_];/)
+                          printf "%s:%d: %s\n", F, start, line
+                      line = "" }
+                ' "$f"
+            done <<< "$files9"
+        )
+        if [ -n "$hits9" ]; then
+            bad "a *_COMMAND glues ';' to a function name -- its body reaches no task hash:"
+            printf '%s\n' "$hits9" | sed 's/^/        /'
+        else
+            ok "no *_COMMAND glues ';' to a function name"
+        fi
+    fi
+fi
+
 if [ "$fail" -ne 0 ]; then
     printf '\nguards FAILED\n'
     exit 1
