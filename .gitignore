@@ -7,7 +7,13 @@ secrets.yaml
 # Operator notes -- serials, MACs, addresses, readings -- which together
 # fingerprint one network, and local/keys, the RAUC key the fleet trusts. Both
 # must live in the tree, so NOT COMMITTING them is the whole protection.
+# Investigation working notes belong here too, beside the operator notes they
+# quote, and reach docs/issue_investigation/ only once they are written up.
 local/
+
+# Agent scratch space: drafts, seeded-defect fixtures, tool output. Untracked by
+# nature, and this repository is PUBLIC, so a stray `git add -A` publishes it.
+scratchpad/
 
 # The skills under .claude/ are tracked; these two are per-checkout machine
 # state, and settings.local.json in particular carries local filesystem paths.
