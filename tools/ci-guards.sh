@@ -424,6 +424,11 @@ else
         "justfiles/ota.just:kiosk-send-direct:--tree" \
         "justfiles/ota.just:kiosk-install:--tree" \
         "justfiles/device.just:rauc-install:--tree"
+    # The rotation path (justfiles/rotate.just rotate-run, and rotate-verify
+    # under --empirical) also installs bundles on a device and is deliberately
+    # ABSENT pending an owner decision (#46) -- see the note at rotate-run. To
+    # close it, add "justfiles/rotate.just:rotate-run:--tree" above and the call
+    # itself there.
     do
         jf10=${spec%%:*}
         rest10=${spec#*:}
