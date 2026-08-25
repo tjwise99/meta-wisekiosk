@@ -94,7 +94,10 @@ just provision-fresh-card /dev/sdX  # mounts partition 4, writes the site config
 ```
 
 `flash` refuses an image not baking the fleet signing keyring, or one mixing builds: a wrong keyring
-is repairable only by another reflash. Provision before first boot — WiFi credentials are the way in.
+is repairable only by another reflash. It also refuses, with no override, a build from a dirty or
+unpushed tree, or one whose `/etc/buildinfo` does not name the current HEAD — see
+[what commit an image was built from](docs/layers-and-kas.md). Provision before first boot — WiFi
+credentials are the way in.
 
 `/data` is the **fourth** partition, and nothing on the card says so — the layout is boot, rootfs-a,
 rootfs-b, data. `provision-fresh-card` derives it; provisioning by hand instead
@@ -118,7 +121,8 @@ of them at once. Boards get swapped on this unit; `just find <cidr>` is how you 
 the one now on the bench. An explicit `host` argument still wins over both.
 
 `kiosk-preflight` refuses a delivery that cannot work — wrong slot size, stale bundle, no room on
-`/data` — before the transfer. Delivery is a single md5-verified `scp` (`kiosk-send-direct`, ~45s for
+`/data` — before the transfer. Every recipe that reaches a board also refuses, with no override, a
+build from a dirty or unpushed tree, so what a slot is running can always be checked out again. Delivery is a single md5-verified `scp` (`kiosk-send-direct`, ~45s for
 the ~114MB bundle): the sustained-transfer wedge that once forced chunking was top-OPP memory
 corruption, fixed by the clock cap in
 [`kiosk-cpufreq`](meta-wisekiosk/recipes-core/kiosk-cpufreq/kiosk-cpufreq_1.0.bb), so the chunker was

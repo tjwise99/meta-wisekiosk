@@ -201,3 +201,35 @@ The same steps apply to every other pinned repo. The pins live in three files: m
 `includes/base.yaml`, meta-rauc in `includes/rauc.yaml`, and the three Raspberry Pi repos
 (meta-raspberrypi, meta-lts-mixins, meta-rauc-community) in `includes/platforms/raspberrypi.yaml` —
 `grep -rn 'commit:' includes/` lists them all.
+
+## What commit an image was built from
+
+Every slot carries `/etc/buildinfo`, written by poky's `image-buildinfo` class, switched on by
+`INHERIT += "image-buildinfo"` in `kiosk-zero-w.yaml`. The class walks `BBLAYERS` and asks git for
+each layer's branch and revision. `meta-wisekiosk` is a subdirectory of this repository, so git walks
+up and its line names **this repo's** HEAD:
+
+```
+meta-wisekiosk    = <branch>:<sha>
+```
+
+`grep ^meta-wisekiosk /etc/buildinfo` on a board is how an investigation learns which source built
+the software in front of it.
+
+That is a record, not a guarantee — the class never fails a build, and writes the literal `<unknown>`
+when git errors. The guarantee is [`tools/reproducibility-gate.sh`](../tools/reproducibility-gate.sh),
+which every recipe that puts an image on a board calls, and which **refuses, with no override flag**,
+unless:
+
+- the working tree is clean by `git status --porcelain` — **untracked files included**. Stronger than
+  the ` -- modified` flag `image-buildinfo` writes, which is `git diff` and therefore tracked-only: a
+  new untracked `.bb` is picked up by `BBFILES` and ships while the layer reads clean. The gate
+  ignores that flag and asks git itself.
+- HEAD is reachable from some ref on `origin`. It never fetches, and an unreachable `origin` refuses
+  rather than assuming — offline is not distinguishable from never-pushed.
+- where the caller holds the rootfs (`flash`, `kiosk-preflight`), `/etc/buildinfo` names a 40-hex sha
+  equal to HEAD. The bundle-shipping recipes cannot check this — a `.raucb` is not readable with
+  `debugfs` and nothing binds one to a rootfs (#48 bundle-image-tie) — so they enforce the first two.
+
+There is no CI here and every image is hand-built, so shipping is the only place the guarantee can be
+made — and a skip flag would be used on exactly the day it mattered.
