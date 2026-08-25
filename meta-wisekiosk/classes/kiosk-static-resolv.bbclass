@@ -29,4 +29,8 @@ kiosk_set_static_resolv() {
     ln -s /data/config/resolv.conf ${IMAGE_ROOTFS}${sysconfdir}/resolv.conf
 }
 
-ROOTFS_POSTPROCESS_COMMAND += "kiosk_set_static_resolv;"
+# Bare name, no trailing `;`: image.bbclass sets the raw value of this variable
+# as its own vardeps, and bitbake splits that on whitespace into names. A glued
+# `func;` is no name at all, so the function's body reaches no task hash and the
+# rootfs keeps whatever the first build wrote. Policed by guard 9.
+ROOTFS_POSTPROCESS_COMMAND += "kiosk_set_static_resolv"
