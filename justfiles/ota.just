@@ -157,6 +157,13 @@ kiosk-preflight image="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wi
     IMAGE_B=$(stat -Lc %s "{{image}}")
     BUNDLE_B=$(stat -Lc %s "{{bundle}}")
 
+    # Fail-closed before the ~114MB transfer, and no override: a slot whose
+    # software cannot be rebuilt from a published commit is unattributable.
+    # Checks the ROOTFS. Nothing binds the bundle to it -- see #48
+    # bundle-image-tie -- so this can pass on an image the bundle does not
+    # contain, the same assumption the slot-size check above already rests on.
+    tools/reproducibility-gate.sh --image "{{image}}" || exit 1
+
     # Nothing ties the image inside the bundle to the slot that receives it. The
     # two agree only because both derive from AUTONOMOS_ROOTFS_SIZE in the same
     # build; a bundle built after that value changes cannot install on a device
@@ -205,6 +212,12 @@ kiosk-send-direct bundle="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0
     SCP="scp -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
     DEST=/data/update.raucb
     test -f "{{bundle}}" || { echo "no bundle at {{bundle}}"; exit 1; }
+    # This recipe is directly invocable, so it cannot rely on kiosk-preflight
+    # having run. --tree, not --image: the argument here is a .raucb, debugfs
+    # cannot read one, and nothing binds a bundle to a rootfs (#48) -- so the
+    # image-names-HEAD check has no honest input and is not faked with a guess
+    # at which rootfs this bundle holds.
+    tools/reproducibility-gate.sh --tree || exit 1
     LOCAL_MD5=$(md5sum "{{bundle}}" | cut -d' ' -f1)
     SIZE=$(stat -Lc%s "{{bundle}}")
     echo "sending {{bundle}} ($SIZE B, md5 $LOCAL_MD5) -> {{host}}:$DEST"
@@ -227,6 +240,12 @@ kiosk-send-direct bundle="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0
 [doc("Install a staged bundle and show slot state")]
 kiosk-install host=kiosk-host:
     SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
+    # Directly invocable, so it cannot rely on kiosk-preflight having run.
+    # --tree: what this installs is already on the device at /data/update.raucb
+    # and there is no local artifact to attribute. `|| exit 1` is load-bearing --
+    # this recipe has no `set -e`, so without it a refusal would print and the
+    # install would proceed anyway.
+    tools/reproducibility-gate.sh --tree || exit 1
     echo "== before"
     $SSH {{host}} 'fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT; rauc status 2>&1 | grep -E "Booted|Activated|boot status"'
     echo "== clock sanity: RAUC rejects a bundle whose cert is not yet valid"

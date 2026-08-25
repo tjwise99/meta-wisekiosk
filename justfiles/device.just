@@ -12,6 +12,11 @@ rauc-status host:
 [group('device')]
 [script('bash')]
 rauc-install host bundle:
+    # This is a straight bypass of the OTA chain -- no preflight, no clock fix,
+    # no signature check -- so it carries the gate itself. --tree, not --image:
+    # the argument is a .raucb, debugfs cannot read one, and nothing binds a
+    # bundle to a rootfs (#48). `|| exit 1` is load-bearing -- no `set -e` here.
+    tools/reproducibility-gate.sh --tree || exit 1
     echo "Copying bundle to device..."
     scp {{bundle}} root@{{host}}:/data/update.raucb
     echo "Installing bundle..."
