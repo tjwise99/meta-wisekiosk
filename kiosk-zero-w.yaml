@@ -183,8 +183,17 @@ local_conf_header:
     # tools/ moves HEAD, the stamp is replayed from the previous build, and the
     # image==HEAD gate can never be satisfied. This puts the host-resolved sha
     # in do_image's vardeps, so a moved HEAD changes the hash and the image
-    # regenerates. Must be inherited wherever image-buildinfo is.
-    INHERIT += "kiosk-buildinfo-cachesafe"
+    # regenerates.
+    #
+    # IMAGE_CLASSES, NOT INHERIT, and that is the fix rather than a style
+    # choice. image.bbclass appends to do_image[vardeps] with no leading
+    # separator, welding whatever token is last into a phantom variable; the
+    # only robust defence is to append AFTER it. IMAGE_CLASSES is reached
+    # through `inherit_defer ${IMGCLASSES}`, and bitbake applies deferred
+    # inherits before running anonymous functions, so this class's anonymous
+    # python is registered last and runs last. A global INHERIT parses FIRST and
+    # is welded. do_image only exists on image recipes, so nothing is lost.
+    IMAGE_CLASSES += "kiosk-buildinfo-cachesafe"
 
   # update-bundle.bb packages whichever image RAUC_SLOT_rootfs names, and its
   # default is autonomos-devel -- a different image, with no surf and no kiosk

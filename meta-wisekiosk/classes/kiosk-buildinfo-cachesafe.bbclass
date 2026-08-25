@@ -35,38 +35,47 @@ include conf/build-rev.inc
 
 KIOSK_BUILDINFO_REV[vardepvalue] = "${KIOSK_BUILDINFO_REV}"
 
-# The spaces inside the quotes are LOAD-BEARING, not formatting.
+# do_image[vardeps] is appended to by image.bbclass's own anonymous python:
 #
-# image.bbclass's anonymous python does
-#     d.appendVarFlag('do_image', 'vardeps', ' '.join(vardeps))
+#     d.appendVarFlag('do_image', 'vardeps', ' '.join(vardeps))          # :433
+#
 # with NO leading separator -- unlike the sibling call for the per-type tasks,
-# which passes ' ' + ' '.join(...). So whatever token is LAST in this flag gets
-# welded to the first token appended there: without the trailing space this read
-# `KIOSK_BUILDINFO_REVIMAGE_TYPEDEP:wic.bmap`, a phantom variable that is empty
-# and constant, so do_image's hash never moved and the whole mechanism was inert
-# while looking correct. Same separator trap as the trailing `;` this branch
-# started with.
+# which passes ' ' + ' '.join(...). So whatever token is LAST in that flag is
+# welded to the first token appended there. A plain
+# `do_image[vardeps] += "KIOSK_BUILDINFO_REV"` therefore produced the phantom
+# KIOSK_BUILDINFO_REVIMAGE_TYPEDEP:wic.bz2 -- empty, no dependencies, CONSTANT --
+# so do_image's hash never moved and the mechanism was inert while reading as
+# correct. Same separator trap as the trailing `;` this branch opened with.
 #
-# Whitespace, not an anonymous-python append, because this cannot depend on parse
-# ORDER: the append above lives in image.bbclass's own anonymous python, and this
-# class is a global INHERIT, so it is parsed FIRST and any append here would land
-# before that one -- and be welded exactly the same way. A literal space is
-# correct whenever it is parsed. The leading space is belt-and-braces against a
-# future prepend-without-separator.
+# Worse, the welded partner is NON-DETERMINISTIC: that list is built from a
+# Python set (image.bbclass :370), whose iteration order varies between
+# processes, so the phantom's NAME differs between the cooker and a worker. A
+# varying dependency name is a varying basehash -- almost certainly what the
+# earlier parse-time-git attempt was really hitting.
 #
-# The space sits INSIDE the quotes, so the line ends with `"` and no
-# trailing-whitespace linter or editor-on-save can eat it.
+# The separation is therefore ORDER-BASED, not whitespace-based. This class is
+# inherited through IMAGE_CLASSES, which image.bbclass pulls in via
+# `inherit_defer ${IMGCLASSES}` (:25). bitbake applies deferred inherits inside
+# finalize() BEFORE running anonymous functions (parse/ast.py :394-400), and
+# runAnonFuncs executes __BBANONFUNCS in registration order -- so a deferred
+# class's anonymous python is registered last and RUNS AFTER :433. Appending
+# there means nothing is concatenated onto our token afterwards.
 #
-# Nothing static can prove this stayed correct -- a guard keyed on the literal
-# sees a deleted space but not the next welding variant upstream invents. The
-# real backstop is the reproducibility gate: if this goes inert the deployed
-# image goes stale, and the gate REFUSES at flash. Loud, never silent.
-do_image[vardeps] += " KIOSK_BUILDINFO_REV "
-
+# The leading space is belt-and-braces for the token before ours. It sits at the
+# START of a Python string literal, so no trailing-whitespace stripper, editor
+# or formatter can silently eat it -- which a bare trailing space in a bitbake
+# assignment could.
+#
+# Nothing static can prove the seam held: a guard reads source text, and only a
+# parsed signature shows the truth. The backstop is the reproducibility gate --
+# if this goes inert the deployed image goes stale and the gate REFUSES at
+# flash. Loud, never silent. Acceptance is `bitbake-dumpsig` on do_image listing
+# KIOSK_BUILDINFO_REV as its OWN entry, value == the host sha.
 python () {
     if not d.getVar('KIOSK_BUILDINFO_REV'):
         bb.fatal("KIOSK_BUILDINFO_REV is unset: run tools/write-build-rev.sh "
                  "before bitbake, or build through `just build` / `just "
                  "kiosk-bundle`, which do it for you. Without it the image "
                  "cannot be kept in step with the commit it was built from.")
+    d.appendVarFlag('do_image', 'vardeps', ' KIOSK_BUILDINFO_REV')
 }

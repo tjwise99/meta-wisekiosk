@@ -235,12 +235,17 @@ context reads the same bytes. Resolving it *inside* bitbake was tried and abando
 sstate setscene free to restore a stale, unchanged-hash `do_image_complete`. A build with no injected
 sha fails loudly rather than quietly skipping the re-stamp.
 
-The spaces around the token in `do_image[vardeps] += " KIOSK_BUILDINFO_REV "` are load-bearing:
-`image.bbclass` appends to that flag with no leading separator, so a token left last is welded to the
-next one and becomes a phantom variable that is empty and constant — the mechanism reads as wired and
-hashes nothing. **Nothing static can prove this stayed correct**; a guard sees a deleted space but
-not the next welding variant upstream invents. The backstop is the gate: if cache-safety goes inert
-the deployed image goes stale, and the gate refuses it at flash. Loud, never silent.
+The class is reached through `IMAGE_CLASSES`, not `INHERIT`, and that is the mechanism rather than a
+style choice. `image.bbclass` appends to `do_image[vardeps]` with **no leading separator**, so
+whatever token is last there is welded into a phantom variable — empty, constant, and with a name
+that varies between parses, since the list comes from a Python set. The only robust defence is to
+append *after* it: `IMAGE_CLASSES` is reached via `inherit_defer`, and bitbake applies deferred
+inherits before running anonymous functions, so this class's anonymous python runs last. A global
+`INHERIT` parses first and is welded.
+
+**Nothing static can prove the seam held** — a guard reads source text, and only a parsed signature
+shows the truth. The backstop is the gate: if cache-safety goes inert the deployed image goes stale
+and the gate refuses it at flash. Loud, never silent.
 
 That is a record, not a guarantee — the class never fails a build, and writes the literal `<unknown>`
 when git errors. The guarantee is [`tools/reproducibility-gate.sh`](../tools/reproducibility-gate.sh),

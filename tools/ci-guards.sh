@@ -413,12 +413,15 @@ else
     # and pushed, and rebuilding does not help. All three parts are asserted
     # because any one of them alone is inert.
     cache10="meta-wisekiosk/classes/kiosk-buildinfo-cachesafe.bbclass"
+    # IMAGE_CLASSES, not INHERIT: a global INHERIT parses before image.bbclass's
+    # vardeps append and gets welded into a phantom variable. The deferred
+    # inherit is what puts this class after it.
     cinh10=$(grep -vE '^[[:space:]]*#' "$conf10" \
-        | grep -cE '^[[:space:]]*INHERIT[[:space:]]*\+?=[[:space:]]*"kiosk-buildinfo-cachesafe"')
+        | grep -cE '^[[:space:]]*IMAGE_CLASSES[[:space:]]*\+?=[[:space:]]*"kiosk-buildinfo-cachesafe"')
     if [ ! -f "$cache10" ]; then
         bad "guard 10: $cache10 missing -- /etc/buildinfo would silently go stale whenever a commit changes no bitbake input"
     elif [ "$cinh10" -eq 0 ]; then
-        bad "guard 10: $conf10 does not INHERIT kiosk-buildinfo-cachesafe -- the class exists but nothing inherits it, so the stamp is not cache-safe"
+        bad "guard 10: $conf10 does not add kiosk-buildinfo-cachesafe to IMAGE_CLASSES -- the class exists but nothing inherits it (or a global INHERIT was used, which parses too early and gets welded), so the stamp is not cache-safe"
     else
         # Comments stripped: this class explains the mechanism at length, and
         # every literal below appears in that prose. A guard greened by the
@@ -453,8 +456,13 @@ else
         # mechanism reads as wired and hashes nothing. This catches the space
         # being stripped; it CANNOT catch the next welding variant upstream
         # invents. That backstop is the gate refusing a stale image at flash.
-        n10=$(grep -cF 'do_image[vardeps] += " KIOSK_BUILDINFO_REV "' <<< "$cbody10")
-        [ "$n10" -eq 0 ] && cmiss10="$cmiss10 do_image[vardeps]+=_spaced_KIOSK_BUILDINFO_REV"
+        # The appendVarFlag form, with its leading space, and on do_image. This
+        # is DELETION detection only -- no source-text check can prove the token
+        # survived as its own entry in the PARSED flag, because image.bbclass
+        # appends to it with no separator. Only bitbake-dumpsig shows that, and
+        # CI never builds. The backstop is the gate refusing a stale image.
+        n10=$(grep -cF "appendVarFlag('do_image', 'vardeps', ' KIOSK_BUILDINFO_REV')" <<< "$cbody10")
+        [ "$n10" -eq 0 ] && cmiss10="$cmiss10 appendVarFlag(do_image,vardeps,'_KIOSK_BUILDINFO_REV')"
         # Absence must be LOUD. Without the fatal, a build with no injected sha
         # succeeds and silently stops re-stamping.
         n10=$(grep -cF 'bb.fatal' <<< "$cbody10")
