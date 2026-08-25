@@ -375,6 +375,79 @@ else
     fi
 fi
 
+# --- 10. the reproducibility gate must stay wired in ----------------------
+# CI never builds, so it cannot check an image. What it CAN check is that the
+# record is still switched on and that every recipe putting an image on a board
+# still calls the gate -- the two halves of #46. Deleting either is a one-line
+# edit that leaves both files parsing and every other guard green.
+#
+# The mode is asserted, not just the call: --image is the full check
+# (clean + pushed + image names HEAD) and --tree is the subset. A site that can
+# prove the image matches and quietly drops to --tree still looks wired.
+#
+# Matching is inside the RECIPE BODY, extracted by name, comment lines dropped:
+# the gate being mentioned somewhere in the file is not the gate running.
+gate10="tools/reproducibility-gate.sh"
+conf10="kiosk-zero-w.yaml"
+missing10=""
+for p in "$gate10" "$conf10" justfiles/deploy.just justfiles/ota.just justfiles/device.just; do
+    [ -e "$p" ] || missing10="$missing10 $p"
+done
+if [ -n "$missing10" ]; then
+    bad "guard 10 cannot scan -- path renamed or removed:$missing10"
+else
+    [ -x "$gate10" ] || bad "guard 10: $gate10 is not executable -- every call site would fail open on a permission error"
+
+    inherits10=$(grep -vE '^[[:space:]]*#' "$conf10" \
+        | grep -cE '^[[:space:]]*INHERIT[[:space:]]*\+?=[[:space:]]*"image-buildinfo"')
+    if [ "$inherits10" -eq 0 ]; then
+        bad "guard 10: $conf10 no longer inherits image-buildinfo -- images would carry no /etc/buildinfo, and the gate's image check would refuse every build"
+    else
+        ok "kiosk-zero-w.yaml inherits image-buildinfo"
+    fi
+
+    # Body of one just recipe: from its `name ...:` header to the next
+    # non-blank unindented line. Comment lines are dropped.
+    recipe_body10() {
+        awk -v r="$2" '
+            $0 ~ "^" r "[ :]" { inb = 1; next }
+            inb && NF && /^[^[:space:]]/ { inb = 0 }
+            inb && !/^[[:space:]]*#/ { print }
+        ' "$1"
+    }
+
+    unwired10=""
+    # <justfile>:<recipe>:<required mode>
+    for spec in \
+        "justfiles/deploy.just:flash:--image" \
+        "justfiles/ota.just:kiosk-preflight:--image" \
+        "justfiles/ota.just:kiosk-send-direct:--tree" \
+        "justfiles/ota.just:kiosk-install:--tree" \
+        "justfiles/device.just:rauc-install:--tree"
+    do
+        jf10=${spec%%:*}
+        rest10=${spec#*:}
+        rn10=${rest10%%:*}
+        mode10=${rest10#*:}
+        body10=$(recipe_body10 "$jf10" "$rn10")
+        if [ -z "$body10" ]; then
+            unwired10="$unwired10 $jf10:$rn10(recipe-gone)"
+            continue
+        fi
+        # grep -c and compare, never `| grep -q`: -q exits on the first hit, the
+        # producer dies of SIGPIPE at 141, and pipefail returns that -- so the
+        # condition would be false precisely when the pattern matches.
+        calls10=$(grep -cF -- "$gate10 $mode10" <<< "$body10")
+        [ "$calls10" -eq 0 ] && unwired10="$unwired10 $jf10:$rn10($mode10)"
+    done
+    if [ -n "$unwired10" ]; then
+        bad "a recipe that puts an image on a board does not call the reproducibility gate:"
+        for u in $unwired10; do printf '        %s\n' "$u"; done
+    else
+        ok "every image-to-board recipe calls the reproducibility gate"
+    fi
+fi
+
 if [ "$fail" -ne 0 ]; then
     printf '\nguards FAILED\n'
     exit 1
