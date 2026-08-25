@@ -178,11 +178,11 @@ local_conf_header:
     # what refuses.
     INHERIT += "image-buildinfo"
 
-    # image-buildinfo reads git live in do_image, so the commit it writes is in
-    # no task signature: a commit touching only docs or tools/ moves HEAD, the
-    # stamp is replayed from the previous build, and the image==HEAD gate can
-    # never be satisfied. This puts the sha in do_image's vardeps so the stamp
-    # re-runs when HEAD moves. Must be inherited wherever image-buildinfo is.
+    # image-buildinfo reads git live in do_image but does not hash it, so the
+    # commit it writes is in no task signature: a commit touching only docs or
+    # tools/ moves HEAD, the stamp is replayed from the previous build, and the
+    # image==HEAD gate can never be satisfied. This sets do_image[nostamp] so
+    # every build re-reads it. Must be inherited wherever image-buildinfo is.
     INHERIT += "kiosk-buildinfo-cachesafe"
 
   # update-bundle.bb packages whichever image RAUC_SLOT_rootfs names, and its

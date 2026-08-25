@@ -216,11 +216,15 @@ meta-wisekiosk    = <branch>:<sha>
 `grep ^meta-wisekiosk /etc/buildinfo` on a board is how an investigation learns which source built
 the software in front of it.
 
-The stamp is **cache-safe**: `image-buildinfo` reads git live in `do_image`, so on its own the sha
-reaches no task signature and a commit touching only docs or `tools/` would leave the previous
-build's stamp in place — making the check below unsatisfiable on a clean, pushed tree.
-[`kiosk-buildinfo-cachesafe`](../meta-wisekiosk/classes/kiosk-buildinfo-cachesafe.bbclass) puts the
-sha in `do_image`'s vardeps, so a moved HEAD re-stamps on the next `just build` and nothing else does.
+The stamp cannot go **stale**: `image-buildinfo` reads git live in `do_image` but does not hash what
+it read, so on its own the sha reaches no task signature — a commit touching only docs or `tools/`
+would leave the previous build's stamp in place, making the check below unsatisfiable on a clean,
+pushed tree, with rebuilding no help.
+[`kiosk-buildinfo-cachesafe`](../meta-wisekiosk/classes/kiosk-buildinfo-cachesafe.bbclass) sets
+`do_image[nostamp]`, so every build re-reads git and rewrites the stamp. `do_rootfs` is untouched and
+stays cached, which is where the hours are. Putting the sha in `do_image[vardeps]` instead would
+re-stamp only when HEAD moved, but hit a basehash non-determinism between the cooker and the
+build-time worker reparse; unconditional beats clever in the path that decides what reaches a board.
 
 That is a record, not a guarantee — the class never fails a build, and writes the literal `<unknown>`
 when git errors. The guarantee is [`tools/reproducibility-gate.sh`](../tools/reproducibility-gate.sh),

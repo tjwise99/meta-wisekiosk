@@ -423,26 +423,24 @@ else
         # Comments stripped: this class explains the mechanism at length, and
         # every literal below appears in that prose. A guard greened by the
         # comment describing the wiring would be worse than no guard.
-        cbody10=$(grep -vE '^[[:space:]]*#' "$cache10")
-        cmiss10=""
+        # Comments stripped: the class explains the mechanism at length and its
+        # prose names the literal below. A guard greened by the comment
+        # describing the wiring would be worse than no guard.
+        #
         # grep -c and compare, never `| grep -q`: -q exits on the first hit, the
         # producer dies of SIGPIPE at 141, and pipefail returns that -- the test
         # would be false precisely when the pattern matches.
-        n10=$(grep -cE '^[[:space:]]*KIOSK_BUILDINFO_REV[[:space:]]*:=' <<< "$cbody10")
-        [ "$n10" -eq 0 ] && cmiss10="$cmiss10 KIOSK_BUILDINFO_REV:="
-        n10=$(grep -cE '^[[:space:]]*KIOSK_BUILDINFO_REV\[vardepvalue\]' <<< "$cbody10")
-        [ "$n10" -eq 0 ] && cmiss10="$cmiss10 KIOSK_BUILDINFO_REV[vardepvalue]"
-        # The vardep must name the variable that carries the sha, on do_image --
-        # `do_image[vardeps] += "something-else"`, or the same line on do_rootfs,
-        # would read wired and stamp nothing.
-        n10=$(grep -E '^[[:space:]]*do_image\[vardeps\][[:space:]]*\+=' <<< "$cbody10" \
-              | grep -cF 'KIOSK_BUILDINFO_REV')
-        [ "$n10" -eq 0 ] && cmiss10="$cmiss10 do_image[vardeps]+=KIOSK_BUILDINFO_REV"
-        if [ -n "$cmiss10" ]; then
-            bad "guard 10: $cache10 is not wired -- /etc/buildinfo would go stale on a commit that changes no bitbake input; missing:"
-            for m in $cmiss10; do printf '        %s\n' "$m"; done
+        #
+        # do_image specifically. do_image is the task that runs buildinfo_image
+        # (via IMAGE_PREPROCESS_COMMAND); the same flag on do_rootfs would read
+        # as wired, cost the expensive rootfs re-assembly, and still not
+        # guarantee a fresh stamp.
+        n10=$(grep -vE '^[[:space:]]*#' "$cache10" \
+              | grep -cE '^[[:space:]]*do_image\[nostamp\][[:space:]]*=[[:space:]]*"1"')
+        if [ "$n10" -eq 0 ]; then
+            bad "guard 10: $cache10 does not set do_image[nostamp] = \"1\" -- /etc/buildinfo would go stale on any commit that changes no bitbake input, and the image==HEAD gate could never be satisfied"
         else
-            ok "the /etc/buildinfo stamp is cache-safe (sha in do_image's signature)"
+            ok "the /etc/buildinfo stamp is refreshed every build (do_image[nostamp])"
         fi
     fi
 
