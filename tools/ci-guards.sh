@@ -296,6 +296,85 @@ else
     fi
 fi
 
+# --- 9. no *_COMMAND may glue a `;` to a function name ---------------------
+# image.bbclass does `d.setVarFlag(var, 'vardeps', d.getVar(var))` over every
+# rootfs/image command variable, and bitbake splits a vardeps value on
+# WHITESPACE into names. `func;` is no name at all, so the function's body never
+# reaches the task hash: edit the function and bitbake replays the sstate rootfs,
+# and the change silently does not ship. oe.utils strips the `;` and runs it
+# either way, so the build succeeds and the form looks correct.
+#
+# `func ;` is legal and NOT flagged -- it splits into `func` and `;`, and `func`
+# is a name. The fix is to drop the character, never to restructure.
+#
+# `${VAR};` and `"…";` are caught too, not just a bare name: the trap is the
+# character, whatever precedes it.
+#
+# Scanned over every file bitbake or kas reads here, not just the class that had
+# the bug: the layer's .bbclass/.bb/.bbappend/.inc/.conf, includes/*.yaml,
+# kiosk-zero-w.yaml, and patches/ (added lines only). Nothing about the glued
+# form looks wrong at review, and the only other way to notice it is a rebuild
+# that does not change. Continuations are joined first -- a multi-line command
+# list is the shape most likely to carry one. Paths are existence-checked, as
+# 1b/3/7/8, so a rename cannot read green.
+scan9="meta-wisekiosk includes kiosk-zero-w.yaml patches"
+missing9=""
+for p in $scan9; do [ -e "$p" ] || missing9="$missing9 $p"; done
+if [ -n "$missing9" ]; then
+    bad "guard 9 cannot scan -- path renamed or removed:$missing9"
+else
+    # The LAYER's own files are counted separately, as guard 7 does. Combining
+    # them with the kas config first would keep the list non-empty forever --
+    # `printf kiosk-zero-w.yaml` always emits -- so a broken layer glob or a
+    # renamed layer would read green with nothing actually scanned.
+    layer9=$(find meta-wisekiosk -type f \
+                 \( -name '*.bbclass' -o -name '*.bb' -o -name '*.bbappend' \
+                    -o -name '*.inc' -o -name '*.conf' \) 2>/dev/null | sort -u)
+    if [ -z "$layer9" ]; then
+        bad "guard 9 found no bitbake files under meta-wisekiosk -- glob broken or layer renamed"
+    else
+        files9=$( { printf '%s\n' "$layer9"
+                    find includes -type f \( -name '*.yaml' -o -name '*.yml' \)
+                    printf '%s\n' kiosk-zero-w.yaml
+                    find patches -type f -name '*.patch'; } 2>/dev/null | sort -u )
+        # A whole-line `#` is skipped so a quoted example cannot fail the guard;
+        # mid-line text is NOT stripped, because `#` inside a bitbake string is
+        # literal and stripping it would hide a real hit.
+        hits9=$(
+            while IFS= read -r f; do
+                [ -f "$f" ] || continue
+                # A patch is a build input like any other (guard 1b's reason):
+                # it is applied to the meta-autonomos checkout before bitbake
+                # parses it, so it is a route to reintroduce the glued form.
+                # ADDED lines only -- a context line is upstream's existing
+                # content and a removed line is the defect going away. Non-added
+                # lines are BLANKED rather than dropped, so reported line numbers
+                # still point into the patch.
+                case "$f" in
+                    patches/*) src9=$(sed -e '/^+/!s/.*//' -e 's/^+//' "$f") ;;
+                    *)         src9=$(cat "$f") ;;
+                esac
+                awk -v F="$f" -v SEMI='[A-Za-z0-9_}"'"'"'];' '
+                    { if (line == "" && $0 ~ /^[[:space:]]*#/) next
+                      if (line == "") start = NR
+                      line = line $0
+                      if (line ~ /\\$/) { sub(/\\$/, " ", line); next }
+                      if (line ~ /^[[:space:]]*[A-Z][A-Z0-9_]*_(PRE|POST)[A-Z_]*COMMANDS?([:_][A-Za-z0-9._:+-]+)?[[:space:]]*[?:+.]*=/ \
+                          && line ~ SEMI)
+                          printf "%s:%d: %s\n", F, start, line
+                      line = "" }
+                ' <<< "$src9"
+            done <<< "$files9"
+        )
+        if [ -n "$hits9" ]; then
+            bad "a *_COMMAND glues ';' to a function name -- its body reaches no task hash:"
+            printf '%s\n' "$hits9" | sed 's/^/        /'
+        else
+            ok "no *_COMMAND glues ';' to a function name"
+        fi
+    fi
+fi
+
 if [ "$fail" -ne 0 ]; then
     printf '\nguards FAILED\n'
     exit 1

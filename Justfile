@@ -91,7 +91,7 @@ spotless: clean
 
 # Run the same checks CI runs. Fast, needs no build.
 [group('guards')]
-[doc("Run repository guards: secrets, template, shell syntax, YAML, gitleaks")]
+[doc("Run repository guards: secrets, template, shell syntax, YAML, gitleaks, IPs, service reachability, recovery wiring, trailing-; hooks")]
 guards:
     tools/ci-guards.sh
 
