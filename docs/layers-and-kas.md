@@ -216,6 +216,12 @@ meta-wisekiosk    = <branch>:<sha>
 `grep ^meta-wisekiosk /etc/buildinfo` on a board is how an investigation learns which source built
 the software in front of it.
 
+The stamp is **cache-safe**: `image-buildinfo` reads git live in `do_image`, so on its own the sha
+reaches no task signature and a commit touching only docs or `tools/` would leave the previous
+build's stamp in place — making the check below unsatisfiable on a clean, pushed tree.
+[`kiosk-buildinfo-cachesafe`](../meta-wisekiosk/classes/kiosk-buildinfo-cachesafe.bbclass) puts the
+sha in `do_image`'s vardeps, so a moved HEAD re-stamps on the next `just build` and nothing else does.
+
 That is a record, not a guarantee — the class never fails a build, and writes the literal `<unknown>`
 when git errors. The guarantee is [`tools/reproducibility-gate.sh`](../tools/reproducibility-gate.sh),
 which every recipe that puts an image on a board calls, and which **refuses, with no override flag**,

@@ -406,6 +406,46 @@ else
         ok "kiosk-zero-w.yaml inherits image-buildinfo"
     fi
 
+    # Cache safety. image-buildinfo reads git live in do_image, so the sha it
+    # writes is in no task signature: without this, a commit touching only docs
+    # or tools/ moves HEAD, bitbake replays the stamp, and the image==HEAD check
+    # can never be satisfied -- the gate refuses a tree that is genuinely clean
+    # and pushed, and rebuilding does not help. All three parts are asserted
+    # because any one of them alone is inert.
+    cache10="meta-wisekiosk/classes/kiosk-buildinfo-cachesafe.bbclass"
+    cinh10=$(grep -vE '^[[:space:]]*#' "$conf10" \
+        | grep -cE '^[[:space:]]*INHERIT[[:space:]]*\+?=[[:space:]]*"kiosk-buildinfo-cachesafe"')
+    if [ ! -f "$cache10" ]; then
+        bad "guard 10: $cache10 missing -- /etc/buildinfo would silently go stale whenever a commit changes no bitbake input"
+    elif [ "$cinh10" -eq 0 ]; then
+        bad "guard 10: $conf10 does not INHERIT kiosk-buildinfo-cachesafe -- the class exists but nothing inherits it, so the stamp is not cache-safe"
+    else
+        # Comments stripped: this class explains the mechanism at length, and
+        # every literal below appears in that prose. A guard greened by the
+        # comment describing the wiring would be worse than no guard.
+        cbody10=$(grep -vE '^[[:space:]]*#' "$cache10")
+        cmiss10=""
+        # grep -c and compare, never `| grep -q`: -q exits on the first hit, the
+        # producer dies of SIGPIPE at 141, and pipefail returns that -- the test
+        # would be false precisely when the pattern matches.
+        n10=$(grep -cE '^[[:space:]]*KIOSK_BUILDINFO_REV[[:space:]]*:=' <<< "$cbody10")
+        [ "$n10" -eq 0 ] && cmiss10="$cmiss10 KIOSK_BUILDINFO_REV:="
+        n10=$(grep -cE '^[[:space:]]*KIOSK_BUILDINFO_REV\[vardepvalue\]' <<< "$cbody10")
+        [ "$n10" -eq 0 ] && cmiss10="$cmiss10 KIOSK_BUILDINFO_REV[vardepvalue]"
+        # The vardep must name the variable that carries the sha, on do_image --
+        # `do_image[vardeps] += "something-else"`, or the same line on do_rootfs,
+        # would read wired and stamp nothing.
+        n10=$(grep -E '^[[:space:]]*do_image\[vardeps\][[:space:]]*\+=' <<< "$cbody10" \
+              | grep -cF 'KIOSK_BUILDINFO_REV')
+        [ "$n10" -eq 0 ] && cmiss10="$cmiss10 do_image[vardeps]+=KIOSK_BUILDINFO_REV"
+        if [ -n "$cmiss10" ]; then
+            bad "guard 10: $cache10 is not wired -- /etc/buildinfo would go stale on a commit that changes no bitbake input; missing:"
+            for m in $cmiss10; do printf '        %s\n' "$m"; done
+        else
+            ok "the /etc/buildinfo stamp is cache-safe (sha in do_image's signature)"
+        fi
+    fi
+
     # Body of one just recipe: from its `name ...:` header to the next
     # non-blank unindented line. Comment lines are dropped.
     recipe_body10() {

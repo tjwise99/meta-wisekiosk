@@ -143,7 +143,9 @@ if [ "$mode" = "image" ]; then
             refuse "the image was not built from HEAD:"
             printf '        image: %s\n' "$commit" >&2
             printf '        HEAD : %s\n' "$HEAD" >&2
-            printf '        rebuild, or check out the commit the image came from.\n' >&2
+            printf '        run `just build` -- the sha is in do_image'\''s signature\n' >&2
+            printf '        (kiosk-buildinfo-cachesafe), so a moved HEAD re-stamps on its own.\n' >&2
+            printf '        Or check out the commit the image came from.\n' >&2
         else
             pass "image names HEAD ($commit)"
         fi
