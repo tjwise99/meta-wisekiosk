@@ -5,30 +5,8 @@
 #   tools/build-stamp-check.sh --require        -- ... and an unreadable one FAILS
 #   tools/build-stamp-check.sh [--require] <rootfs.ext4|rootfs-dir>
 #
-# Host-only, and deliberately NOT in tools/ci-guards.sh: CI never builds, so a
-# rootfs check there would be a required gate that skips on every run, which this
-# repository has already ruled against. Guard 9 is the half CI can see -- that
-# the wiring still exists. This is the half that reads the artifact.
-#
-# It reads the SHIPPED .ext4, not the unpacked rootfs tree, because the .ext4 is
-# what `just flash` writes and `just kiosk-bundle` packages; the tree is a
-# fallback for a `bitbake core-image-base` that never ran do_image.
-#
-# What it asserts, and why each one is load-bearing:
-#   BUILD_INFO_VERSION  -- a format change must fail here rather than become a
-#                          silent parse difference.
-#   40 lowercase hex    -- oe.buildcfg swallows every git failure and returns the
-#                          literal <unknown>; inside kas-container that is the
-#                          likely symptom of git refusing the bind-mounted tree
-#                          as dubiously owned. This is what turns a quiet wrong
-#                          answer into a red build.
-#   SHORT is a prefix   -- catches the two fields drifting apart.
-#   DIRTY is 0 or 1     -- one comparison on-device and here, not OE's
-#                          " -- modified" string.
-#
-# A dirty build is REPORTED, never refused (owner, 2026-08-18): refusing would
-# make the develop-and-test loop hostile, and an investigation quoting
-# META_WISEKIOSK_DIRTY=1 is already disqualified by its own standard.
+# Host-only: CI never builds, so this is not in tools/ci-guards.sh. Guard 9
+# checks the wiring; this reads the artifact. See docs/layers-and-kas.md.
 
 set -uo pipefail
 
@@ -47,17 +25,15 @@ for arg in "$@"; do
 done
 
 die()  { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
-# Loud, on stdout, exit 0. Silence here would be indistinguishable from a clean
-# run, which is the exact failure this script exists to prevent
-# (tools/doc-image.py:177-186).
+# Loud, on stdout, exit 0 -- see tools/doc-image.py.
 skip() {
     if [ "$require" -eq 1 ]; then die "$*"; fi
     printf 'SKIPPED: %s -- build stamp check did not run\n' "$*"
     exit 0
 }
 
-# Newest match, or empty. `-nt` follows symlinks, which matters: the .ext4 in
-# deploy/images is a symlink onto the build-stamped file.
+# Newest match, or empty. `-nt` follows symlinks: the .ext4 in deploy/images is
+# a symlink onto the build-stamped file.
 newest_of() {
     local best="" f
     for f in "$@"; do
@@ -68,15 +44,12 @@ newest_of() {
 }
 
 if [ -z "$target" ]; then
-    # Only the discovery path needs the repository root; an explicit target stays
-    # relative to the caller's cwd.
     cd "$(git rev-parse --show-toplevel)" || exit 2
     mapfile -t ext4s < <(compgen -G "$EXT4_GLOB")
     target=$(newest_of "${ext4s[@]+"${ext4s[@]}"}")
     if [ -z "$target" ]; then
-        # The rootfs directory's own mtime is clamped to the reproducible epoch,
-        # so the unclamped recipe workdir above it is what dates the build
-        # (tools/doc-image.py:83-90).
+        # The rootfs directory's mtime is epoch-clamped; the recipe workdir above
+        # it is what dates the build.
         mapfile -t trees < <(compgen -G "$ROOTFS_GLOB")
         parents=()
         for t in "${trees[@]+"${trees[@]}"}"; do parents+=("$(dirname "$t")"); done
@@ -92,8 +65,7 @@ if [ -d "$target" ]; then
     info=$(cat "$target/etc/build-info" 2>/dev/null)
 else
     # Refuse, never skip: an artifact that exists and cannot be read is not the
-    # same as no artifact, and `just flash` refuses on a missing debugfs for the
-    # same reason (justfiles/deploy.just:41).
+    # same as no artifact.
     command -v debugfs >/dev/null 2>&1 \
         || die "debugfs missing -- cannot read $target; install e2fsprogs"
     info=$(debugfs -R "cat /etc/build-info" "$target" 2>/dev/null)
@@ -102,9 +74,8 @@ info=$(printf '%s' "$info" | tr -d '\r')
 
 [ -n "$info" ] || die "no /etc/build-info in $target -- this image cannot name the commit it was built from (is INHERIT += \"kiosk-buildstamp\" still in kiosk-zero-w.yaml?)"
 
-# First KEY= line, unquoted. One awk, no pipeline: `sed | head -n1` under
-# pipefail returns head's SIGPIPE kill of sed, which is a trap not worth leaving
-# in a script whose whole job is refusing to report a false pass.
+# First KEY= line, unquoted. One awk, not `sed | head`: under pipefail that
+# returns head's SIGPIPE kill of sed.
 field() {
     awk -v k="$1" 'index($0, k "=") == 1 { sub(/^[^=]*=/, ""); gsub(/"/, ""); print; exit }' <<< "$info"
 }

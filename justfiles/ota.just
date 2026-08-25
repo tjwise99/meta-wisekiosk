@@ -154,19 +154,8 @@ kiosk-preflight image="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wi
 
     test -f "{{image}}"  || { echo "no rootfs image at {{image}}"; exit 1; }
     test -f "{{bundle}}" || { echo "no bundle at {{bundle}}"; exit 1; }
-    # An image that cannot name its source commit installs a slot nobody can
-    # attribute afterwards. Fail-closed here, before the ~114MB transfer.
-    #
-    # ASSUMPTION: the bundle packages the rootfs this .ext4 was made from, so a
-    # green stamp here describes what gets delivered. NOTHING CHECKS THAT. The
-    # stamp is readable from the .ext4 and not from the .raucb, and the two are
-    # deployed by different recipes, so a stale bundle beside a fresh image
-    # passes. The filename tie `just flash` uses (deploy.just:51-59) does NOT
-    # transfer: DATETIME is fixed per bitbake INVOCATION, and `just build` then
-    # `just kiosk-bundle` is two invocations, so matching stamps would refuse the
-    # documented sequence. The honest tie is content-based -- the bundle
-    # manifest's image hash against the .ext4 -- and is tracked as
-    # #48 bundle-image-tie, not solved here.
+    # Fail-closed before the ~114MB transfer. Assumes the bundle packages this
+    # rootfs; nothing binds them -- see #48 bundle-image-tie.
     tools/build-stamp-check.sh --require "{{image}}"
 
     IMAGE_B=$(stat -Lc %s "{{image}}")

@@ -4,10 +4,7 @@ sources/
 .kas_shell_history
 secrets.yaml
 
-# Agent scratch space. Present in most sessions, and `git status --porcelain` at
-# the repository root is what META_WISEKIOSK_DIRTY reads, so leaving it untracked
-# pins every image to DIRTY=1 -- an always-on warning carries no signal, and a
-# genuinely dirty build then looks identical to a clean one.
+# Agent scratch space. Untracked, it would pin META_WISEKIOSK_DIRTY to 1.
 scratchpad/
 
 # Operator notes -- serials, MACs, addresses, readings -- which together

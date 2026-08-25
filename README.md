@@ -63,8 +63,8 @@ behind those changes are indexed in **[docs/README.md](docs/README.md)**.
 
 Every image carries **`/etc/build-info`**: the `meta-wisekiosk` commit it was built from, whether that
 tree was modified, the branch, and the machine/distro. It lives in the rootfs the `.raucb` packages,
-so it should be per-slot — `cat /etc/build-info` on a device naming the build that slot is running is
-the fact an investigation has to be able to quote. Not yet confirmed on a booted device.
+so it is per-slot — `cat /etc/build-info` on a device names the build that slot is running, which is
+the fact an investigation has to be able to quote.
 `just build-stamp` reads it back out of the built `.ext4`, and `just flash` and `just kiosk-preflight`
 refuse an artifact that cannot name its commit. See
 [docs/layers-and-kas.md](docs/layers-and-kas.md#what-commit-an-image-was-built-from).

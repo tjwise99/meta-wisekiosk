@@ -218,8 +218,14 @@ Four things about it are load-bearing:
   exact name and resolves to nothing — the body, and every value in it, reaches no task hash.
   `oe/utils.py` meanwhile does `cmds.replace(";", " ")` before executing, so it runs perfectly. Two
   consumers of one string with opposite parsers: the file is written once and then frozen while the
-  source moves. This shipped, was caught only by a real build, and is now gated by guard 9 across
-  every class in the layer.
+  source moves. What turns a function *name* into a dependency is the anonymous python in
+  `image.bbclass` — `d.setVarFlag(var, 'vardeps', d.getVar(var))` — not `rootfs_variables()`, which
+  contributes the variable names. The trap belongs to the variable, not to this class: OE feeds
+  twelve `*_(PRE|POST)*_COMMAND` names through `rootfs_command_variables()`, and
+  `SDK_POSTPROCESS_COMMAND` behaves the same way. Guard 9 rejects the form across the layer's
+  classes, recipes and bbappends and across every kas build input (`kiosk-zero-w.yaml`,
+  `includes/*.yaml`). The spaced form `func ;` is left alone: the `;` is then its own token, which
+  reaches no hash but takes nothing with it.
 - **`DIRTY` is `git status --porcelain` over the whole repository, so an untracked file counts.**
   Same scope as the sha above it, which is the repository's HEAD, not the layer's — `kiosk-zero-w.yaml`,
   `includes/` and `patches/` are build inputs living outside the layer. OE's `is_layer_modified` is
@@ -231,7 +237,8 @@ upstream layer, or a signing key rotated in `local/keys`, moves the image withou
 `META_WISEKIOSK_COMMIT`.
 
 Verification splits in two, because CI never builds. `tools/ci-guards.sh` guard 9 checks the wiring
-still exists and that no postprocess function anywhere in the layer carries the semicolon above;
+still exists — the hook, the written path and key, the `INHERIT`, that both call sites still invoke
+the checker, and that no command variable anywhere carries the semicolon above;
 `tools/build-stamp-check.sh` (`just build-stamp`) reads the file back out of the
 shipped `.ext4` with `debugfs` and rejects the `<unknown>` that git failing inside kas-container
 would leave. `just flash` and `just kiosk-preflight` run it with `--require`.

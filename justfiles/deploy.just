@@ -106,10 +106,7 @@ flash device:
     fi
     echo "verified: image bakes the fleet keyring ($BAKED_FP)"
 
-    # Same .ext4, same fail-closed reason: a card whose image cannot name its
-    # source commit produces an investigation nobody can attribute later. A
-    # DIRTY build is reported and flashed -- refusing that would make the
-    # develop loop hostile.
+    # Fail-closed: a card that cannot name its source commit is unattributable.
     tools/build-stamp-check.sh --require "$ROOTFS"
 
     echo "Flashing $IMAGE to {{device}}..."
