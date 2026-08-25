@@ -35,7 +35,33 @@ include conf/build-rev.inc
 
 KIOSK_BUILDINFO_REV[vardepvalue] = "${KIOSK_BUILDINFO_REV}"
 
-do_image[vardeps] += "KIOSK_BUILDINFO_REV"
+# The spaces inside the quotes are LOAD-BEARING, not formatting.
+#
+# image.bbclass's anonymous python does
+#     d.appendVarFlag('do_image', 'vardeps', ' '.join(vardeps))
+# with NO leading separator -- unlike the sibling call for the per-type tasks,
+# which passes ' ' + ' '.join(...). So whatever token is LAST in this flag gets
+# welded to the first token appended there: without the trailing space this read
+# `KIOSK_BUILDINFO_REVIMAGE_TYPEDEP:wic.bmap`, a phantom variable that is empty
+# and constant, so do_image's hash never moved and the whole mechanism was inert
+# while looking correct. Same separator trap as the trailing `;` this branch
+# started with.
+#
+# Whitespace, not an anonymous-python append, because this cannot depend on parse
+# ORDER: the append above lives in image.bbclass's own anonymous python, and this
+# class is a global INHERIT, so it is parsed FIRST and any append here would land
+# before that one -- and be welded exactly the same way. A literal space is
+# correct whenever it is parsed. The leading space is belt-and-braces against a
+# future prepend-without-separator.
+#
+# The space sits INSIDE the quotes, so the line ends with `"` and no
+# trailing-whitespace linter or editor-on-save can eat it.
+#
+# Nothing static can prove this stayed correct -- a guard keyed on the literal
+# sees a deleted space but not the next welding variant upstream invents. The
+# real backstop is the reproducibility gate: if this goes inert the deployed
+# image goes stale, and the gate REFUSES at flash. Loud, never silent.
+do_image[vardeps] += " KIOSK_BUILDINFO_REV "
 
 python () {
     if not d.getVar('KIOSK_BUILDINFO_REV'):

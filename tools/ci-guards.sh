@@ -447,9 +447,14 @@ else
         # do_image specifically, and it must name the variable carrying the sha.
         # The same flag on do_rootfs, or naming something else, reads as wired
         # and changes no hash -- so nothing re-stamps and nothing says so.
-        n10=$(grep -E '^[[:space:]]*do_image\[vardeps\][[:space:]]*\+=' <<< "$cbody10" \
-              | grep -cF 'KIOSK_BUILDINFO_REV')
-        [ "$n10" -eq 0 ] && cmiss10="$cmiss10 do_image[vardeps]+=KIOSK_BUILDINFO_REV"
+        # The SPACES are matched deliberately. image.bbclass appends to this flag
+        # with no leading separator, so a token left last is welded to the next
+        # one and silently becomes a phantom, empty, constant variable -- the
+        # mechanism reads as wired and hashes nothing. This catches the space
+        # being stripped; it CANNOT catch the next welding variant upstream
+        # invents. That backstop is the gate refusing a stale image at flash.
+        n10=$(grep -cF 'do_image[vardeps] += " KIOSK_BUILDINFO_REV "' <<< "$cbody10")
+        [ "$n10" -eq 0 ] && cmiss10="$cmiss10 do_image[vardeps]+=_spaced_KIOSK_BUILDINFO_REV"
         # Absence must be LOUD. Without the fatal, a build with no injected sha
         # succeeds and silently stops re-stamping.
         n10=$(grep -cF 'bb.fatal' <<< "$cbody10")

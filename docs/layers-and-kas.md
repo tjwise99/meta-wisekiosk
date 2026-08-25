@@ -235,6 +235,13 @@ context reads the same bytes. Resolving it *inside* bitbake was tried and abando
 sstate setscene free to restore a stale, unchanged-hash `do_image_complete`. A build with no injected
 sha fails loudly rather than quietly skipping the re-stamp.
 
+The spaces around the token in `do_image[vardeps] += " KIOSK_BUILDINFO_REV "` are load-bearing:
+`image.bbclass` appends to that flag with no leading separator, so a token left last is welded to the
+next one and becomes a phantom variable that is empty and constant — the mechanism reads as wired and
+hashes nothing. **Nothing static can prove this stayed correct**; a guard sees a deleted space but
+not the next welding variant upstream invents. The backstop is the gate: if cache-safety goes inert
+the deployed image goes stale, and the gate refuses it at flash. Loud, never silent.
+
 That is a record, not a guarantee — the class never fails a build, and writes the literal `<unknown>`
 when git errors. The guarantee is [`tools/reproducibility-gate.sh`](../tools/reproducibility-gate.sh),
 which every recipe that puts an image on a board calls, and which **refuses, with no override flag**,
