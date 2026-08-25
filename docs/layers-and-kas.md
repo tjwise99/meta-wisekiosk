@@ -220,11 +220,20 @@ The stamp cannot go **stale**: `image-buildinfo` reads git live in `do_image` bu
 it read, so on its own the sha reaches no task signature — a commit touching only docs or `tools/`
 would leave the previous build's stamp in place, making the check below unsatisfiable on a clean,
 pushed tree, with rebuilding no help.
-[`kiosk-buildinfo-cachesafe`](../meta-wisekiosk/classes/kiosk-buildinfo-cachesafe.bbclass) sets
-`do_image[nostamp]`, so every build re-reads git and rewrites the stamp. `do_rootfs` is untouched and
-stays cached, which is where the hours are. Putting the sha in `do_image[vardeps]` instead would
-re-stamp only when HEAD moved, but hit a basehash non-determinism between the cooker and the
-build-time worker reparse; unconditional beats clever in the path that decides what reaches a board.
+[`kiosk-buildinfo-cachesafe`](../meta-wisekiosk/classes/kiosk-buildinfo-cachesafe.bbclass) puts the
+sha in `do_image[vardeps]`, so a moved HEAD gives `do_image` a new signature — no matching sstate
+entry, so `do_image`, `do_image_ext4` and `do_image_complete` all regenerate and the deployed `.ext4`
+is fresh. `do_rootfs` is untouched and stays cached, which is where the hours are.
+
+The sha is resolved on the **host** by
+[`tools/write-build-rev.sh`](../tools/write-build-rev.sh), which every build entry point runs before
+bitbake, and read as a plain assignment from a gitignored `meta-wisekiosk/conf/build-rev.inc`.
+Nothing is computed at parse time — no python, no git, no subprocess — so every parse in every
+context reads the same bytes. Resolving it *inside* bitbake was tried and abandoned: a parse-time
+`${@git…}` produced a basehash that differed between the cooker and the build-time worker reparse.
+`do_image[nostamp]` was also tried; it forces re-execution without changing a hash, which leaves
+sstate setscene free to restore a stale, unchanged-hash `do_image_complete`. A build with no injected
+sha fails loudly rather than quietly skipping the re-stamp.
 
 That is a record, not a guarantee — the class never fails a build, and writes the literal `<unknown>`
 when git errors. The guarantee is [`tools/reproducibility-gate.sh`](../tools/reproducibility-gate.sh),

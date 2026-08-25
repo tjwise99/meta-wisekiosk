@@ -67,11 +67,13 @@ help:
 # Build the kiosk image using kas-container
 [group('build')]
 build:
+    tools/write-build-rev.sh
     kas-container build {{config}}
 
 # Open a shell in the build environment
 [group('build')]
 shell:
+    tools/write-build-rev.sh
     kas-container shell {{config}}
 
 # === Clean ===

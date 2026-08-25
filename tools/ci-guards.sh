@@ -435,12 +435,69 @@ else
         # (via IMAGE_PREPROCESS_COMMAND); the same flag on do_rootfs would read
         # as wired, cost the expensive rootfs re-assembly, and still not
         # guarantee a fresh stamp.
-        n10=$(grep -vE '^[[:space:]]*#' "$cache10" \
-              | grep -cE '^[[:space:]]*do_image\[nostamp\][[:space:]]*=[[:space:]]*"1"')
-        if [ "$n10" -eq 0 ]; then
-            bad "guard 10: $cache10 does not set do_image[nostamp] = \"1\" -- /etc/buildinfo would go stale on any commit that changes no bitbake input, and the image==HEAD gate could never be satisfied"
+        cbody10=$(grep -vE '^[[:space:]]*#' "$cache10")
+        cmiss10=""
+        # grep -c and compare, never `| grep -q`: -q exits on the first hit, the
+        # producer dies of SIGPIPE at 141, and pipefail returns that -- the test
+        # would be false precisely when the pattern matches.
+        n10=$(grep -cE '^[[:space:]]*include[[:space:]]+conf/build-rev\.inc' <<< "$cbody10")
+        [ "$n10" -eq 0 ] && cmiss10="$cmiss10 include-conf/build-rev.inc"
+        n10=$(grep -cE '^[[:space:]]*KIOSK_BUILDINFO_REV\[vardepvalue\]' <<< "$cbody10")
+        [ "$n10" -eq 0 ] && cmiss10="$cmiss10 KIOSK_BUILDINFO_REV[vardepvalue]"
+        # do_image specifically, and it must name the variable carrying the sha.
+        # The same flag on do_rootfs, or naming something else, reads as wired
+        # and changes no hash -- so nothing re-stamps and nothing says so.
+        n10=$(grep -E '^[[:space:]]*do_image\[vardeps\][[:space:]]*\+=' <<< "$cbody10" \
+              | grep -cF 'KIOSK_BUILDINFO_REV')
+        [ "$n10" -eq 0 ] && cmiss10="$cmiss10 do_image[vardeps]+=KIOSK_BUILDINFO_REV"
+        # Absence must be LOUD. Without the fatal, a build with no injected sha
+        # succeeds and silently stops re-stamping.
+        n10=$(grep -cF 'bb.fatal' <<< "$cbody10")
+        [ "$n10" -eq 0 ] && cmiss10="$cmiss10 bb.fatal-when-unset"
+        if [ -n "$cmiss10" ]; then
+            bad "guard 10: $cache10 is not wired -- /etc/buildinfo would go stale on a commit that changes no bitbake input; missing:"
+            for m in $cmiss10; do printf '        %s\n' "$m"; done
         else
-            ok "the /etc/buildinfo stamp is refreshed every build (do_image[nostamp])"
+            ok "the /etc/buildinfo stamp is cache-safe (host sha in do_image's signature)"
+        fi
+
+        # The sha reaches bitbake only if the host writes it BEFORE the build.
+        # Every route to bitbake that can produce a flashable image must run the
+        # writer; one that does not trips the class's bb.fatal, which is loud but
+        # is a broken build, not a guarantee. Checked per call site, in file
+        # order, so a new entry point added without the writer is caught here.
+        writer10="tools/write-build-rev.sh"
+        if [ ! -x "$writer10" ]; then
+            bad "guard 10: $writer10 missing or not executable -- no build could inject the commit it is building from"
+        else
+            uninj10=$(
+                for f in Justfile justfiles/ota.just tools/rauc-rotate-build.sh; do
+                    [ -f "$f" ] || { printf '%s: MISSING FILE\n' "$f"; continue; }
+                    awk -v F="$f" -v W="$writer10" '
+                        /^[[:space:]]*#/ { next }
+                        index($0, W) { armed = 1; next }
+                        /kas-container[[:space:]]+(build|shell)/ {
+                            if (!armed) printf "%s:%d: %s\n", F, NR, $1
+                            armed = 0
+                        }
+                    ' "$f"
+                done
+            )
+            if [ -n "$uninj10" ]; then
+                bad "guard 10: a build that can produce a flashable image does not run $writer10 first:"
+                printf '%s\n' "$uninj10" | sed 's/^/        /'
+            else
+                ok "every build entry point injects the commit it is building from"
+            fi
+        fi
+
+        # Generated build input, never source. Untracked instead of ignored would
+        # make `git status --porcelain` dirty and the gate would refuse EVERY
+        # flash -- the mechanism would break the thing it exists to serve.
+        if ! git check-ignore -q meta-wisekiosk/conf/build-rev.inc; then
+            bad "guard 10: meta-wisekiosk/conf/build-rev.inc is not gitignored -- once written it would leave the tree dirty and the reproducibility gate would refuse every flash"
+        else
+            ok "the generated build-rev fragment is gitignored"
         fi
     fi
 

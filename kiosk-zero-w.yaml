@@ -181,8 +181,9 @@ local_conf_header:
     # image-buildinfo reads git live in do_image but does not hash it, so the
     # commit it writes is in no task signature: a commit touching only docs or
     # tools/ moves HEAD, the stamp is replayed from the previous build, and the
-    # image==HEAD gate can never be satisfied. This sets do_image[nostamp] so
-    # every build re-reads it. Must be inherited wherever image-buildinfo is.
+    # image==HEAD gate can never be satisfied. This puts the host-resolved sha
+    # in do_image's vardeps, so a moved HEAD changes the hash and the image
+    # regenerates. Must be inherited wherever image-buildinfo is.
     INHERIT += "kiosk-buildinfo-cachesafe"
 
   # update-bundle.bb packages whichever image RAUC_SLOT_rootfs names, and its

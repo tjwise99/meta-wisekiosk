@@ -15,6 +15,13 @@ local/
 # nature, and this repository is PUBLIC, so a stray `git add -A` publishes it.
 scratchpad/
 
+# Written by tools/write-build-rev.sh before every build: the commit bitbake is
+# building from (#46). Build input, not source -- committing it would pin a sha
+# that goes stale the next commit. Ignored, NOT merely untracked: the
+# reproducibility gate refuses on a dirty `git status --porcelain`, and an
+# untracked file here would block every flash.
+meta-wisekiosk/conf/build-rev.inc
+
 # The skills under .claude/ are tracked; these two are per-checkout machine
 # state, and settings.local.json in particular carries local filesystem paths.
 .claude/settings.local.json
