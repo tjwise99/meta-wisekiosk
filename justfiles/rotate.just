@@ -56,14 +56,12 @@ rotate-build name=fleet-key:
 [group('rotate')]
 [doc("Rotate the signing key on one device (transition then end-state)")]
 rotate-run host name=fleet-key *flags:
-    # NOT gated by tools/reproducibility-gate.sh, pending an owner decision
-    # (#46). This installs bundles on a device, so by the rule the other five
-    # sites follow it would be gated -- but a rotation build is produced by
-    # rauc-rotate-build.sh with an overriding kas fragment, and whether it is
-    # required to correspond to plain HEAD is the open question. To gate it, add
-    #     tools/reproducibility-gate.sh --tree || exit 1
-    # here and the matching entry to guard 10 in tools/ci-guards.sh.
-    # rotate-verify --empirical installs bundles too and needs the same answer.
+    # Gated, but not here: rauc-rotate.sh reaches the device through
+    # kiosk-preflight, which runs tools/reproducibility-gate.sh in its strongest
+    # --image form, once per install phase. A rotation build overlays only the
+    # four AUTONOMOS_RAUC_* signing variables and builds the working tree at
+    # HEAD, so the commit==HEAD check is satisfied by a legitimate rotation.
+    # Guard 10 holds that coverage.
     tools/rauc-rotate.sh "{{host}}" "{{keys-root}}/{{name}}" {{flags}}
 
 # Check a device trusts the new key. Add: --empirical <old.raucb> <new.raucb>

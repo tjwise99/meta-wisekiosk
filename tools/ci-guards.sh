@@ -424,11 +424,6 @@ else
         "justfiles/ota.just:kiosk-send-direct:--tree" \
         "justfiles/ota.just:kiosk-install:--tree" \
         "justfiles/device.just:rauc-install:--tree"
-    # The rotation path (justfiles/rotate.just rotate-run, and rotate-verify
-    # under --empirical) also installs bundles on a device and is deliberately
-    # ABSENT pending an owner decision (#46) -- see the note at rotate-run. To
-    # close it, add "justfiles/rotate.just:rotate-run:--tree" above and the call
-    # itself there.
     do
         jf10=${spec%%:*}
         rest10=${spec#*:}
@@ -450,6 +445,38 @@ else
         for u in $unwired10; do printf '        %s\n' "$u"; done
     else
         ok "every image-to-board recipe calls the reproducibility gate"
+    fi
+
+    # The rotation path reaches a device WITHOUT calling the gate itself: it goes
+    # through kiosk-preflight, which runs it in the strongest --image form, once
+    # per install phase. So the invariant here is positional, not a call site --
+    # every install must be PRECEDED by a preflight. A refactor that reorders or
+    # drops one strips the gate off the rotation path while every other check
+    # here stays green.
+    #
+    # A rotation build overlays only the four AUTONOMOS_RAUC_* signing variables
+    # (rauc-rotate-build.sh) and builds the working tree at HEAD -- no checkout,
+    # no worktree, no pin -- so commit==HEAD holds for a legitimate rotation and
+    # the --image check does not false-refuse.
+    rot10="tools/rauc-rotate.sh"
+    if [ ! -f "$rot10" ]; then
+        bad "guard 10: $rot10 missing -- the rotation path's gating cannot be checked"
+    else
+        ungated10=$(awk '
+            /^[[:space:]]*#/ { next }
+            /just[[:space:]]+kiosk-preflight/ { armed = 1 }
+            /just[[:space:]]+kiosk-install|rauc[[:space:]]+install/ {
+                if (!armed) printf "%d: %s\n", NR, $0
+                armed = 0; n++
+            }
+            END { if (n == 0) print "0: no install phase found -- this guard went stale, or the script was restructured" }
+        ' "$rot10")
+        if [ -n "$ungated10" ]; then
+            bad "guard 10: an install in $rot10 is not preceded by kiosk-preflight -- the rotation path would reach a device ungated:"
+            printf '%s\n' "$ungated10" | sed 's/^/        /'
+        else
+            ok "every install in the rotation path is preceded by kiosk-preflight"
+        fi
     fi
 fi
 
