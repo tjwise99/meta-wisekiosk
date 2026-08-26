@@ -239,11 +239,11 @@ kiosk-install host=kiosk-host:
     tools/reproducibility-gate.sh --tree || exit 1
     echo "== before"
     $SSH {{host}} 'fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT; rauc status 2>&1 | grep -E "Booted|Activated|boot status"'
-    # Report clock skew but do NOT set the device clock: kiosk-timesync-persist
-    # keeps timesyncd's clock across an OTA, so a cold clock here points at clock
-    # persistence, not a broken bundle -- it is the documented cause of the
-    # "certificate is not yet valid" refusal the signature check below raises
-    # (see the #31 investigation).
+    # The board has no RTC or fake-hwclock, so a fresh slot's clock sits at the
+    # image's build-time floor until NTP; kiosk-timesync-persist keeps it across an
+    # OTA. Report the skew but do NOT set the clock: a cold clock here points at
+    # persistence, not a broken bundle -- the documented cause of the "certificate
+    # is not yet valid" refusal the signature check below raises (see #31).
     DEV_EPOCH=$($SSH {{host}} 'date +%s')
     HOST_EPOCH=$(date +%s)
     SKEW=$(( HOST_EPOCH - DEV_EPOCH ))

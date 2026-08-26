@@ -13,10 +13,10 @@ boots at the image's build-time floor, and RAUC refuses a bundle in that window 
 signing certificate is not yet valid. The fix is `kiosk-timesync-persist`, which binds
 systemd-timesyncd's saved clock onto the `/data` partition RAUC never touches, so a fresh slot boots
 inside the certificate's validity window on its own. Both arms ran on images carrying the #46
-build-stamp record that name their own build commit, host-side and on the board. Time-to-NTP-sync is
-unchanged by the fix and was never expected to change; what collapses is the clock's error during
-that window, from ~15 months to
-seconds, and with it a `rauc info` that went from `rc=1 certificate is not yet valid` to `rc=0`.
+build-stamp record, which names each image's own build commit, host-side and on the board.
+Time-to-NTP-sync is unchanged by the fix and was never expected to change; what collapses is the
+clock's error during that window, from ~15 months to seconds, and with it a `rauc info` that went
+from `rc=1 certificate is not yet valid` to `rc=0`.
 
 ## Test runs
 
@@ -182,8 +182,8 @@ systemd swallows that at `log_debug`, so a symlink would be a silent no-op.
 **Image wiring:** `kiosk-zero-w.yaml:112` adds `kiosk-timesync-persist` to `IMAGE_INSTALL:append`.
 Run A's image predates that line, which is why the units are absent there.
 
-**The host-skew workaround (baseline `34a917b`).** `justfiles/ota.just:242-255` force-set the device
-clock from the host before every install. In the tree as shipped, `justfiles/ota.just:242-254`
+**The host-skew workaround (baseline `34a917b`).** `34a917b:justfiles/ota.just:242-255` force-set the
+device clock from the host before every install. In the tree as shipped, `justfiles/ota.just:242-254`
 reports the skew and does not correct it, so a persistence failure surfaces as the documented
 `certificate is not yet valid` refusal rather than being masked by the host.
 
