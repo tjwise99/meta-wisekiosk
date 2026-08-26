@@ -233,10 +233,21 @@ Nothing is computed at parse time — no python, no git, no subprocess — so ev
 context reads the same bytes. A build with no injected sha fails loudly rather than quietly
 skipping the re-stamp.
 
-Why it is reached through `IMAGE_CLASSES` rather than `INHERIT`, why no static check can prove the
-seam held, and the two mechanisms tried before it are recorded in the class header — the reasoning is
-inseparable from the six lines it defends. Verify with `bitbake-dumpsig` on `do_image`:
-`KIOSK_BUILDINFO_REV` must appear as its own entry with the host sha as its value.
+The class is reached through `IMAGE_CLASSES`, not `INHERIT`. `IMAGE_CLASSES` is a deferred inherit,
+so its anonymous python registers *after* `image.bbclass` has appended to the same flag with no
+trailing separator; the leading space inside the appended literal is what stops the two tokens
+welding into one phantom variable. A global `INHERIT` parses too early to be sure of that order. No
+static check can prove the seam held — verify with `bitbake-dumpsig` on `do_image`:
+`KIOSK_BUILDINFO_REV` must appear as its own entry with the host sha as its value. The backstop is
+the gate below, which refuses a stale image at flash.
+
+Alternatives rejected:
+
+- a parse-time `${@git...}` — basehash differed between the cooker and the worker's reparse.
+- `do_image[nostamp]` — re-executes without changing a hash, so setscene can still restore a stale
+  `do_image_complete`.
+- `require conf/build-rev.inc` — bitbake's own parse error would replace the class's
+  operator-facing `bb.fatal`.
 
 That is a record, not a guarantee — the class never fails a build, and writes the literal `<unknown>`
 when git errors. The guarantee is [`tools/reproducibility-gate.sh`](../tools/reproducibility-gate.sh),

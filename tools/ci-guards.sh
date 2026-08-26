@@ -406,7 +406,7 @@ else
     # Cache safety: every part asserted, any one alone is inert.
     # See docs/layers-and-kas.md, "What commit an image was built from".
     cache10="meta-wisekiosk/classes/kiosk-buildinfo-cachesafe.bbclass"
-    # IMAGE_CLASSES, not INHERIT -- ordering, see the class.
+    # IMAGE_CLASSES, not INHERIT -- ordering, see the doc section above.
     cinh10=$(grep -vE '^[[:space:]]*#' "$conf10" \
         | grep -cE '^[[:space:]]*IMAGE_CLASSES[[:space:]]*\+?=[[:space:]]*"kiosk-buildinfo-cachesafe"')
     if [ ! -f "$cache10" ]; then
@@ -414,9 +414,8 @@ else
     elif [ "$cinh10" -eq 0 ]; then
         bad "guard 10: $conf10 does not add kiosk-buildinfo-cachesafe to IMAGE_CLASSES -- the class exists but nothing inherits it (or a global INHERIT was used, which parses too early and gets welded), so the stamp is not cache-safe"
     else
-        # Comments stripped: the class header names bb.fatal in prose, and a
-        # guard greened by the comment describing the wiring would be worse
-        # than no guard.
+        # Comments stripped: a guard greened by a comment that describes the
+        # wiring would be worse than no guard.
         cbody10=$(grep -vE '^[[:space:]]*#' "$cache10")
         cmiss10=""
         # grep -c and compare, never `| grep -q`: -q exits on the first hit, the
