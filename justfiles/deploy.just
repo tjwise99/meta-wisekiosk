@@ -106,10 +106,7 @@ flash device:
     fi
     echo "verified: image bakes the fleet keyring ($BAKED_FP)"
 
-    # Fail-closed, no override: a card whose software cannot be rebuilt from a
-    # published commit is unattributable, and this one goes behind glass. Checks
-    # the .ext4 the keyring check just read, which the stamp tie above binds to
-    # the .wic.bz2 actually written.
+    # Checks the .ext4 the keyring check above read.
     tools/reproducibility-gate.sh --image "$ROOTFS" || exit 1
 
     echo "Flashing $IMAGE to {{device}}..."

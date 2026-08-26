@@ -216,10 +216,11 @@ meta-wisekiosk    = <branch>:<sha>
 `grep ^meta-wisekiosk /etc/buildinfo` on a board is how an investigation learns which source built
 the software in front of it.
 
-The stamp cannot go **stale**: `image-buildinfo` reads git live in `do_image` but does not hash what
-it read, so on its own the sha reaches no task signature — a commit touching only docs or `tools/`
-would leave the previous build's stamp in place, making the check below unsatisfiable on a clean,
-pushed tree, with rebuilding no help.
+Left alone the stamp would go **stale**. `image-buildinfo` reads git live in `do_image` but does not
+hash what it read, so the sha reaches no task signature: a commit touching only docs or `tools/`
+moves HEAD, bitbake replays the previous build's stamp, and the check below becomes unsatisfiable on
+a clean, pushed tree — with rebuilding no help, because nothing tells bitbake there is anything to
+redo.
 [`kiosk-buildinfo-cachesafe`](../meta-wisekiosk/classes/kiosk-buildinfo-cachesafe.bbclass) puts the
 sha in `do_image[vardeps]`, so a moved HEAD gives `do_image` a new signature — no matching sstate
 entry, so `do_image`, `do_image_ext4` and `do_image_complete` all regenerate and the deployed `.ext4`
@@ -229,23 +230,13 @@ The sha is resolved on the **host** by
 [`tools/write-build-rev.sh`](../tools/write-build-rev.sh), which every build entry point runs before
 bitbake, and read as a plain assignment from a gitignored `meta-wisekiosk/conf/build-rev.inc`.
 Nothing is computed at parse time — no python, no git, no subprocess — so every parse in every
-context reads the same bytes. Resolving it *inside* bitbake was tried and abandoned: a parse-time
-`${@git…}` produced a basehash that differed between the cooker and the build-time worker reparse.
-`do_image[nostamp]` was also tried; it forces re-execution without changing a hash, which leaves
-sstate setscene free to restore a stale, unchanged-hash `do_image_complete`. A build with no injected
-sha fails loudly rather than quietly skipping the re-stamp.
+context reads the same bytes. A build with no injected sha fails loudly rather than quietly
+skipping the re-stamp.
 
-The class is reached through `IMAGE_CLASSES`, not `INHERIT`, and that is the mechanism rather than a
-style choice. `image.bbclass` appends to `do_image[vardeps]` with **no leading separator**, so
-whatever token is last there is welded into a phantom variable — empty, constant, and with a name
-that varies between parses, since the list comes from a Python set. The only robust defence is to
-append *after* it: `IMAGE_CLASSES` is reached via `inherit_defer`, and bitbake applies deferred
-inherits before running anonymous functions, so this class's anonymous python runs last. A global
-`INHERIT` parses first and is welded.
-
-**Nothing static can prove the seam held** — a guard reads source text, and only a parsed signature
-shows the truth. The backstop is the gate: if cache-safety goes inert the deployed image goes stale
-and the gate refuses it at flash. Loud, never silent.
+Why it is reached through `IMAGE_CLASSES` rather than `INHERIT`, why no static check can prove the
+seam held, and the two mechanisms tried before it are recorded in the class header — the reasoning is
+inseparable from the six lines it defends. Verify with `bitbake-dumpsig` on `do_image`:
+`KIOSK_BUILDINFO_REV` must appear as its own entry with the host sha as its value.
 
 That is a record, not a guarantee — the class never fails a build, and writes the literal `<unknown>`
 when git errors. The guarantee is [`tools/reproducibility-gate.sh`](../tools/reproducibility-gate.sh),
@@ -261,6 +252,9 @@ unless:
 - where the caller holds the rootfs (`flash`, `kiosk-preflight`), `/etc/buildinfo` names a 40-hex sha
   equal to HEAD. The bundle-shipping recipes cannot check this — a `.raucb` is not readable with
   `debugfs` and nothing binds one to a rootfs (#48 bundle-image-tie) — so they enforce the first two.
+
+The rotation path is gated positionally — every install in
+[`tools/rauc-rotate.sh`](../tools/rauc-rotate.sh) is preceded by `kiosk-preflight`.
 
 There is no CI here and every image is hand-built, so shipping is the only place the guarantee can be
 made — and a skip flag would be used on exactly the day it mattered.

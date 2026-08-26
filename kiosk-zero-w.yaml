@@ -163,36 +163,14 @@ local_conf_header:
     # provisioning.
     INHERIT += "kiosk-static-resolv"
 
-    # /etc/buildinfo: the commit each slot was built from (#46). poky's own
-    # class -- it walks BBLAYERS and asks git for each layer's branch and sha,
-    # so meta-wisekiosk answers with THIS repository's HEAD (the layer is a
-    # subdirectory of it, and git walks up).
-    #
-    # Global INHERIT, not USER_CLASSES and not an image recipe: every route to
-    # bitbake has to carry it, or an image built some other way is the one that
-    # cannot be attributed. IMAGE_BUILDINFO_VARS is left at its default -- the
-    # layer table is written unconditionally and is the part #46 needs.
-    #
-    # This RECORDS. It does not enforce: the class never fails a build, and on a
-    # git error it writes the literal <unknown>. tools/reproducibility-gate.sh is
-    # what refuses.
+    # /etc/buildinfo: the commit each slot was built from (#46). Records only --
+    # tools/reproducibility-gate.sh is what refuses. Global INHERIT so every
+    # route to bitbake carries it. See docs/layers-and-kas.md.
     INHERIT += "image-buildinfo"
 
-    # image-buildinfo reads git live in do_image but does not hash it, so the
-    # commit it writes is in no task signature: a commit touching only docs or
-    # tools/ moves HEAD, the stamp is replayed from the previous build, and the
-    # image==HEAD gate can never be satisfied. This puts the host-resolved sha
-    # in do_image's vardeps, so a moved HEAD changes the hash and the image
-    # regenerates.
-    #
-    # IMAGE_CLASSES, NOT INHERIT, and that is the fix rather than a style
-    # choice. image.bbclass appends to do_image[vardeps] with no leading
-    # separator, welding whatever token is last into a phantom variable; the
-    # only robust defence is to append AFTER it. IMAGE_CLASSES is reached
-    # through `inherit_defer ${IMGCLASSES}`, and bitbake applies deferred
-    # inherits before running anonymous functions, so this class's anonymous
-    # python is registered last and runs last. A global INHERIT parses FIRST and
-    # is welded. do_image only exists on image recipes, so nothing is lost.
+    # Keeps /etc/buildinfo from going stale (#46). IMAGE_CLASSES, not INHERIT:
+    # the deferred inherit orders this after image.bbclass's vardeps append.
+    # See meta-wisekiosk/classes/kiosk-buildinfo-cachesafe.bbclass.
     IMAGE_CLASSES += "kiosk-buildinfo-cachesafe"
 
   # update-bundle.bb packages whichever image RAUC_SLOT_rootfs names, and its

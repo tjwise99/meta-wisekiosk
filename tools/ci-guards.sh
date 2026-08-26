@@ -384,9 +384,6 @@ fi
 # The mode is asserted, not just the call: --image is the full check
 # (clean + pushed + image names HEAD) and --tree is the subset. A site that can
 # prove the image matches and quietly drops to --tree still looks wired.
-#
-# Matching is inside the RECIPE BODY, extracted by name, comment lines dropped:
-# the gate being mentioned somewhere in the file is not the gate running.
 gate10="tools/reproducibility-gate.sh"
 conf10="kiosk-zero-w.yaml"
 missing10=""
@@ -401,21 +398,15 @@ else
     inherits10=$(grep -vE '^[[:space:]]*#' "$conf10" \
         | grep -cE '^[[:space:]]*INHERIT[[:space:]]*\+?=[[:space:]]*"image-buildinfo"')
     if [ "$inherits10" -eq 0 ]; then
-        bad "guard 10: $conf10 no longer inherits image-buildinfo -- images would carry no /etc/buildinfo, and the gate's image check would refuse every build"
+        bad "guard 10: $conf10 does not inherit image-buildinfo -- images would carry no /etc/buildinfo, and the gate's image check would refuse every build"
     else
         ok "kiosk-zero-w.yaml inherits image-buildinfo"
     fi
 
-    # Cache safety. image-buildinfo reads git live in do_image, so the sha it
-    # writes is in no task signature: without this, a commit touching only docs
-    # or tools/ moves HEAD, bitbake replays the stamp, and the image==HEAD check
-    # can never be satisfied -- the gate refuses a tree that is genuinely clean
-    # and pushed, and rebuilding does not help. All three parts are asserted
-    # because any one of them alone is inert.
+    # Cache safety: every part asserted, any one alone is inert.
+    # See docs/layers-and-kas.md, "What commit an image was built from".
     cache10="meta-wisekiosk/classes/kiosk-buildinfo-cachesafe.bbclass"
-    # IMAGE_CLASSES, not INHERIT: a global INHERIT parses before image.bbclass's
-    # vardeps append and gets welded into a phantom variable. The deferred
-    # inherit is what puts this class after it.
+    # IMAGE_CLASSES, not INHERIT -- ordering, see the class.
     cinh10=$(grep -vE '^[[:space:]]*#' "$conf10" \
         | grep -cE '^[[:space:]]*IMAGE_CLASSES[[:space:]]*\+?=[[:space:]]*"kiosk-buildinfo-cachesafe"')
     if [ ! -f "$cache10" ]; then
@@ -423,21 +414,9 @@ else
     elif [ "$cinh10" -eq 0 ]; then
         bad "guard 10: $conf10 does not add kiosk-buildinfo-cachesafe to IMAGE_CLASSES -- the class exists but nothing inherits it (or a global INHERIT was used, which parses too early and gets welded), so the stamp is not cache-safe"
     else
-        # Comments stripped: this class explains the mechanism at length, and
-        # every literal below appears in that prose. A guard greened by the
-        # comment describing the wiring would be worse than no guard.
-        # Comments stripped: the class explains the mechanism at length and its
-        # prose names the literal below. A guard greened by the comment
-        # describing the wiring would be worse than no guard.
-        #
-        # grep -c and compare, never `| grep -q`: -q exits on the first hit, the
-        # producer dies of SIGPIPE at 141, and pipefail returns that -- the test
-        # would be false precisely when the pattern matches.
-        #
-        # do_image specifically. do_image is the task that runs buildinfo_image
-        # (via IMAGE_PREPROCESS_COMMAND); the same flag on do_rootfs would read
-        # as wired, cost the expensive rootfs re-assembly, and still not
-        # guarantee a fresh stamp.
+        # Comments stripped: the class header names bb.fatal in prose, and a
+        # guard greened by the comment describing the wiring would be worse
+        # than no guard.
         cbody10=$(grep -vE '^[[:space:]]*#' "$cache10")
         cmiss10=""
         # grep -c and compare, never `| grep -q`: -q exits on the first hit, the
@@ -445,22 +424,12 @@ else
         # would be false precisely when the pattern matches.
         n10=$(grep -cE '^[[:space:]]*include[[:space:]]+conf/build-rev\.inc' <<< "$cbody10")
         [ "$n10" -eq 0 ] && cmiss10="$cmiss10 include-conf/build-rev.inc"
-        n10=$(grep -cE '^[[:space:]]*KIOSK_BUILDINFO_REV\[vardepvalue\]' <<< "$cbody10")
-        [ "$n10" -eq 0 ] && cmiss10="$cmiss10 KIOSK_BUILDINFO_REV[vardepvalue]"
         # do_image specifically, and it must name the variable carrying the sha.
         # The same flag on do_rootfs, or naming something else, reads as wired
         # and changes no hash -- so nothing re-stamps and nothing says so.
-        # The SPACES are matched deliberately. image.bbclass appends to this flag
-        # with no leading separator, so a token left last is welded to the next
-        # one and silently becomes a phantom, empty, constant variable -- the
-        # mechanism reads as wired and hashes nothing. This catches the space
-        # being stripped; it CANNOT catch the next welding variant upstream
-        # invents. That backstop is the gate refusing a stale image at flash.
-        # The appendVarFlag form, with its leading space, and on do_image. This
-        # is DELETION detection only -- no source-text check can prove the token
-        # survived as its own entry in the PARSED flag, because image.bbclass
-        # appends to it with no separator. Only bitbake-dumpsig shows that, and
-        # CI never builds. The backstop is the gate refusing a stale image.
+        #
+        # Deletion detection only: no source-text check can prove the token
+        # survived as its own entry in the parsed flag. Backstop is the gate.
         n10=$(grep -cF "appendVarFlag('do_image', 'vardeps', ' KIOSK_BUILDINFO_REV')" <<< "$cbody10")
         [ "$n10" -eq 0 ] && cmiss10="$cmiss10 appendVarFlag(do_image,vardeps,'_KIOSK_BUILDINFO_REV')"
         # Absence must be LOUD. Without the fatal, a build with no injected sha
@@ -492,7 +461,13 @@ else
                         /kas-container[[:space:]]+(build|shell)/ {
                             if (!armed) printf "%s:%d: %s\n", F, NR, $1
                             armed = 0
+                            next
                         }
+                        # Last rule: the writer and build rules match first, so an
+                        # unindented line in a shell script is not a boundary. A
+                        # recipe header disarms, so a writer-only recipe cannot
+                        # arm the next one.
+                        /^[^[:space:]#]/ { armed = 0 }
                     ' "$f"
                 done
             )
@@ -542,9 +517,6 @@ else
             unwired10="$unwired10 $jf10:$rn10(recipe-gone)"
             continue
         fi
-        # grep -c and compare, never `| grep -q`: -q exits on the first hit, the
-        # producer dies of SIGPIPE at 141, and pipefail returns that -- so the
-        # condition would be false precisely when the pattern matches.
         calls10=$(grep -cF -- "$gate10 $mode10" <<< "$body10")
         [ "$calls10" -eq 0 ] && unwired10="$unwired10 $jf10:$rn10($mode10)"
     done
@@ -561,11 +533,6 @@ else
     # every install must be PRECEDED by a preflight. A refactor that reorders or
     # drops one strips the gate off the rotation path while every other check
     # here stays green.
-    #
-    # A rotation build overlays only the four AUTONOMOS_RAUC_* signing variables
-    # (rauc-rotate-build.sh) and builds the working tree at HEAD -- no checkout,
-    # no worktree, no pin -- so commit==HEAD holds for a legitimate rotation and
-    # the --image check does not false-refuse.
     rot10="tools/rauc-rotate.sh"
     if [ ! -f "$rot10" ]; then
         bad "guard 10: $rot10 missing -- the rotation path's gating cannot be checked"

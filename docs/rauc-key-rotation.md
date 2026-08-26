@@ -41,6 +41,15 @@ repairs a card written with the wrong keyring. `just flash` therefore verifies t
 `/etc/rauc/keyring.pem` against this key, refusing to write if they differ or if the image and rootfs
 artifacts come from different builds.
 
+A rotation also has to be shippable. `rotate-run` reaches the device through `kiosk-preflight`, which
+runs [`tools/reproducibility-gate.sh`](../tools/reproducibility-gate.sh) — so a working tree that is
+dirty or whose HEAD is unpushed refuses the install, and it refuses *after* `rotate-build` has spent
+two full builds. Commit and push before starting. The generated overrides and bundles land in
+`build/rotation/` and the keys in `local/`, both gitignored, so a rotation never dirties the tree by
+running. A rotation build overlays only the four `AUTONOMOS_RAUC_*` signing variables onto the
+working tree at HEAD — no checkout, no worktree, no pin — which is why the gate's `--image` check is
+satisfiable during a rotation.
+
 ## The ordering constraint
 
 A device verifies a bundle's signature against the keyring in the slot it is **currently running

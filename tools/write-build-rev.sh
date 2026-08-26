@@ -7,17 +7,9 @@
 # Every route to bitbake that can produce a flashable image runs this first. The
 # generated fragment is gitignored: it is build input, not source.
 #
-# Why the host, and why a file. image-buildinfo reads git live in do_image and
-# does not hash what it read, so the commit reaches no task signature and a
-# stamp can be replayed while HEAD has moved. Putting the sha in do_image's
-# vardeps fixes that, but resolving it INSIDE bitbake does not work here: a
-# parse-time `${@git...}` produced a basehash that differed between the cooker
-# and the build-time worker reparse. A plain assignment in a conf file has no
-# python, no subprocess and no environment to disagree about -- every parse in
-# every context reads the same bytes.
-#
-# The host is also the right authority: the gate compares the image against the
-# HOST's HEAD, so that is the value whose movement must force a re-stamp.
+# Read as a plain assignment by
+# meta-wisekiosk/classes/kiosk-buildinfo-cachesafe.bbclass.
+# See docs/layers-and-kas.md.
 
 set -uo pipefail
 
@@ -28,9 +20,8 @@ DEST=meta-wisekiosk/conf/build-rev.inc
 
 rev=$(git rev-parse HEAD 2>/dev/null)
 if ! [[ "$rev" =~ ^[0-9a-f]{40}$ ]]; then
-    # Refuse rather than write a placeholder. A file saying <unknown> would be a
-    # perfectly stable vardep, so the build would succeed and quietly stop
-    # re-stamping -- the exact failure this mechanism exists to remove.
+    # No placeholder: <unknown> is a stable vardep, so re-stamping would stop
+    # silently.
     printf 'write-build-rev: cannot resolve HEAD to a 40-character sha (got %s)\n' "${rev:-<nothing>}" >&2
     exit 1
 fi
