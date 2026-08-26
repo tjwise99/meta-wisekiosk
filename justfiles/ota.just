@@ -240,9 +240,10 @@ kiosk-install host=kiosk-host:
     echo "== before"
     $SSH {{host}} 'fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT; rauc status 2>&1 | grep -E "Booted|Activated|boot status"'
     # Report clock skew but do NOT set the device clock: kiosk-timesync-persist
-    # keeps timesyncd's clock across an OTA, so a cold clock at install time means
-    # persistence failed -- the cause of the "certificate is not yet valid" refusal
-    # verified below (see the #31 investigation).
+    # keeps timesyncd's clock across an OTA, so a cold clock here points at clock
+    # persistence, not a broken bundle -- it is the documented cause of the
+    # "certificate is not yet valid" refusal the signature check below raises
+    # (see the #31 investigation).
     DEV_EPOCH=$($SSH {{host}} 'date +%s')
     HOST_EPOCH=$(date +%s)
     SKEW=$(( HOST_EPOCH - DEV_EPOCH ))

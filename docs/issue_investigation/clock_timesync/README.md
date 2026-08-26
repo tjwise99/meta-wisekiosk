@@ -167,13 +167,13 @@ floor is below it, so signature verification fails before the bundle is ever rea
 **The fix under test, as it sits in the tree.** The recipe
 `meta-wisekiosk/recipes-core/kiosk-timesync-persist/kiosk-timesync-persist_1.0.bb` installs two
 files and auto-enables the oneshot (`:15-16`, `:18-24`). The drop-in
-`meta-wisekiosk/recipes-core/kiosk-timesync-persist/files/10-persist-clock.conf:14` carries
+`meta-wisekiosk/recipes-core/kiosk-timesync-persist/files/10-persist-clock.conf:16` carries
 `BindPaths=-/data/systemd-timesync:/var/lib/systemd/timesync`, ordered behind the staging oneshot and
-`data.mount` at `:10-11`. The leading `-` on the source makes a missing
+`data.mount` at `:12-13`. The leading `-` on the source makes a missing
 `/data/systemd-timesync` skip the bind instead of failing timesyncd's namespace setup
 (`226/NAMESPACE`), so a degraded `/data` leaves the board running NTP non-persistent rather than with
 no time source at all. The oneshot
-`meta-wisekiosk/recipes-core/kiosk-timesync-persist/files/kiosk-timesync-dir.service:20` creates and
+`meta-wisekiosk/recipes-core/kiosk-timesync-persist/files/kiosk-timesync-dir.service:22` creates and
 chowns the bind source in one statement, ordered `After=data.mount`,
 `Before=systemd-timesyncd.service` at `:10-11`. It is a `BindPaths` and not a symlink because
 timesyncd ships `ProtectSystem=strict`: a write outside the sandbox's writable set fails EROFS and
@@ -182,7 +182,7 @@ systemd swallows that at `log_debug`, so a symlink would be a silent no-op.
 **Image wiring:** `kiosk-zero-w.yaml:112` adds `kiosk-timesync-persist` to `IMAGE_INSTALL:append`.
 Run A's image predates that line, which is why the units are absent there.
 
-**The host-skew workaround (baseline `34a917b`).** On `34a917b`, `justfiles/ota.just:242-254` force-set
+**The host-skew workaround (baseline `34a917b`).** On `34a917b`, `justfiles/ota.just:242-255` force-set
 the device clock from the host before every install. On this branch, `justfiles/ota.just:242-253`
 reports the skew and does not correct it, so a persistence failure surfaces as the documented
 `certificate is not yet valid` refusal rather than being masked by the host.
@@ -370,9 +370,9 @@ start-limit event emits two of them (`Start request repeated too quickly` and `F
 - **Code change:** `kiosk-timesync-persist` — the recipe at
   `meta-wisekiosk/recipes-core/kiosk-timesync-persist/kiosk-timesync-persist_1.0.bb` with its
   `kiosk-timesync-dir.service` oneshot and `10-persist-clock.conf` drop-in, wired into the image at
-  `kiosk-zero-w.yaml:112` — and the host clock force-set in `justfiles/ota.just:242-253` reduced to
-  reporting skew instead of correcting it. Both ship in PR #59 persist the clock across an OTA, which
-  closes #31.
+  `kiosk-zero-w.yaml:112` — and `justfiles/ota.just:242-253`, which reports the host/device skew
+  instead of force-setting the device clock (the `34a917b:242-255` behavior). Both ship in PR #59
+  persist the clock across an OTA, which closes #31.
 
 Every one-off script named above is committed in this directory. Every durable change links to its
 recipe/PR.
