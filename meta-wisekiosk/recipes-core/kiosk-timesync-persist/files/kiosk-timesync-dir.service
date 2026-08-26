@@ -1,12 +1,13 @@
 [Unit]
 Description=Stage the persistent timesync clock dir on /data
-# The BindPaths source in the systemd-timesyncd drop-in must exist each time that
-# unit's namespace is built, or namespace setup fails 226/NAMESPACE and -- with
-# timesyncd's Restart=always/RestartSec=0 -- burns the start limit in ms and the
-# board never syncs time. This unit stages that source -- existence and ownership
-# of /data/systemd-timesync -- ordered After=data.mount and Before=systemd-
-# timesyncd.service, so on a normal boot the dir is present on the real /data
-# before timesyncd builds its namespace. timesyncd also restarts on its own
+# This unit stages the BindPaths source named by the systemd-timesyncd drop-in --
+# existence and ownership of /data/systemd-timesync -- ordered After=data.mount and
+# Before=systemd-timesyncd.service, so on a normal boot the dir is present on the
+# real /data before timesyncd builds its namespace, and the clock persists.
+# A missing source is not fatal: the drop-in writes the bind with a `-` prefix, so
+# systemd skips it and timesyncd starts anyway, non-persistent for that boot. That
+# is the degraded path, not the intended one -- staging is what keeps the board on
+# the persistent path. timesyncd also restarts on its own
 # (WatchdogSec=3min) and its view of /data can change under it, so this is NOT
 # RemainAfterExit -- the drop-in Wants=+After= it, so it re-runs on every timesyncd
 # start and re-stages against whatever /data currently is.

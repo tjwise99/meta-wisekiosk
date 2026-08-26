@@ -167,12 +167,15 @@ floor is below it, so signature verification fails before the bundle is ever rea
 **The fix under test, as it sits in the tree.** The recipe
 `meta-wisekiosk/recipes-core/kiosk-timesync-persist/kiosk-timesync-persist_1.0.bb` installs two
 files and auto-enables the oneshot (`:15-16`, `:18-24`). The drop-in
-`meta-wisekiosk/recipes-core/kiosk-timesync-persist/files/10-persist-clock.conf:22` carries
-`BindPaths=/data/systemd-timesync:/var/lib/systemd/timesync`, ordered behind the staging oneshot and
-`data.mount` at `:17-19`. The oneshot
-`meta-wisekiosk/recipes-core/kiosk-timesync-persist/files/kiosk-timesync-dir.service:34` creates and
+`meta-wisekiosk/recipes-core/kiosk-timesync-persist/files/10-persist-clock.conf:23` carries
+`BindPaths=-/data/systemd-timesync:/var/lib/systemd/timesync`, ordered behind the staging oneshot and
+`data.mount` at `:19-20`. The leading `-` on the source makes a missing
+`/data/systemd-timesync` skip the bind instead of failing timesyncd's namespace setup
+(`226/NAMESPACE`), so a degraded `/data` leaves the board running NTP non-persistent rather than with
+no time source at all. The oneshot
+`meta-wisekiosk/recipes-core/kiosk-timesync-persist/files/kiosk-timesync-dir.service:36` creates and
 chowns the bind source in one statement, ordered `After=data.mount`,
-`Before=systemd-timesyncd.service` at `:19-20`. It is a `BindPaths` and not a symlink because
+`Before=systemd-timesyncd.service` at `:21-22`. It is a `BindPaths` and not a symlink because
 timesyncd ships `ProtectSystem=strict`: a write outside the sandbox's writable set fails EROFS and
 systemd swallows that at `log_debug`, so a symlink would be a silent no-op.
 
@@ -293,8 +296,13 @@ The clock is corrected at monotonic **18.96 s** from the `/data` record. That is
 so it is not subtractable from the **~55.5 s Run B mean** time-to-NTP-sync, which is an average over
 40 boots; the comparable single-boot figure is the fresh slot, where NTP sync landed at monotonic
 **58.15 s** ([`runB-freshslot-bootstart.txt`](runB-freshslot-bootstart.txt)). Either way the ordering
-is what carries, and it holds on every boot in the corpus: the record restores a real clock within a
-few seconds of timesyncd starting, tens of seconds before any NTP packet lands. On the fix image the
+is what carries: the record restores a real clock within a few seconds of timesyncd starting, tens of
+seconds before any NTP packet lands. That ordering is an **n = 1 observation**, not a corpus result —
+`bootloop-collect.sh:103` records `ntp_contact_s`, `ntp_sync_s`, `synchronized`, `dns`, the RAUC
+counters, pstore and mmc errors, and **no clock-restore field at all**, so neither 40-boot log
+contains a single `restored from recorded timestamp` line to count. The restore is witnessed only by
+the two single-boot captures above, matching the n = 1 fresh-slot arm noted under Limits. On the fix
+image the
 bind is live inside timesyncd's own namespace —
 `/proc/<MainPID>/mountinfo` shows `/systemd-timesync /var/lib/systemd/timesync … ext4 /dev/mmcblk0p4`
 ([`runB-onboard-fix-health.txt`](runB-onboard-fix-health.txt)). `findmnt` from an ordinary shell
