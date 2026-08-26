@@ -1,0 +1,13 @@
+N_boots            = 40
+ntp_sync_s samples = 40 (NA: 0)
+ntp_sync_s min     = 29.191336
+ntp_sync_s max     = 57.725337
+ntp_sync_s mean    = 55.534233
+ntp_sync_s median  = 56.216116
+ntp_sync_s sd      = 4.294302
+ntp_sync_s spread  = 28.534001
+dns != ok          = 0 / 40
+synchronized != yes= 0 / 40
+pstore non-empty   = 0 / 40
+mmc_err > 0        = 0 / 40
+RAUC counter < 3   = 0 / 40

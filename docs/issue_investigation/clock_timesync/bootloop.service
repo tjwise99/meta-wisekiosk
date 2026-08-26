@@ -1,0 +1,18 @@
+[Unit]
+Description=Bounded boot-loop clock collector (#31 bench harness)
+# Requires= is the counter-safety interlock: the loop cannot start, and therefore
+# cannot reboot, unless rauc-mark-good ran and reset BOOT_*_LEFT to 3.
+Requires=rauc-mark-good.service
+After=rauc-mark-good.service
+
+[Service]
+Type=oneshot
+ExecStart=/data/bootloop/collect.sh
+# collect.sh blocks until NTPSynchronized=yes (or a 120 s cap) and then until
+# uptime >= 90 s, so its own runtime can exceed systemd's 90 s default and be
+# SIGTERMed before it logs the boot. Reconstructed harness deviation, documented
+# in the write-up: it bounds nothing the safety model relies on.
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

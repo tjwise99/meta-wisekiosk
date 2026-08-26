@@ -1,0 +1,31 @@
+Warning: Permanently added '<BENCH>' (ED25519) to the list of known hosts.
+== buildinfo ==
+meta-wisekiosk    = HEAD:a9eb3a914793816881e7350ae21d3a2f49f1fbbc
+== units shipped by kiosk-timesync-persist ==
+-rw-r--r--    1 root     root          2149 Mar  9  2018 /usr/lib/systemd/system/kiosk-timesync-dir.service
+drwxr-xr-x    2 root     root          4096 Mar  9  2018 .
+drwxr-xr-x   23 root     root         16384 Mar  9  2018 ..
+-rw-r--r--    1 root     root          1228 Mar  9  2018 10-persist-clock.conf
+== kiosk-timesync-dir.service state ==
+enabled
+Result=success
+NRestarts=0
+ExecMainStatus=0
+== drop-in as systemd parsed it ==
+BindPaths=/data/systemd-timesync:/var/lib/systemd/timesync:rbind
+== persisted clock on /data ==
+drwxr-xr-x    2 systemd- systemd-      4096 May 29  2025 .
+drwxr-xr-x    8 root     root          4096 May 29  2025 ..
+-rw-r--r--    1 systemd- systemd-         0 Aug 26 01:17 clock
+== namespace check: what timesyncd itself sees ==
+timesyncd MainPID=188
+2
+166 142 0:21 /systemd/timesync /run/systemd/timesync rw,nosuid,nodev shared:84 master:10 - tmpfs tmpfs rw,size=87544k,nr_inodes=819200,mode=755
+170 128 179:4 /systemd-timesync /var/lib/systemd/timesync rw,nosuid,noatime shared:109 master:42 - ext4 /dev/mmcblk0p4 rw
+== 226/NAMESPACE failures this boot ==
+0
+0
+== timesyncd status ==
+active
+Result=success
+NRestarts=0

@@ -1,0 +1,27 @@
+Warning: Permanently added '<BENCH>' (ED25519) to the list of known hosts.
+== fresh-slot boot: first kernel journal line (the clock at boot start) ==
+2026-08-26T01:26:11-04:00 <BENCH-HOST> systemd-journald[86]: Time spent on flushing to /var/log/journal/58e33d6d0d2a45cda670a88c06723dc8 is 1.300142s for 425 entries.
+== timesyncd restoring the persisted clock ==
+2026-08-26T01:26:14-04:00 <BENCH-HOST> systemd-timesyncd[188]: Network configuration changed, trying to establish connection.
+2026-08-26T01:26:15-04:00 <BENCH-HOST> systemd-timesyncd[188]: Network configuration changed, trying to establish connection.
+2026-08-26T01:27:14-04:00 <BENCH-HOST> systemd-timesyncd[188]: Contacted time server 216.239.35.8:123 (time3.google.com).
+2026-08-26T01:27:14-04:00 <BENCH-HOST> systemd-timesyncd[188]: Initial clock synchronization to Wed 2026-08-26 01:27:14.952689 EDT.
+== NTP sync event this boot ==
+[   58.149522] <BENCH-HOST> systemd-timesyncd[188]: Initial clock synchronization to Wed 2026-08-26 01:27:14.952689 EDT.
+== /data clock (the source) and the bind ==
+drwxr-xr-x    2 systemd- systemd-      4096 May 29  2025 .
+drwxr-xr-x    8 root     root          4096 Aug 26 01:22 ..
+-rw-r--r--    1 systemd- systemd-         0 Aug 26 01:27 clock
+170 134 179:4 /systemd-timesync /var/lib/systemd/timesync rw,nosuid,noatime shared:109 master:42 - ext4 /dev/mmcblk0p4 rw
+== oneshot + namespace health on the fresh slot ==
+Result=success
+NRestarts=0
+ExecMainStatus=0
+226/NAMESPACE this boot: 0
+active
+== slot + counters ==
+Booted from: rootfs.0 (A)
+Activated: rootfs.0 (A)
+BOOT_ORDER=A B
+BOOT_A_LEFT=3
+BOOT_B_LEFT=3

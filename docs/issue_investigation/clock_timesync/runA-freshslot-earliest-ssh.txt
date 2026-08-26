@@ -1,0 +1,20 @@
+pre-reboot boot_id=3b89d720-138a-4607-82fd-d823ef6b59d3
+post-reboot boot_id=de58e8c7-35eb-4140-8ce4-5aba4fc6cd86  (host waited 48s for sshd)
+Warning: Permanently added '<BENCH>' (ED25519) to the list of known hosts.
+uptime_s_at_first_ssh=39.63
+date=2025-05-29T14:48:58-0400
+epoch=1748544538
+ntpsync=no
+buildinfo=meta-wisekiosk    = HEAD:34a917b018c154afddcd5fa2fe34afbf93033c01
+slot=Booted from: rootfs.0 (A)
+timesyncd=active
+bind_target=not a mountpoint
+--- rauc info /data/update.raucb ---
+rauc-Message: 14:49:01.029: Using central status file /data/rauc/rauc.status
+rauc-Message: 14:49:01.082: Using system config file /etc/rauc/system.conf
+rauc-Message: 14:49:01.082: Reading bundle: /data/update.raucb
+rauc-Message: 14:49:01.233: Verifying bundle signature... 
+signature verification failed: Verify error: certificate is not yet valid
+rauc_info_rc=1
+uptime_s_after_rauc_info=42.71
+CAPTURE_DONE

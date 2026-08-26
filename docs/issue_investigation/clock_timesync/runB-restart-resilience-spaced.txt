@@ -1,0 +1,20 @@
+Warning: Permanently added '<BENCH>' (ED25519) to the list of known hosts.
+== why restart 6 failed (exact journal reason) ==
+Aug 26 01:18:30 <BENCH-HOST> systemd[1]: systemd-timesyncd.service: Start request repeated too quickly.
+Aug 26 01:18:30 <BENCH-HOST> systemd[1]: systemd-timesyncd.service: Failed with result 'start-limit-hit'.
+
+== spaced restart test: 8 restarts, 12s apart (outside the 5-per-10s burst) ==
+restart 1: timesyncd=active bind_present=1 dir-oneshot=success
+restart 2: timesyncd=active bind_present=1 dir-oneshot=success
+restart 3: timesyncd=active bind_present=1 dir-oneshot=success
+restart 4: timesyncd=active bind_present=1 dir-oneshot=success
+restart 5: timesyncd=active bind_present=1 dir-oneshot=success
+restart 6: timesyncd=active bind_present=1 dir-oneshot=success
+restart 7: timesyncd=active bind_present=1 dir-oneshot=success
+restart 8: timesyncd=active bind_present=1 dir-oneshot=success
+
+== totals after spaced test ==
+226/NAMESPACE this boot: 0
+timesyncd is-active:     active
+dir-oneshot Result:      success
+NTPSynchronized=yes

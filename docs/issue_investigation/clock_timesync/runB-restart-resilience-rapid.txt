@@ -1,0 +1,28 @@
+Warning: Permanently added '<BENCH>' (ED25519) to the list of known hosts.
+== 10 x systemctl restart systemd-timesyncd ==
+restart 1: timesyncd=active  dir-oneshot=success  bind_present=1
+restart 2: timesyncd=active  dir-oneshot=success  bind_present=1
+restart 3: timesyncd=active  dir-oneshot=success  bind_present=1
+restart 4: timesyncd=active  dir-oneshot=success  bind_present=1
+restart 5: timesyncd=active  dir-oneshot=success  bind_present=1
+Job for systemd-timesyncd.service failed because start of the service was attempted too often.
+See "systemctl status systemd-timesyncd.service" and "journalctl -xeu systemd-timesyncd.service" for details.
+To force a start use "systemctl reset-failed systemd-timesyncd.service"
+followed by "systemctl start systemd-timesyncd.service" again.
+restart 6: timesyncd=failed  dir-oneshot=success  bind_present=
+restart 7: timesyncd=active  dir-oneshot=success  bind_present=1
+restart 8: timesyncd=active  dir-oneshot=success  bind_present=1
+restart 9: timesyncd=active  dir-oneshot=success  bind_present=1
+restart 10: timesyncd=active  dir-oneshot=success  bind_present=1
+== after 10 restarts ==
+Result=success
+NRestarts=0
+Result=success
+NRestarts=0
+226/NAMESPACE count this boot: 0
+timesyncd failures this boot:  2
+dir-oneshot failures this boot: 0
+== clock still synced ==
+NTPSynchronized=yes
+Wed Aug 26 01:18:42 EDT 2026
+-rw-r--r--    1 systemd- systemd-         0 Aug 26 01:18 /data/systemd-timesync/clock

@@ -1,0 +1,21 @@
+Warning: Permanently added '<BENCH>' (ED25519) to the list of known hosts.
+== on-board buildinfo ==
+meta-wisekiosk    = HEAD:34a917b018c154afddcd5fa2fe34afbf93033c01
+== slot ==
+Booted from: rootfs.1 (B)
+Activated: rootfs.1 (B)
+== timesync-persist present? (must be ABSENT on baseline) ==
+ls: /usr/lib/systemd/system/kiosk-timesync-dir.service: No such file or directory
+ls: /usr/lib/systemd/system/systemd-timesyncd.service.d/: No such file or directory
+== timesync state dir ==
+drwxr-xr-x    2 systemd- systemd-      4096 May 29  2025 .
+drwxr-xr-x    7 root     root          4096 May 29  2025 ..
+-rw-r--r--    1 systemd- systemd-         0 Aug 25 23:36 clock
+== this boot start (wall clock) ==
+2026-08-25T23:36:28-04:00 <BENCH-HOST> systemd-timesyncd[185]: Initial clock synchronization to Tue 2026-08-25 23:36:28.678236 EDT.
+2025-05-29T14:48:26-04:00 raspberrypi0-wifi kernel: Booting Linux on physical CPU 0x0
+2025-05-29T14:48:26-04:00 raspberrypi0-wifi kernel: Linux version 6.6.63 (oe-user@oe-host) (arm-poky-linux-gnueabi-gcc (GCC) 13.4.0, GNU ld (GNU Binutils) 2.42.0.20240723) #1 Fri Dec  6 10:10:05 UTC 2024
+2025-05-29T14:48:26-04:00 raspberrypi0-wifi kernel: CPU: ARMv6-compatible processor [410fb767] revision 7 (ARMv7), cr=00c5387d
+== uptime/date ==
+ 23:36:31 up 1 min,  load average: 2.19, 0.66, 0.23
+Tue Aug 25 23:36:31 EDT 2026
