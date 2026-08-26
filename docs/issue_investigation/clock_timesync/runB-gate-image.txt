@@ -1,0 +1,10 @@
+ok    working tree is clean
+ok    HEAD (a9eb3a914793816881e7350ae21d3a2f49f1fbbc) is published on origin
+ok    image names HEAD (a9eb3a914793816881e7350ae21d3a2f49f1fbbc)
+
+reproducibility gate passed
+meta-wisekiosk    = HEAD:a9eb3a914793816881e7350ae21d3a2f49f1fbbc
+   4432   40755 (2)      0      0    4096  9-Mar-2018 07:34 .
+   4206   40755 (2)      0      0   16384  9-Mar-2018 07:34 ..
+   4433  100644 (1)      0      0    1228  9-Mar-2018 07:34 10-persist-clock.conf
+

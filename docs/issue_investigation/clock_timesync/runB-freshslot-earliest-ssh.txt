@@ -1,0 +1,47 @@
+pre-reboot boot_id=07edcde9-decd-478e-830f-b67b4b7126ea
+post-reboot boot_id=084318d5-8056-4086-aba5-5317cd828588  (host waited 48s for sshd)
+Warning: Permanently added '<BENCH>' (ED25519) to the list of known hosts.
+uptime_s_at_first_ssh=39.34
+date=2026-08-26T01:26:27-0400
+epoch=1787721987
+ntpsync=no
+buildinfo=meta-wisekiosk    = HEAD:a9eb3a914793816881e7350ae21d3a2f49f1fbbc
+slot=Booted from: rootfs.0 (A)
+timesyncd=active
+bind_target=not a mountpoint
+--- rauc info /data/update.raucb ---
+rauc-Message: 01:26:30.378: Using central status file /data/rauc/rauc.status
+rauc-Message: 01:26:30.419: Using system config file /etc/rauc/system.conf
+rauc-Message: 01:26:30.420: Reading bundle: /data/update.raucb
+rauc-Message: 01:26:30.461: Verifying bundle signature... 
+rauc-Message: 01:26:30.484: Verified inline signature by 'CN = WiseKiosk Signing Key 2026, O = WiseKiosk, C = US'
+Compatible:     'autonomos-raspberrypi0-wifi'
+Version:        '0.1'
+Description:    'AutonomOS Update Bundle'
+Build:          '20260826050606'
+Hooks:          ''
+Bundle Format:  verity
+  Verity Salt:  '5f968c0ed03626538bb9d4700a170cca8e0edb7325095e013cc7e2ee43a81a9c'
+  Verity Hash:  'a9c30ae420e3cbb7ceeb629e4b662e1953becdd034b7c7caddea7d308a022434'
+  Verity Size:  933888
+Manifest Hash:  '70fc4df32e9e673fc7fc1bc3512ea10b72e88c9da80ca4702f002de708bd7157'
+
+
+1 Image:
+  [1m[rootfs][0m
+    Filename:  core-image-base-raspberrypi0-wifi.rootfs.ext4
+    Type:      ext4 (detected)
+    Checksum:  ac280bf85fd3f693cb6f698c119083eef0d04737729b181a7caa949a61817f15
+    Size:      2.1?GB (2147483648 bytes)
+    Hooks:     post-install
+
+Certificate Chain:
+ 0 Subject: CN = WiseKiosk Signing Key 2026, O = WiseKiosk, C = US
+   Issuer: CN = WiseKiosk Signing Key 2026, O = WiseKiosk, C = US
+   SPKI sha256: <SPKI-FINGERPRINT>
+   Not Before: Aug 15 02:56:16 2026 GMT
+   Not After:  Aug 12 02:56:16 2036 GMT
+
+rauc_info_rc=0
+uptime_s_after_rauc_info=42.66
+CAPTURE_DONE

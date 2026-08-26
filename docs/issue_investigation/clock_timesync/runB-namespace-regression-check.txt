@@ -1,0 +1,24 @@
+Warning: Permanently added '<BENCH>' (ED25519) to the list of known hosts.
+== across the WHOLE persistent journal on this image ==
+226/NAMESPACE occurrences ...... 0
+kiosk-timesync-dir failures .... 0
+timesyncd 'Failed with result' . 1
+boots recorded in journal ...... 88
+
+== per-boot oneshot outcome, last 40 boots ==
+boots where kiosk-timesync-dir ran cleanly: 1 ; without a clean record: 39
+
+== end state ==
+meta-wisekiosk    = HEAD:a9eb3a914793816881e7350ae21d3a2f49f1fbbc
+active
+success
+drwxr-xr-x    2 systemd- systemd-      4096 May 29  2025 .
+drwxr-xr-x    9 root     root          4096 Aug 26 01:27 ..
+-rw-r--r--    1 systemd- systemd-         0 Aug 26 02:45 clock
+170 127 179:4 /systemd-timesync /var/lib/systemd/timesync rw,nosuid,noatime shared:109 master:42 - ext4 /dev/mmcblk0p4 rw
+Booted from: rootfs.0 (A)
+Activated: rootfs.0 (A)
+BOOT_ORDER=A B
+BOOT_A_LEFT=3
+BOOT_B_LEFT=3
+NTPSynchronized=yes

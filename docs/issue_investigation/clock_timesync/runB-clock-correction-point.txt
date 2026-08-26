@@ -1,0 +1,23 @@
+Warning: Permanently added '<BENCH>' (ED25519) to the list of known hosts.
+== current boot, FIX image: where does the clock jump from 2025 to 2026? ==
+entries dated 2025 in this boot: 371
+LAST  2025 entry: 2025-05-29T14:48:35-04:00 <BENCH-HOST> systemd[1]: Finished Record System Boot/Shutdown in UTMP.
+FIRST 2026 entry: 2026-08-26T02:36:48-04:00 <BENCH-HOST> systemd-timesyncd[181]: System clock time unset or jumped backwards, restored from recorded timestamp: Wed 2026-08-26 02:36:48 EDT
+
+== the same jump on the monotonic clock (when in the boot it happened) ==
+[    0.000005] <BENCH-HOST> kernel: sched_clock: 32 bits at 1000kHz, resolution 1000ns, wraps every 2147483647500ns
+[    0.000056] <BENCH-HOST> kernel: clocksource: timer: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1911260446275 ns
+[    0.000140] <BENCH-HOST> kernel: bcm2835: system timer (irq = 27)
+[    0.057055] <BENCH-HOST> kernel: clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604462750000 ns
+[    0.138066] <BENCH-HOST> kernel: PTP clock support registered
+[    0.151592] <BENCH-HOST> kernel: clocksource: Switched to clocksource timer
+[    2.690337] <BENCH-HOST> kernel: clk: Disabling unused clocks
+[    3.427984] <BENCH-HOST> systemd[1]: System time before build time, advancing clock.
+
+== timesyncd start vs NTP sync, monotonic ==
+[   16.722149] <BENCH-HOST> systemd[1]: Starting Network Time Synchronization...
+[   18.961484] <BENCH-HOST> systemd-timesyncd[181]: System clock time unset or jumped backwards, restored from recorded timestamp: Wed 2026-08-26 02:36:48 EDT
+[   19.068533] <BENCH-HOST> systemd[1]: Started Network Time Synchronization.
+[   26.034286] <BENCH-HOST> systemd-timesyncd[181]: Network configuration changed, trying to establish connection.
+
+== systemd's own view of when units started ==

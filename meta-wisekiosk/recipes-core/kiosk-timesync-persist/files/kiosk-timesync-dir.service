@@ -1,0 +1,25 @@
+[Unit]
+Description=Stage the persistent timesync clock dir on /data
+# Creates+chowns /data/systemd-timesync, the BindPaths source named by
+# 10-persist-clock.conf. The drop-in's Wants= re-runs this on every timesyncd
+# start (incl. watchdog restarts), so it is NOT RemainAfterExit.
+# No Requires=: a failed /data must not cancel NTP; a missing source degrades
+# to a non-persistent boot, not a failure.
+# Full rationale: docs/issue_investigation/clock_timesync/README.md.
+DefaultDependencies=no
+After=data.mount
+Before=systemd-timesyncd.service
+# No self-restart to bound; the default 5-starts/10s limit would trip on a
+# timesyncd crash-loop and silently stop staging for the boot.
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+# One statement so the exit status is single-valued: a mkdir failure short-
+# circuits chown, so the unit cannot exit 0 with the dir left root-owned
+# (unwritable by timesyncd's User=, an EACCES swallowed at log_debug). chown -R
+# also re-owns the clock file, defusing a dynamic-UID shift across an OTA.
+ExecStart=/bin/sh -c 'mkdir -p /data/systemd-timesync && exec chown -R systemd-timesync:systemd-timesync /data/systemd-timesync'
+
+[Install]
+WantedBy=sysinit.target

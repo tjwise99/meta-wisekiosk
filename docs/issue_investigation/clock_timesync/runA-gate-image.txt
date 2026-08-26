@@ -1,0 +1,6 @@
+ok    working tree is clean
+ok    HEAD (34a917b018c154afddcd5fa2fe34afbf93033c01) is published on origin
+ok    image names HEAD (34a917b018c154afddcd5fa2fe34afbf93033c01)
+
+reproducibility gate passed
+meta-wisekiosk    = HEAD:34a917b018c154afddcd5fa2fe34afbf93033c01

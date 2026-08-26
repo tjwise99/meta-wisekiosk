@@ -1,0 +1,18 @@
+=== boot_id=1f56592f-ac62-4719-a35d-bcc23526da02 ===
+uptime_s=16.14
+date=2025-05-29T14:48:34-0400
+epoch=1748544514
+buildinfo=meta-wisekiosk    = HEAD:34a917b018c154afddcd5fa2fe34afbf93033c01
+slot=
+ntpsync=
+persist_clock_mtime=2026-08-19T08:30:05-0400
+rootfs_clock_mtime=2026-08-26T00:50:04-0400
+--- rauc info /data/update.raucb (uptime 17.84s) ---
+rauc-Message: 14:48:36.682: Using central status file /data/rauc/rauc.status
+rauc-Message: 14:48:36.745: Using system config file /etc/rauc/system.conf
+rauc-Message: 14:48:36.746: Reading bundle: /data/update.raucb
+rauc-Message: 14:48:36.932: Verifying bundle signature... 
+signature verification failed: Verify error: certificate is not yet valid
+rauc_info_rc=1
+uptime_end_s=18.44
+
