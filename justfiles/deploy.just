@@ -106,6 +106,9 @@ flash device:
     fi
     echo "verified: image bakes the fleet keyring ($BAKED_FP)"
 
+    # Checks the .ext4 the keyring check above read.
+    tools/reproducibility-gate.sh --image "$ROOTFS" || exit 1
+
     echo "Flashing $IMAGE to {{device}}..."
     echo "WARNING: This will overwrite all data on {{device}}!"
     # `|| true`: read exits non-zero at EOF, which errexit would turn into an

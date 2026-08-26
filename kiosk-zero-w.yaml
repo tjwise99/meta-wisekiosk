@@ -163,6 +163,16 @@ local_conf_header:
     # provisioning.
     INHERIT += "kiosk-static-resolv"
 
+    # /etc/buildinfo: the commit each slot was built from (#46). Records only --
+    # tools/reproducibility-gate.sh is what refuses. Global INHERIT so every
+    # route to bitbake carries it. See docs/layers-and-kas.md.
+    INHERIT += "image-buildinfo"
+
+    # Keeps /etc/buildinfo from going stale (#46). IMAGE_CLASSES, not INHERIT:
+    # the deferred inherit orders this after image.bbclass's vardeps append.
+    # See meta-wisekiosk/classes/kiosk-buildinfo-cachesafe.bbclass.
+    IMAGE_CLASSES += "kiosk-buildinfo-cachesafe"
+
   # update-bundle.bb packages whichever image RAUC_SLOT_rootfs names, and its
   # default is autonomos-devel -- a different image, with no surf and no kiosk
   # unit. Installing that bundle would replace the slot and report success.

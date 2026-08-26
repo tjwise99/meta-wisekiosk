@@ -2,7 +2,7 @@
 
 | Document | What question it answers |
 |---|---|
-| [`layers-and-kas.md`](layers-and-kas.md) | How does a tree of YAML and recipes become an image, for someone who has not used Yocto? |
+| [`layers-and-kas.md`](layers-and-kas.md) | How does a tree of YAML and recipes become an image, for someone who has not used Yocto — and which commit is a given image from? |
 | [`rauc-key-rotation.md`](rauc-key-rotation.md) | How do you replace the RAUC signing key the devices trust, and why must it happen in a fixed order? |
 | [`issue_investigation/TEMPLATE.md`](issue_investigation/TEMPLATE.md) | What shape must an issue investigation take, and what must every test run in it name? |
 | [`issue_investigation/boot_cpu_saturation/`](issue_investigation/boot_cpu_saturation/README.md) | Across a boot, is the single core doing work, waiting on hardware, or queued behind something else? |

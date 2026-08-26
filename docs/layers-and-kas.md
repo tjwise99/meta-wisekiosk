@@ -201,3 +201,71 @@ The same steps apply to every other pinned repo. The pins live in three files: m
 `includes/base.yaml`, meta-rauc in `includes/rauc.yaml`, and the three Raspberry Pi repos
 (meta-raspberrypi, meta-lts-mixins, meta-rauc-community) in `includes/platforms/raspberrypi.yaml` —
 `grep -rn 'commit:' includes/` lists them all.
+
+## What commit an image was built from
+
+Every slot carries `/etc/buildinfo`, written by poky's `image-buildinfo` class, switched on by
+`INHERIT += "image-buildinfo"` in `kiosk-zero-w.yaml`. The class walks `BBLAYERS` and asks git for
+each layer's branch and revision. `meta-wisekiosk` is a subdirectory of this repository, so git walks
+up and its line names **this repo's** HEAD:
+
+```
+meta-wisekiosk    = <branch>:<sha>
+```
+
+`grep ^meta-wisekiosk /etc/buildinfo` on a board is how an investigation learns which source built
+the software in front of it.
+
+Left alone the stamp would go **stale**. `image-buildinfo` reads git live in `do_image` but does not
+hash what it read, so the sha reaches no task signature: a commit touching only docs or `tools/`
+moves HEAD, bitbake replays the previous build's stamp, and the check below becomes unsatisfiable on
+a clean, pushed tree — with rebuilding no help, because nothing tells bitbake there is anything to
+redo.
+[`kiosk-buildinfo-cachesafe`](../meta-wisekiosk/classes/kiosk-buildinfo-cachesafe.bbclass) puts the
+sha in `do_image[vardeps]`, so a moved HEAD gives `do_image` a new signature — no matching sstate
+entry, so `do_image`, `do_image_ext4` and `do_image_complete` all regenerate and the deployed `.ext4`
+is fresh. `do_rootfs` is untouched and stays cached, which is where the hours are.
+
+The sha is resolved on the **host** by
+[`tools/write-build-rev.sh`](../tools/write-build-rev.sh), which every build entry point runs before
+bitbake, and read as a plain assignment from a gitignored `meta-wisekiosk/conf/build-rev.inc`.
+Nothing is computed at parse time — no python, no git, no subprocess — so every parse in every
+context reads the same bytes. A build with no injected sha fails loudly rather than quietly
+skipping the re-stamp.
+
+The class is reached through `IMAGE_CLASSES`, not `INHERIT`. `IMAGE_CLASSES` is a deferred inherit,
+so its anonymous python registers *after* `image.bbclass` has appended to the same flag with no
+trailing separator; the leading space inside the appended literal is what stops the two tokens
+welding into one phantom variable. A global `INHERIT` parses too early to be sure of that order. No
+static check can prove the seam held — verify with `bitbake-dumpsig` on `do_image`:
+`KIOSK_BUILDINFO_REV` must appear as its own entry with the host sha as its value. The backstop is
+the gate below, which refuses a stale image at flash.
+
+Alternatives rejected:
+
+- a parse-time `${@git...}` — basehash differed between the cooker and the worker's reparse.
+- `do_image[nostamp]` — re-executes without changing a hash, so setscene can still restore a stale
+  `do_image_complete`.
+- `require conf/build-rev.inc` — bitbake's own parse error would replace the class's
+  operator-facing `bb.fatal`.
+
+That is a record, not a guarantee — the class never fails a build, and writes the literal `<unknown>`
+when git errors. The guarantee is [`tools/reproducibility-gate.sh`](../tools/reproducibility-gate.sh),
+which every recipe that puts an image on a board calls, and which **refuses, with no override flag**,
+unless:
+
+- the working tree is clean by `git status --porcelain` — **untracked files included**. Stronger than
+  the ` -- modified` flag `image-buildinfo` writes, which is `git diff` and therefore tracked-only: a
+  new untracked `.bb` is picked up by `BBFILES` and ships while the layer reads clean. The gate
+  ignores that flag and asks git itself.
+- HEAD is reachable from some ref on `origin`. It never fetches, and an unreachable `origin` refuses
+  rather than assuming — offline is not distinguishable from never-pushed.
+- where the caller holds the rootfs (`flash`, `kiosk-preflight`), `/etc/buildinfo` names a 40-hex sha
+  equal to HEAD. The bundle-shipping recipes cannot check this — a `.raucb` is not readable with
+  `debugfs` and nothing binds one to a rootfs (#48 bundle-image-tie) — so they enforce the first two.
+
+The rotation path is gated positionally — every install in
+[`tools/rauc-rotate.sh`](../tools/rauc-rotate.sh) is preceded by `kiosk-preflight`.
+
+There is no CI here and every image is hand-built, so shipping is the only place the guarantee can be
+made — and a skip flag would be used on exactly the day it mattered.

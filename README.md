@@ -49,7 +49,8 @@ meta-wisekiosk/                    <- the repository (project scaffolding)
 │   ├── classes/
 │   └── recipes-*/
 ├── Justfile, justfiles/           build, OTA and device commands
-├── tools/                         provisioning, bundle delivery, device debugging, doc gate, CI guards
+├── tools/                         provisioning, bundle delivery, device debugging, doc gate,
+│                                  CI guards, the build-commit writer and reproducibility gate
 ├── docs/                          layers-and-kas.md, issue_investigation/
 └── sources/                       gitignored; everything kas fetches lands here
 ```
@@ -64,7 +65,8 @@ behind those changes are indexed in **[docs/README.md](docs/README.md)**.
 ## Quick start
 
 `kas-container` runs the build inside a container, so a working **Docker or Podman** is a
-prerequisite — it is the only host dependency besides `just`.
+prerequisite. The flash and OTA paths additionally need `git`, `debugfs` (`e2fsprogs`) and `openssl`
+on the host, and refuse rather than skip when one is missing.
 
 ```sh
 curl -L -o ~/bin/kas-container https://raw.githubusercontent.com/siemens/kas/5.4/kas-container
@@ -76,8 +78,12 @@ cp secrets.yaml.tmpl ~/.config/wisekiosk/secrets.yaml   # fill in; lives OUTSIDE
 just build          # kas fetches sources/, applies the patches, builds core-image-base
 ```
 
-`just build` is `kas-container build kiosk-zero-w.yaml`. The first run clones every repo declared
-across the kas include chain — `includes/base.yaml`, `includes/rauc.yaml` and
+`just build` writes `meta-wisekiosk/conf/build-rev.inc` (the commit being built, see
+[what commit an image was built from](docs/layers-and-kas.md#what-commit-an-image-was-built-from))
+and then runs `kas-container build kiosk-zero-w.yaml`. Calling `kas-container` directly skips the
+first half: on a fresh clone bitbake refuses to parse, and on a tree that has built before it builds
+against the *previous* run's commit — which the gate then refuses at flash. The first run clones
+every repo declared across the kas include chain — `includes/base.yaml`, `includes/rauc.yaml` and
 `includes/platforms/raspberrypi.yaml` — into `sources/`: nine repositories, several GB and a long
 while before any compiling starts.
 
@@ -94,7 +100,10 @@ just provision-fresh-card /dev/sdX  # mounts partition 4, writes the site config
 ```
 
 `flash` refuses an image not baking the fleet signing keyring, or one mixing builds: a wrong keyring
-is repairable only by another reflash. Provision before first boot — WiFi credentials are the way in.
+is repairable only by another reflash. It also refuses, with no override, a build from a dirty or
+unpushed tree, or one whose `/etc/buildinfo` does not name the current HEAD — see
+[what commit an image was built from](docs/layers-and-kas.md#what-commit-an-image-was-built-from).
+Provision before first boot — WiFi credentials are the way in.
 
 `/data` is the **fourth** partition, and nothing on the card says so — the layout is boot, rootfs-a,
 rootfs-b, data. `provision-fresh-card` derives it; provisioning by hand instead
@@ -118,9 +127,12 @@ of them at once. Boards get swapped on this unit; `just find <cidr>` is how you 
 the one now on the bench. An explicit `host` argument still wins over both.
 
 `kiosk-preflight` refuses a delivery that cannot work — wrong slot size, stale bundle, no room on
-`/data` — before the transfer. Delivery is a single md5-verified `scp` (`kiosk-send-direct`, ~45s for
-the ~114MB bundle): the sustained-transfer wedge that once forced chunking was top-OPP memory
-corruption, fixed by the clock cap in
+`/data` — before the transfer. Every recipe that puts software on a board also refuses, with no
+override, a build from a dirty or unpushed tree, so a build shipped from this host is always one
+someone else can check out; tying a bundle to the rootfs inside it is #48 bundle-image-tie.
+Delivery is a single md5-verified `scp` (`kiosk-send-direct`, ~45s for the ~114MB bundle): the
+sustained-transfer wedge that once forced chunking was top-OPP memory corruption, fixed by the
+clock cap in
 [`kiosk-cpufreq`](meta-wisekiosk/recipes-core/kiosk-cpufreq/kiosk-cpufreq_1.0.bb), so the chunker was
 removed (issue #29 remove chunked bundle delivery, verified 5/5 on the capped board).
 

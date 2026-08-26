@@ -36,7 +36,10 @@
 ### Run 1 — <board role>, commit `<sha>`
 
 - **Board:** role label only (bench / prod) + hardware model. NO IP, hostname, MAC, or serial — this repo is public.
-- **Image commit:** `<full git sha the running image was built from>`, confirmed by `<baked /etc/build-info | built+flashed from this commit on YYYY-MM-DD>`. An unverifiable "probably this build" is not a commit — leave the run out until you can name it.
+- **Image commit:** `<full git sha the running image was built from>`, confirmed by
+  `grep ^meta-wisekiosk /etc/buildinfo` on the board (its line reads `meta-wisekiosk = branch:sha`)
+  or by `<built+flashed from this commit on YYYY-MM-DD>`. An unverifiable "probably this build"
+  is not a commit — leave the run out until you can name it.
 - **Scripts deployed (each, with disposition):**
   - `<name>` — ONE-OFF, not shipped → committed here beside this README.
   - `<name>` — DURABLE → ships via `<recipe path>`, PR #NN.

@@ -56,6 +56,7 @@ rotate-build name=fleet-key:
 [group('rotate')]
 [doc("Rotate the signing key on one device (transition then end-state)")]
 rotate-run host name=fleet-key *flags:
+    # Gated via kiosk-preflight inside rauc-rotate.sh; held by ci-guards guard 10.
     tools/rauc-rotate.sh "{{host}}" "{{keys-root}}/{{name}}" {{flags}}
 
 # Check a device trusts the new key. Add: --empirical <old.raucb> <new.raucb>

@@ -15,6 +15,10 @@ local/
 # nature, and this repository is PUBLIC, so a stray `git add -A` publishes it.
 scratchpad/
 
+# Written by tools/write-build-rev.sh before every build (#46). Build input, not
+# source. Must be ignored, not merely untracked -- see ci-guards.sh guard 10.
+meta-wisekiosk/conf/build-rev.inc
+
 # The skills under .claude/ are tracked; these two are per-checkout machine
 # state, and settings.local.json in particular carries local filesystem paths.
 .claude/settings.local.json

@@ -141,6 +141,7 @@ casync-stats store:
 [group('ota')]
 [doc("Build the RAUC update bundle")]
 kiosk-bundle kconfig="kiosk-zero-w.yaml":
+    tools/write-build-rev.sh
     kas-container shell {{kconfig}} -c "bitbake update-bundle"
 
 # Every check here catches a failure that otherwise surfaces only after the
@@ -156,6 +157,9 @@ kiosk-preflight image="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wi
     test -f "{{bundle}}" || { echo "no bundle at {{bundle}}"; exit 1; }
     IMAGE_B=$(stat -Lc %s "{{image}}")
     BUNDLE_B=$(stat -Lc %s "{{bundle}}")
+
+    # Checks the rootfs, not the bundle -- nothing binds the two (#48).
+    tools/reproducibility-gate.sh --image "{{image}}" || exit 1
 
     # Nothing ties the image inside the bundle to the slot that receives it. The
     # two agree only because both derive from AUTONOMOS_ROOTFS_SIZE in the same
@@ -205,6 +209,9 @@ kiosk-send-direct bundle="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0
     SCP="scp -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
     DEST=/data/update.raucb
     test -f "{{bundle}}" || { echo "no bundle at {{bundle}}"; exit 1; }
+    # Directly invocable, so it cannot rely on kiosk-preflight having run.
+    # --tree: the argument is a .raucb and nothing binds it to a rootfs (#48).
+    tools/reproducibility-gate.sh --tree || exit 1
     LOCAL_MD5=$(md5sum "{{bundle}}" | cut -d' ' -f1)
     SIZE=$(stat -Lc%s "{{bundle}}")
     echo "sending {{bundle}} ($SIZE B, md5 $LOCAL_MD5) -> {{host}}:$DEST"
@@ -227,6 +234,9 @@ kiosk-send-direct bundle="build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0
 [doc("Install a staged bundle and show slot state")]
 kiosk-install host=kiosk-host:
     SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
+    # Directly invocable, so it cannot rely on kiosk-preflight having run.
+    # --tree: what installs is already on the device. `|| exit 1` -- no set -e here.
+    tools/reproducibility-gate.sh --tree || exit 1
     echo "== before"
     $SSH {{host}} 'fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT; rauc status 2>&1 | grep -E "Booted|Activated|boot status"'
     echo "== clock sanity: RAUC rejects a bundle whose cert is not yet valid"
