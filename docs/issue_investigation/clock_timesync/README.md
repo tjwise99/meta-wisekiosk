@@ -62,8 +62,8 @@ SPKI fingerprint reads `<SPKI-FINGERPRINT>`. Nothing else was altered — the Yo
     instant sshd answers — the exact point a real `just kiosk-install` reaches a freshly rebooted
     board. Because it runs on the host it survives an OTA; a device-side witness unit does not,
     which is why the fresh-slot evidence is host-side in both runs. This repo is public, so the one
-    line that held the board's address now reads `HOST=${KIOSK_HOST:?…}`; as run it was a literal
-    `root@<addr>`. That is the only edit to any committed script.
+    line that held the board's address reads `HOST=${KIOSK_HOST:?…}` as committed; as run it was a
+    literal `root@<addr>`. That is the only edit to any committed script.
   - [`clockproof.sh`](clockproof.sh) + [`clockproof.service`](clockproof.service) — ONE-OFF, not
     shipped → committed here. Device-side pre-timesyncd witness: the unit fires at `sysinit` after
     `data.mount` and before `systemd-timesyncd`, and the script records the clock, `NTPSynchronized`
@@ -146,7 +146,7 @@ The tree facts the runs rest on.
 
 **The board has no RTC and no fake-hwclock.** Every boot starts at systemd's compiled-in build-time
 floor and only a recorded timestamp or NTP moves it forward — the tree stated this before the
-investigation, in the retired workaround's own comment at `justfiles/ota.just:243-246` as of commit
+investigation, in the host-skew workaround's own comment at `justfiles/ota.just:243-246` as of commit
 `34a917b`. The floor is visible in the captures as `System time before build time, advancing clock`
 at monotonic 3.43 s ([`runB-clock-correction-point.txt`](runB-clock-correction-point.txt)) and as a
 first kernel journal line dated `2025-05-29`
@@ -167,24 +167,24 @@ floor is below it, so signature verification fails before the bundle is ever rea
 **The fix under test, as it sits in the tree.** The recipe
 `meta-wisekiosk/recipes-core/kiosk-timesync-persist/kiosk-timesync-persist_1.0.bb` installs two
 files and auto-enables the oneshot (`:15-16`, `:18-24`). The drop-in
-`meta-wisekiosk/recipes-core/kiosk-timesync-persist/files/10-persist-clock.conf:23` carries
+`meta-wisekiosk/recipes-core/kiosk-timesync-persist/files/10-persist-clock.conf:14` carries
 `BindPaths=-/data/systemd-timesync:/var/lib/systemd/timesync`, ordered behind the staging oneshot and
-`data.mount` at `:19-20`. The leading `-` on the source makes a missing
+`data.mount` at `:10-11`. The leading `-` on the source makes a missing
 `/data/systemd-timesync` skip the bind instead of failing timesyncd's namespace setup
 (`226/NAMESPACE`), so a degraded `/data` leaves the board running NTP non-persistent rather than with
 no time source at all. The oneshot
-`meta-wisekiosk/recipes-core/kiosk-timesync-persist/files/kiosk-timesync-dir.service:36` creates and
+`meta-wisekiosk/recipes-core/kiosk-timesync-persist/files/kiosk-timesync-dir.service:20` creates and
 chowns the bind source in one statement, ordered `After=data.mount`,
-`Before=systemd-timesyncd.service` at `:21-22`. It is a `BindPaths` and not a symlink because
+`Before=systemd-timesyncd.service` at `:10-11`. It is a `BindPaths` and not a symlink because
 timesyncd ships `ProtectSystem=strict`: a write outside the sandbox's writable set fails EROFS and
 systemd swallows that at `log_debug`, so a symlink would be a silent no-op.
 
 **Image wiring:** `kiosk-zero-w.yaml:112` adds `kiosk-timesync-persist` to `IMAGE_INSTALL:append`.
 Run A's image predates that line, which is why the units are absent there.
 
-**The workaround the fix retires.** On `34a917b`, `justfiles/ota.just:242-254` force-set the device
-clock from the host before every install. On this branch, `justfiles/ota.just:242-255` reports the
-skew and no longer corrects it, so a persistence failure surfaces as the documented
+**The host-skew workaround (baseline `34a917b`).** On `34a917b`, `justfiles/ota.just:242-254` force-set
+the device clock from the host before every install. On this branch, `justfiles/ota.just:242-253`
+reports the skew and does not correct it, so a persistence failure surfaces as the documented
 `certificate is not yet valid` refusal rather than being masked by the host.
 
 **NTP servers are not configured in this tree**, so timesyncd uses its compiled-in defaults; the
@@ -370,9 +370,9 @@ start-limit event emits two of them (`Start request repeated too quickly` and `F
 - **Code change:** `kiosk-timesync-persist` — the recipe at
   `meta-wisekiosk/recipes-core/kiosk-timesync-persist/kiosk-timesync-persist_1.0.bb` with its
   `kiosk-timesync-dir.service` oneshot and `10-persist-clock.conf` drop-in, wired into the image at
-  `kiosk-zero-w.yaml:112` — and the retirement of the host clock force-set in
-  `justfiles/ota.just:242-255`, which now reports skew instead of correcting it. Both ship in
-  PR #59 persist the clock across an OTA, which closes #31.
+  `kiosk-zero-w.yaml:112` — and the host clock force-set in `justfiles/ota.just:242-253` reduced to
+  reporting skew instead of correcting it. Both ship in PR #59 persist the clock across an OTA, which
+  closes #31.
 
 Every one-off script named above is committed in this directory. Every durable change links to its
 recipe/PR.

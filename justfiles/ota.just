@@ -239,12 +239,10 @@ kiosk-install host=kiosk-host:
     tools/reproducibility-gate.sh --tree || exit 1
     echo "== before"
     $SSH {{host}} 'fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT; rauc status 2>&1 | grep -E "Booted|Activated|boot status"'
-    # The host force-setting the clock is retired: it now persists on /data
-    # across an OTA (kiosk-timesync-persist), so a fresh slot boots inside the
-    # cert's validity window on its own. See the #31 investigation. The skew is
-    # still REPORTED, not corrected -- if persistence ever fails, a cold clock is
-    # the documented cause of a "certificate is not yet valid" refusal
-    # (2026-08-13), and this line is where that shows without the host masking it.
+    # Report clock skew but do NOT set the device clock: kiosk-timesync-persist
+    # keeps timesyncd's clock across an OTA, so a cold clock at install time means
+    # persistence failed -- the cause of the "certificate is not yet valid" refusal
+    # verified below (see the #31 investigation).
     DEV_EPOCH=$($SSH {{host}} 'date +%s')
     HOST_EPOCH=$(date +%s)
     SKEW=$(( HOST_EPOCH - DEV_EPOCH ))

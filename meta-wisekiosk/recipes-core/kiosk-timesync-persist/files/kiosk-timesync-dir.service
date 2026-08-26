@@ -1,38 +1,22 @@
 [Unit]
 Description=Stage the persistent timesync clock dir on /data
-# This unit stages the BindPaths source named by the systemd-timesyncd drop-in --
-# existence and ownership of /data/systemd-timesync -- ordered After=data.mount and
-# Before=systemd-timesyncd.service, so on a normal boot the dir is present on the
-# real /data before timesyncd builds its namespace, and the clock persists.
-# A missing source is not fatal: the drop-in writes the bind with a `-` prefix, so
-# systemd skips it and timesyncd starts anyway, non-persistent for that boot. That
-# is the degraded path, not the intended one -- staging is what keeps the board on
-# the persistent path. timesyncd also restarts on its own
-# (WatchdogSec=3min) and its view of /data can change under it, so this is NOT
-# RemainAfterExit -- the drop-in Wants=+After= it, so it re-runs on every timesyncd
-# start and re-stages against whatever /data currently is.
-#
-# After=data.mount holds the mkdir until the mount reaches a terminal state, so on
-# the normal boot the dir is created on the real /data. No Requires=: a failed
-# /data must not cancel NTP (mirrors every other /data consumer). The degraded
-# cost is explicit: the clock is written to the rootfs slot and is silently
-# non-persistent for that boot until the next stage puts it back on /data.
+# Creates+chowns /data/systemd-timesync, the BindPaths source named by
+# 10-persist-clock.conf. Re-runs on every timesyncd start (incl. watchdog
+# restarts), so it is NOT RemainAfterExit and disables its own start-limit.
+# No Requires=: a failed /data must not cancel NTP; a missing source degrades
+# to a non-persistent boot, not a failure.
+# Full rationale: docs/issue_investigation/clock_timesync/README.md.
 DefaultDependencies=no
 After=data.mount
 Before=systemd-timesyncd.service
-# The oneshot re-runs on every timesyncd start (incl. watchdog restarts); its own
-# default 5-starts/10s limit would otherwise trip on an unrelated timesyncd crash-
-# loop and silently stop staging for the boot. It has no self-restart to bound.
 StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
-# One statement, so the exit status is single-valued: a mkdir failure short-
-# circuits chown, so the unit cannot exit 0 with the dir created but left
-# root-owned (which timesyncd's User= could not write -- an EACCES swallowed at
-# log_debug). It does not make the filesystem effect atomic; it makes a
-# success-with-unowned-dir unreportable. chown -R also re-owns the pre-existing
-# clock file, defusing a dynamic-UID shift across an OTA.
+# One statement so the exit status is single-valued: a mkdir failure short-
+# circuits chown, so the unit cannot exit 0 with the dir left root-owned
+# (unwritable by timesyncd's User=, an EACCES swallowed at log_debug). chown -R
+# also re-owns the clock file, defusing a dynamic-UID shift across an OTA.
 ExecStart=/bin/sh -c 'mkdir -p /data/systemd-timesync && exec chown -R systemd-timesync:systemd-timesync /data/systemd-timesync'
 
 [Install]
