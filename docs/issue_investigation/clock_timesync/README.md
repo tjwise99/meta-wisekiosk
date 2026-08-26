@@ -12,9 +12,10 @@ separately because they are different builds, records `dns != ok` 0/40 and `sync
 boots at the image's build-time floor, and RAUC refuses a bundle in that window because the fleet
 signing certificate is not yet valid. The fix is `kiosk-timesync-persist`, which binds
 systemd-timesyncd's saved clock onto the `/data` partition RAUC never touches, so a fresh slot boots
-inside the certificate's validity window on its own. Both arms ran on #46-stamped images that name
-their own build commit, host-side and on the board. Time-to-NTP-sync is unchanged by the fix and was
-never expected to change; what collapses is the clock's error during that window, from ~15 months to
+inside the certificate's validity window on its own. Both arms ran on images carrying the #46
+build-stamp record that name their own build commit, host-side and on the board. Time-to-NTP-sync is
+unchanged by the fix and was never expected to change; what collapses is the clock's error during
+that window, from ~15 months to
 seconds, and with it a `rauc info` that went from `rc=1 certificate is not yet valid` to `rc=0`.
 
 ## Test runs
@@ -68,9 +69,8 @@ SPKI fingerprint reads `<SPKI-FINGERPRINT>`. Nothing else was altered — the Yo
     shipped → committed here. Device-side pre-timesyncd witness: the unit fires at `sysinit` after
     `data.mount` and before `systemd-timesyncd`, and the script records the clock, `NTPSynchronized`
     and `rauc info` at that point. Used only for the Run A baseline capture
-    [`runA-pretimesyncd-witness.txt`](runA-pretimesyncd-witness.txt); superseded by
-    [`earliest-ssh-capture.sh`](earliest-ssh-capture.sh), which is host-side and therefore survives
-    an OTA into a fresh slot, which a device-side unit does not.
+    [`runA-pretimesyncd-witness.txt`](runA-pretimesyncd-witness.txt); superseded for the fresh-slot
+    arm by [`earliest-ssh-capture.sh`](earliest-ssh-capture.sh), for the reason given above.
   - [`analyze-bootloop.sh`](analyze-bootloop.sh) — ONE-OFF, not shipped → committed here. Corpus
     analyzer. Self-tested against a seeded corpus carrying one DNS failure, one unsynchronized boot,
     one non-empty pstore, one mmc error and one dropped RAUC counter; all five fired, so a clean
@@ -182,8 +182,8 @@ systemd swallows that at `log_debug`, so a symlink would be a silent no-op.
 **Image wiring:** `kiosk-zero-w.yaml:112` adds `kiosk-timesync-persist` to `IMAGE_INSTALL:append`.
 Run A's image predates that line, which is why the units are absent there.
 
-**The host-skew workaround (baseline `34a917b`).** On `34a917b`, `justfiles/ota.just:242-255` force-set
-the device clock from the host before every install. On this branch, `justfiles/ota.just:242-253`
+**The host-skew workaround (baseline `34a917b`).** `justfiles/ota.just:242-255` force-set the device
+clock from the host before every install. In the tree as shipped, `justfiles/ota.just:242-254`
 reports the skew and does not correct it, so a persistence failure surfaces as the documented
 `certificate is not yet valid` refusal rather than being masked by the host.
 
@@ -193,7 +193,7 @@ captures show it contacting `time3.google.com`
 
 ## Metrics
 
-One table per run. Run A's corpus and Run B's corpus are never merged.
+One table per run.
 
 ### Run A — image `34a917b`, N = 40 boots, 2026-08-25 23:39:10 → 2026-08-26 00:47:47 EDT
 
@@ -301,10 +301,8 @@ seconds before any NTP packet lands. That ordering is an **n = 1 observation**, 
 `bootloop-collect.sh:103` records `ntp_contact_s`, `ntp_sync_s`, `synchronized`, `dns`, the RAUC
 counters, pstore and mmc errors, and **no clock-restore field at all**, so neither 40-boot log
 contains a single `restored from recorded timestamp` line to count. The restore is witnessed only by
-the two single-boot captures above, matching the n = 1 fresh-slot arm noted under Limits. On the fix
-image the
-bind is live inside timesyncd's own namespace —
-`/proc/<MainPID>/mountinfo` shows `/systemd-timesync /var/lib/systemd/timesync … ext4 /dev/mmcblk0p4`
+the two single-boot captures above. On the fix image the bind is live inside timesyncd's own namespace
+— `/proc/<MainPID>/mountinfo` shows `/systemd-timesync /var/lib/systemd/timesync … ext4 /dev/mmcblk0p4`
 ([`runB-onboard-fix-health.txt`](runB-onboard-fix-health.txt)). `findmnt` from an ordinary shell
 reports "not a mountpoint" on a *working* fix, because `BindPaths` exists only inside the unit's
 namespace; a `findmnt`-based check would have looked like a failure on a healthy board.
@@ -332,13 +330,13 @@ errors. The namespace class is counted at a wider scope — `226/NAMESPACE` occu
 recorded boots**, which spans Run B's 40 plus the earlier fix boots
 ([`runB-namespace-regression-check.txt`](runB-namespace-regression-check.txt)). On the fresh slot
 `kiosk-timesync-dir.service` reported `Result=success`, `ExecMainStatus=0`, `NRestarts=0`
-([`runB-freshslot-bootstart.txt`](runB-freshslot-bootstart.txt)). Under a restart stress test, 8 timesyncd restarts spaced 12 s apart were 8/8 active
-with the bind present every time
+([`runB-freshslot-bootstart.txt`](runB-freshslot-bootstart.txt)). Under a restart stress test, 8
+timesyncd restarts spaced 12 s apart were 8/8 active with the bind present every time
 ([`runB-restart-resilience-spaced.txt`](runB-restart-resilience-spaced.txt)). A first attempt at 10
 back-to-back restarts saw one failure at restart 6, and the journal names the cause as systemd's own
-5-starts-per-10 s burst limit — `Start request repeated too quickly` /
-`start-limit-hit`, not `226/NAMESPACE`, whose count stayed 0 — so that is an artifact of the test
-method, and it recovered by itself on restart 7
+5-starts-per-10 s burst limit — `Start request repeated too quickly` / `start-limit-hit`, not
+`226/NAMESPACE`, whose count stayed 0 — so that is an artifact of the test method, and it recovered
+by itself on restart 7
 ([`runB-restart-resilience-rapid.txt`](runB-restart-resilience-rapid.txt)). That capture's
 `timesyncd failures this boot: 2` is not two failures: the harness greps log lines, and the one
 start-limit event emits two of them (`Start request repeated too quickly` and `Failed with result
@@ -370,7 +368,7 @@ start-limit event emits two of them (`Start request repeated too quickly` and `F
 - **Code change:** `kiosk-timesync-persist` — the recipe at
   `meta-wisekiosk/recipes-core/kiosk-timesync-persist/kiosk-timesync-persist_1.0.bb` with its
   `kiosk-timesync-dir.service` oneshot and `10-persist-clock.conf` drop-in, wired into the image at
-  `kiosk-zero-w.yaml:112` — and `justfiles/ota.just:242-253`, which reports the host/device skew
+  `kiosk-zero-w.yaml:112` — and `justfiles/ota.just:242-254`, which reports the host/device skew
   instead of force-setting the device clock (the `34a917b:242-255` behavior). Both ship in PR #59
   persist the clock across an OTA, which closes #31.
 
