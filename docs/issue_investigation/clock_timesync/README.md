@@ -64,6 +64,13 @@ SPKI fingerprint reads `<SPKI-FINGERPRINT>`. Nothing else was altered — the Yo
     which is why the fresh-slot evidence is host-side in both runs. This repo is public, so the one
     line that held the board's address now reads `HOST=${KIOSK_HOST:?…}`; as run it was a literal
     `root@<addr>`. That is the only edit to any committed script.
+  - [`clockproof.sh`](clockproof.sh) + [`clockproof.service`](clockproof.service) — ONE-OFF, not
+    shipped → committed here. Device-side pre-timesyncd witness: the unit fires at `sysinit` after
+    `data.mount` and before `systemd-timesyncd`, and the script records the clock, `NTPSynchronized`
+    and `rauc info` at that point. Used only for the Run A baseline capture
+    [`runA-pretimesyncd-witness.txt`](runA-pretimesyncd-witness.txt); superseded by
+    [`earliest-ssh-capture.sh`](earliest-ssh-capture.sh), which is host-side and therefore survives
+    an OTA into a fresh slot, which a device-side unit does not.
   - [`analyze-bootloop.sh`](analyze-bootloop.sh) — ONE-OFF, not shipped → committed here. Corpus
     analyzer. Self-tested against a seeded corpus carrying one DNS failure, one unsynchronized boot,
     one non-empty pstore, one mmc error and one dropped RAUC counter; all five fired, so a clean
@@ -282,8 +289,13 @@ The mechanism behind the Run B column is caught in the log
 [   19.068533] systemd[1]: Started Network Time Synchronization.
 ```
 
-The clock is corrected at monotonic ~19 s from the `/data` record, roughly 37 s before NTP sync
-lands at ~56 s. On the fix image the bind is live inside timesyncd's own namespace —
+The clock is corrected at monotonic **18.96 s** from the `/data` record. That is one boot's reading,
+so it is not subtractable from the **~55.5 s Run B mean** time-to-NTP-sync, which is an average over
+40 boots; the comparable single-boot figure is the fresh slot, where NTP sync landed at monotonic
+**58.15 s** ([`runB-freshslot-bootstart.txt`](runB-freshslot-bootstart.txt)). Either way the ordering
+is what carries, and it holds on every boot in the corpus: the record restores a real clock within a
+few seconds of timesyncd starting, tens of seconds before any NTP packet lands. On the fix image the
+bind is live inside timesyncd's own namespace —
 `/proc/<MainPID>/mountinfo` shows `/systemd-timesync /var/lib/systemd/timesync … ext4 /dev/mmcblk0p4`
 ([`runB-onboard-fix-health.txt`](runB-onboard-fix-health.txt)). `findmnt` from an ordinary shell
 reports "not a mountpoint" on a *working* fix, because `BindPaths` exists only inside the unit's
@@ -319,7 +331,10 @@ back-to-back restarts saw one failure at restart 6, and the journal names the ca
 5-starts-per-10 s burst limit — `Start request repeated too quickly` /
 `start-limit-hit`, not `226/NAMESPACE`, whose count stayed 0 — so that is an artifact of the test
 method, and it recovered by itself on restart 7
-([`runB-restart-resilience-rapid.txt`](runB-restart-resilience-rapid.txt)).
+([`runB-restart-resilience-rapid.txt`](runB-restart-resilience-rapid.txt)). That capture's
+`timesyncd failures this boot: 2` is not two failures: the harness greps log lines, and the one
+start-limit event emits two of them (`Start request repeated too quickly` and `Failed with result
+'start-limit-hit'`). One event, counted twice.
 
 ### Limits to carry with these findings
 

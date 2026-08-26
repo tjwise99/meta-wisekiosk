@@ -3,12 +3,13 @@ Description=Stage the persistent timesync clock dir on /data
 # The BindPaths source in the systemd-timesyncd drop-in must exist each time that
 # unit's namespace is built, or namespace setup fails 226/NAMESPACE and -- with
 # timesyncd's Restart=always/RestartSec=0 -- burns the start limit in ms and the
-# board never syncs time. timesyncd restarts on its own (WatchdogSec=3min), and
-# its view of /data can change under it: on a degraded boot data.mount fails, this
-# runs before the mount, so the dir lands on the rootfs; then mount-fdir mounts
-# the real /data over it and a later restart would bind an empty /data. So this is
-# NOT RemainAfterExit -- the drop-in Wants=+After= it, so it re-runs on every
-# timesyncd start and re-stages against whatever /data currently is.
+# board never syncs time. This unit stages that source -- existence and ownership
+# of /data/systemd-timesync -- ordered After=data.mount and Before=systemd-
+# timesyncd.service, so on a normal boot the dir is present on the real /data
+# before timesyncd builds its namespace. timesyncd also restarts on its own
+# (WatchdogSec=3min) and its view of /data can change under it, so this is NOT
+# RemainAfterExit -- the drop-in Wants=+After= it, so it re-runs on every timesyncd
+# start and re-stages against whatever /data currently is.
 #
 # After=data.mount holds the mkdir until the mount reaches a terminal state, so on
 # the normal boot the dir is created on the real /data. No Requires=: a failed

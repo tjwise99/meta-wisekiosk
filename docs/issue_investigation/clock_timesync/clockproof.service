@@ -1,0 +1,13 @@
+[Unit]
+Description=Low-uptime clock witness (#31 verification harness)
+DefaultDependencies=no
+After=data.mount
+Before=systemd-timesyncd.service
+
+[Service]
+Type=oneshot
+ExecStart=/data/clockproof.sh
+TimeoutStartSec=60
+
+[Install]
+WantedBy=sysinit.target
