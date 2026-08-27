@@ -73,7 +73,7 @@ wheels = [
 
 [[package]]
 name = "kas"
-version = "5.0"
+version = "5.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "distro" },
@@ -81,10 +81,13 @@ dependencies = [
     { name = "jsonschema" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bb/97/69e515d6c0de2b85d576a77c59c3b58ed5f5b01ed6d6218a0e5c7637f38c/kas-5.0.tar.gz", hash = "sha256:9b00d56726b6a303c2bd9c0b65896b5b1f185849075c51a397c7f7d4eb46e375", size = 82504, upload-time = "2025-10-17T13:15:48.194Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/be/42/4c492db21778eb99c33febf1ec5c8369d885825b412c6ba016299098c396/kas-5.4.tar.gz", hash = "sha256:446c087382a01c4c543c981e0204c7933f525ac92fafc00c9973c8ba0da0990a", size = 87144, upload-time = "2026-06-24T12:59:40.233Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0e/1f/ad0c236e92fc866d4b0d44db10ad9be8aa1f0dbfee53a937bac3506de71f/kas-5.4-py3-none-any.whl", hash = "sha256:f63a964068c1db73075faf10185b0ab5386d6876e8ff5f28560354075e8890f1", size = 95750, upload-time = "2026-06-24T12:59:39.111Z" },
+]
 
 [[package]]
-name = "meta-autonomos"
+name = "meta-wisekiosk"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
