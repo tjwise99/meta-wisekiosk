@@ -1,8 +1,9 @@
 version: 2
 
 # Dependabot covers only the dependency surfaces GitHub can parse from a
-# manifest: the Actions this repo's workflows call, and the pip toolchain in
-# pyproject.toml. It does NOT and cannot manage the Yocto layer pins that
+# manifest: the Actions this repo's workflows call, and the uv-managed Python
+# toolchain (uv.lock + pyproject.toml). It does NOT and cannot manage the Yocto
+# layer pins that
 # actually build the image -- poky, meta-openembedded, meta-arm, meta-autonomos
 # and their SRCREVs live as git revisions in includes/base.yaml and are updated
 # by hand against upstream, because kas/BitBake pinning is invisible to it. A
@@ -27,7 +28,9 @@ updates:
           - minor
           - patch
 
-  - package-ecosystem: pip
+  # uv, not pip: this project is uv-managed (uv.lock is the source of truth);
+  # the pip ecosystem would update pyproject.toml but never the lockfile.
+  - package-ecosystem: uv
     directory: /
     schedule:
       interval: weekly
