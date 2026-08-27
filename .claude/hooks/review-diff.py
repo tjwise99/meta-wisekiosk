@@ -353,7 +353,14 @@ def parse_checklist(contributing_path):
 # tooling path drew the keyring and site-secret questions — and a reader trained
 # to wave three irrelevant questions through is how a real question 9 gets waved
 # through.
-SECRET_PATH = re.compile(r"(rauc|\bsign(ing|ed|er|s)?\b|secrets?|keyring|gitleaks|\bkeys?\b)", re.I)
+#
+# `provision` is here for the same reason: tools/provision.sh is the file that
+# writes a site's SSID and PSK hash onto a card, so it is the exact subject of
+# question 10 (no secret as a build input) and question 11 (no identity in the
+# tree) -- and it drew neither, because its name carries no signing word.
+SECRET_PATH = re.compile(
+    r"(rauc|\bsign(ing|ed|er|s)?\b|secrets?|keyring|gitleaks|\bkeys?\b|\bprovision(ing)?\b)", re.I
+)
 
 
 def select_groups(changed):
@@ -378,8 +385,13 @@ def select_groups(changed):
         if norm == "kiosk-zero-w.yaml" or norm.startswith("includes/"):
             needed.add("Build config & pins")
 
-        # Patches kas applies to the upstream checkout before bitbake parses it.
-        if norm.startswith("patches/"):
+        # Patches kas applies to the upstream checkout before bitbake parses it
+        # -- and the ones a recipe applies through SRC_URI, which live beside
+        # that recipe under meta-wisekiosk/. Questions 7 and 8 (why not a
+        # bbappend, does it still apply) are the same questions wherever the
+        # patch sits, and keying on the `patches/` prefix alone asked neither of
+        # them about the in-layer half.
+        if norm.startswith("patches/") or norm.endswith(".patch"):
             needed.add("Upstream patches")
 
         if SECRET_PATH.search(norm):

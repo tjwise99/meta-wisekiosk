@@ -21,7 +21,9 @@
 #
 # Fail-open everywhere: no jq, no payload, no identity file, or an unparseable
 # anything, and the call goes through. A guard that blocks on its own breakage
-# gets disabled, and then it guards nothing.
+# gets disabled, and then it guards nothing. A missing map says so on stderr --
+# fail-open is a degradation, and a silent one cannot be told from a rule that
+# looked and found nothing.
 #
 # Self-test: bash .claude/hooks/guard-test.sh  (wired into `just guards` and CI)
 set -uo pipefail
@@ -33,11 +35,38 @@ tool=$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null) || exit
 [ -n "$tool" ] || exit 0
 
 REPO=${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
-# Both overridable so the self-test can drive real fixtures rather than the
-# machine it happens to run on. A test that only passes on one host measures
-# that host.
-IDFILE=${KIOSK_IDENTITY_FILE:-$REPO/local/device-identity.md}
+# This and KIOSK_IDENTITY_FILE below are overridable so the self-test can drive
+# real fixtures rather than the machine it happens to run on. A test that only
+# passes on one host measures that host.
 SYSFS=${KIOSK_SYSFS_ROOT:-/sys}
+
+# `local/` is gitignored, so it exists in the PRIMARY worktree and nowhere else.
+# Resolving the map as `$REPO/local/...` therefore found nothing from a linked
+# worktree -- and a worktree is exactly where device work happens, so rules 1
+# and 3 fail-opened in the one place they are most needed, silently.
+#
+# `git rev-parse --git-common-dir` names the SHARED git directory (the primary
+# tree's `.git`, whichever worktree asks), so its parent is the primary worktree
+# root. The answer is relative to $REPO when asked from the primary tree itself
+# and absolute from a linked one, so both spellings are handled.
+IDFILE=${KIOSK_IDENTITY_FILE:-}
+if [ -z "$IDFILE" ]; then
+    IDFILE=$REPO/local/device-identity.md
+    if [ ! -f "$IDFILE" ]; then
+        gitcommon=$(git -C "$REPO" rev-parse --git-common-dir 2>/dev/null)
+        if [ -n "$gitcommon" ]; then
+            case "$gitcommon" in /*) ;; *) gitcommon=$REPO/$gitcommon ;; esac
+            primary=$(cd "$gitcommon/.." 2>/dev/null && pwd)
+            [ -n "$primary" ] && IDFILE=$primary/local/device-identity.md
+        fi
+    fi
+fi
+# Fail-open stays, but never silently: a disarmed prod rule that says nothing is
+# indistinguishable from a prod rule that looked and found nothing to block.
+# Said only for Bash, the only tool the map can decide anything about.
+if [ ! -f "$IDFILE" ] && [ "$tool" = Bash ]; then
+    printf '%s\n' "guard.sh: no local/device-identity.md reachable from $REPO -- the PROD-board rules (1, 3) are INERT for this call." >&2
+fi
 
 # One `key = value` from the map's ```identity fence, empty when absent. Scoped
 # to the fence so the prose around it -- which necessarily shows the format --
@@ -134,19 +163,36 @@ Bash)
             esac
             [ "$armed" -eq 1 ] || continue
             if [ "$skip" -eq 1 ]; then skip=0; continue; fi
-            case "$w" in
-                # ssh options that take a separate value; the value is not a target.
-                -l | -p | -o | -i | -F | -b | -c | -m | -E | -J | -L | -R | -D | -W | -Q | -S | -e)
-                    skip=1; continue ;;
-                -*) continue ;;
-            esac
-            if [ -z "$target" ]; then target=$w; continue; fi
+            # Options BEFORE the target are the ssh client's; options after it
+            # belong to the remote command's own prefix and take a different
+            # list, so the two stages are separated rather than sharing one
+            # `-*) continue`, which swallowed `-u` and then read its value `root`
+            # as the remote command.
+            if [ -z "$target" ]; then
+                case "$w" in
+                    # ssh options that take a separate value; the value is not a target.
+                    -l | -p | -o | -i | -F | -b | -c | -m | -E | -J | -L | -R | -D | -W | -Q | -S | -e)
+                        skip=1; continue ;;
+                    -*) continue ;;
+                esac
+                target=$w; continue
+            fi
             # A privilege or assignment prefix is not the remote command --
             # `ssh <board> 'sudo reboot'` reboots the board, and reading the
             # prefix as the verb made `sudo` a one-word bypass of rule 1.
             case "$w" in
-                sudo | doas | env | nice | ionice | command | time) continue ;;
+                sudo | doas | env | nice | ionice | command | time | timeout | stdbuf | setsid | nohup | chrt) continue ;;
                 [A-Za-z_]*=*) continue ;;
+                # A wrapper option that takes a SEPARATE value: the value is not
+                # the remote command either. `ssh <board> sudo -u root reboot`
+                # otherwise reported `-u` as the verb and rule 1 saw no power
+                # word at all -- the same hole CMDPOS closes for local commands.
+                # Value-taking options only, listed rather than inferred: sudo's
+                # `-n` and `-i` take NO value, so skipping a word after them
+                # would step over the very verb this is looking for.
+                -u | -g | -U | -C | -p | -r | -t | --user | --group | --chdir)
+                    skip=1; continue ;;
+                -*) continue ;;
             esac
             printf '%s\t%s\n' "$target" "$w"
             target=""
@@ -173,7 +219,24 @@ Bash)
     # need root, and justfiles/deploy.just itself runs `"${SUDO[@]}" bmaptool`.
     # Anything using the bare anchor is a hole; the self-test carries a
     # sudo-prefixed must-block case per rule so a regression fails the build.
-    CMDPOS='(^|[;&|(]|&&|\|\|)[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*((sudo|doas|env|nice|ionice|command|time)[[:space:]]+(-[^[:space:]]+[[:space:]]+)*)*'
+    #
+    # The prefix is one REPEATING group of elements in any order and quantity,
+    # not assignments-then-wrappers. Ordering them let `env VAR=V <cmd>` past
+    # every rule that anchors here -- and an assignment AFTER the wrapper word is
+    # the ONLY way `env` is ever used, so the ordered form was open to the
+    # commonest spelling there is. `sudo VAR=V <cmd>` and `env VAR=V sudo <cmd>`
+    # are the same hole.
+    CMDWRAP='sudo|doas|env|nice|ionice|command|time|timeout|stdbuf|setsid|nohup|chrt'
+    # An element: a wrapper word, a NAME=value assignment, an attached option, or
+    # a bare numeric argument (`timeout 60`, `nice 10`).
+    CMDELEM="((${CMDWRAP})|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|-[^[:space:]]+|[0-9]+[smhd]?)[[:space:]]+"
+    # An option's SEPARATE value (`-u root`, `-n 5`) is accepted once, in the
+    # final slot before the command. Deliberately not part of the repeating group
+    # above: the value pattern matches any word, so mid-prefix it would swallow a
+    # real command as some option's value and re-anchor on the word after it --
+    # `sudo -n grep -c reboot /var/log/messages` would read as a `reboot` in
+    # command position and false-block the main legitimate activity on prod.
+    CMDPOS="(^|[;&|(]|&&|\\|\\|)[[:space:]]*(${CMDELEM})*(-[^[:space:]]+[[:space:]]+[^-[:space:]][^[:space:]]*[[:space:]]+)?"
 
     # --- RULE 1 -- destructive operation aimed at the PROD board -------------
     # The prod unit is wall-mounted and carries the live soak run (issue #40).
@@ -215,7 +278,7 @@ Bash)
         ssh_verb "$v" && prod_reboot=1
     done
     if [ "$targets_prod" -eq 1 ] && { [ "$prod_reboot" -eq 1 ] || printf '%s' "$code" | grep -qE \
-        "just[[:space:]]+(kiosk-ota|kiosk-install|kiosk-send-direct|kiosk-rollback|kiosk-reboot|reboot|rauc-install|provision-device|bootprofile|flash)([[:space:]]|$)|rauc[[:space:]]+install|systemctl[[:space:]]+(reboot|poweroff)|${CMDPOS}(reboot|shutdown|halt|poweroff)([[:space:]]|$)|tools/provision\.sh[[:space:]]+device|tools/rauc-rotate"; }; then
+        "just[[:space:]]+(kiosk-ota|kiosk-install|kiosk-send-direct|kiosk-rollback|kiosk-reboot|reboot|rauc-install|provision-device|bootprofile|flash)([[:space:]]|$)|rauc[[:space:]]+install|systemctl[[:space:]]+(reboot|poweroff|halt|kexec|shutdown)|${CMDPOS}(reboot|shutdown|halt|poweroff)([[:space:]]|$)|tools/provision\.sh[[:space:]]+device|tools/rauc-rotate"; }; then
         cat >&2 <<'MSG'
 BLOCKED: that is a destructive operation aimed at the PROD board.
 

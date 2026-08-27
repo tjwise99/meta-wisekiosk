@@ -60,8 +60,13 @@ export KIOSK_SYSFS_ROOT="$T/sys"
 export KIOSK_DEV_ROOT="$T/dev"
 
 pass=0; fail=0
+# Extra environment for the guard under test, as `env` arguments. Used by the
+# worktree block, which has to UNSET the identity-file override -- an assignment
+# prefix cannot express that, and a prefix on a shell FUNCTION persists past the
+# call in bash, which would silently re-point every later case.
+TENV=()
 t() { # $1=label $2=expect $3=payload
-  out=$(printf '%s' "$3" | "$G" 2>&1); rc=$?
+  out=$(printf '%s' "$3" | env ${TENV+"${TENV[@]}"} "$G" 2>&1); rc=$?
   got=$([ $rc -eq 2 ] && echo BLOCK || echo ALLOW)
   if [ "$got" = "$2" ]; then r="ok  "; pass=$((pass+1)); else r="FAIL"; fail=$((fail+1)); fi
   printf '%s expected=%-5s got=%-5s  %s\n' "$r" "$2" "$got" "$1"
@@ -102,6 +107,18 @@ t "prod sudo reboot"      BLOCK "$(b "ssh root@$PROD 'sudo reboot'")"
 t "prod sudo reboot bare" BLOCK "$(b "ssh root@$PROD sudo reboot")"
 t "prod shutdown -r"      BLOCK "$(b "ssh root@$PROD 'shutdown -r now'")"
 t "prod local sudo reboot" BLOCK "$(b "ssh root@$PROD uptime && sudo reboot")"
+# An assignment AFTER the privilege word. `env VAR=V <cmd>` is the ONLY way env
+# is ever used, and the prefix used to accept assignments only BEFORE it -- so
+# the commonest spelling there is walked past rules 1, 2, 5 and 7 untouched.
+t "prod sudo VAR= reboot" BLOCK "$(b "ssh root@$PROD uptime && sudo LC_ALL=C reboot")"
+t "prod env VAR= reboot"  BLOCK "$(b "ssh root@$PROD uptime && env LC_ALL=C reboot")"
+# A wrapper option with a SEPARATE value walked the anchor past the verb too.
+t "prod sudo -u root"     BLOCK "$(b "ssh root@$PROD uptime && sudo -u root reboot")"
+t "prod ssh sudo -u root" BLOCK "$(b "ssh root@$PROD sudo -u root reboot")"
+# `systemctl halt` and `systemctl kexec` end the soak exactly as `reboot` does;
+# the systemctl alternation listed only reboot/poweroff.
+t "prod systemctl halt"   BLOCK "$(b "ssh root@$PROD systemctl halt")"
+t "prod systemctl kexec"  BLOCK "$(b "ssh root@$PROD systemctl kexec")"
 
 echo "--- must BLOCK: rule 2, image write to a non-removable device ---"
 t "flash to fixed disk"   BLOCK "$(b 'just flash /dev/sdz')"
@@ -121,6 +138,11 @@ t "tee to disk"           BLOCK "$(b 'cat core-image.wic | sudo tee /dev/sdz > /
 t "wipefs a disk"         BLOCK "$(b 'sudo wipefs -a /dev/sdz')"
 t "mkfs a partition"      BLOCK "$(b 'sudo mkfs.vfat /dev/sdz1')"
 t "by-id path"            BLOCK "$(b 'sudo dd if=x.wic of=/dev/disk/by-id/fixture-fixed-disk bs=4M')"
+# The same prefix salad, on a writer that has no `of=` for the rule to fall back
+# on -- so these measure the command-position anchor and nothing else.
+t "sudo VAR= wipefs"      BLOCK "$(b 'sudo LC_ALL=C wipefs -a /dev/sdz')"
+t "env VAR= sudo wipefs"  BLOCK "$(b 'env KIOSK=1 sudo wipefs -a /dev/sdz')"
+t "sudo -u root bmaptool" BLOCK "$(b 'sudo -u root bmaptool copy core-image.wic.bz2 /dev/sdz')"
 
 echo "--- must BLOCK: rules 3-7 ---"
 t "ssh + suppress"        BLOCK "$(b "ssh root@$BENCH uptime 2>/dev/null")"
@@ -150,6 +172,15 @@ t "pipe to sudo tee"      BLOCK "$(b 'echo x | sudo tee /boot/config.txt')"
 t "sudo fw_setenv"        BLOCK "$(b 'sudo fw_setenv bootdelay 0')"
 t "doas sed on /boot"     BLOCK "$(b 'doas sed -i s/a/b/ /boot/cmdline.txt')"
 t "assignment + sed"      BLOCK "$(b 'FOO=1 sed -i s/a/b/ /boot/cmdline.txt')"
+# Assignment AFTER the privilege word, which is how `env` is spelled and how a
+# locale-pinned sudo run is spelled. Ordering the prefix as assignments-then-
+# wrappers left every one of these allowed.
+t "env VAR= rm /boot"     BLOCK "$(b 'env LC_ALL=C rm /boot/cmdline.txt')"
+t "sudo VAR= sed /boot"   BLOCK "$(b 'sudo LC_ALL=C sed -i s/a/b/ /boot/cmdline.txt')"
+t "env VAR= sudo rm"      BLOCK "$(b 'env KIOSK=1 sudo rm /boot/cmdline.txt')"
+t "sudo -u root rm /boot" BLOCK "$(b 'sudo -u root rm /boot/cmdline.txt')"
+t "nice -n 5 tee /boot"   BLOCK "$(b 'nice -n 5 tee /boot/config.txt')"
+t "timeout 60 rm /boot"   BLOCK "$(b 'timeout 60 rm /boot/cmdline.txt')"
 t "exit-echo after pipe"  BLOCK "$(b 'just verify | tail -50 ; echo "exit=$?"')"
 t "kiosk-ssh + suppress"  BLOCK "$(b "tools/kiosk-ssh.sh root@$BENCH uptime 2>/dev/null")"
 t "pkill bare -f"         BLOCK "$(b "$KILLPAT -f doseresp.sh")"
@@ -159,6 +190,8 @@ t "pkill combined -af"    BLOCK "$(b "$KILLPAT -af foo")"
 # too -- and the harness's own command line is still what the -f matches.
 t "sudo pkill bare -f"    BLOCK "$(b "sudo $KILLPAT -f doseresp.sh")"
 t "env pgrep bare -f"     BLOCK "$(b "env $GREPPAT -f nettest")"
+t "env VAR= pkill -f"     BLOCK "$(b "env LC_ALL=C $KILLPAT -f doseresp.sh")"
+t "sudo -u root pkill -f" BLOCK "$(b "sudo -u root $KILLPAT -f doseresp.sh")"
 # The other two rules the heredoc strip disarmed. A shell reads these bodies.
 t "lifeline in heredoc"   BLOCK "$(b "$(printf "ssh root@%s bash <<'EOF'\nsystemctl disable sshd\nEOF" "$BENCH")")"
 t "/boot in heredoc"      BLOCK "$(b "$(printf "bash <<'EOF'\necho x > /boot/cmdline.txt\nEOF")")"
@@ -187,6 +220,18 @@ t "prod soak | grep"      ALLOW "$(b "just soak-summary root@$PROD 24 | grep reb
 # The other direction of the sudo-prefix fix: skipping the prefix must land on
 # the REAL verb, not on the argument of a grep one word further along.
 t "prod sudo grep reboot" ALLOW "$(b "ssh root@$PROD 'sudo grep -c reboot /var/log/messages'")"
+# The other direction of the prefix rework. A locale-pinned read of the soak log
+# is an OBSERVATION, and so is one run under `sudo -n`: accepting an option's
+# separate value mid-prefix would swallow `grep` as the value of `-n` and anchor
+# on the word after `-c`, which is the literal `reboot` being searched FOR.
+t "prod env grep reboot"  ALLOW "$(b "ssh root@$PROD 'env LC_ALL=C grep -c reboot /var/log/messages'")"
+t "prod local env grep"   ALLOW "$(b "ssh root@$PROD uptime && env LC_ALL=C grep -c reboot /tmp/soak.log")"
+t "prod sudo -n grep"     ALLOW "$(b "ssh root@$PROD uptime && sudo -n grep -c reboot /tmp/soak.log")"
+t "prod ssh sudo -u grep" ALLOW "$(b "ssh root@$PROD sudo -u root grep -c reboot /var/log/messages")"
+# Rule 1 is scoped to PROD, not to the verb: the bench board is the reboot target.
+t "bench systemctl halt"  ALLOW "$(b "ssh root@$BENCH systemctl halt")"
+t "bench env VAR= OTA"    ALLOW "$(b "env LC_ALL=C just kiosk-ota host=root@$BENCH")"
+t "bench sudo -u reboot"  ALLOW "$(b "ssh root@$BENCH sudo -u root reboot")"
 echo "--- must ALLOW: rule 2's legal targets ---"
 t "flash to card reader"  ALLOW "$(b 'just flash /dev/sdy')"
 t "dd to removable part"  ALLOW "$(b 'dd if=x.img of=/dev/sdy1')"
@@ -218,6 +263,12 @@ t "arm/boot in a path"    ALLOW "$(b 'ls build/work-shared/kernel-source/arch/ar
 t "sudo read /boot"       ALLOW "$(b 'sudo cat /boot/cmdline.txt')"
 t "sudo ls /boot"         ALLOW "$(b 'sudo ls -l /boot/')"
 t "sudo cp FROM /boot"    ALLOW "$(b 'sudo cp /boot/uImage /data/uImage-known-good')"
+# Nor may the repeating prefix group: reads of /boot stay reads however many
+# wrapper words, assignments and options sit in front of them.
+t "sudo cat /boot"        ALLOW "$(b 'sudo cat /boot/config.txt')"
+t "env VAR= cat /boot"    ALLOW "$(b 'env LC_ALL=C cat /boot/config.txt')"
+t "sudo -u root ls /boot" ALLOW "$(b 'sudo -u root ls -l /boot/')"
+t "sudo -u root sysctl"   ALLOW "$(b 'sudo -u root systemctl is-active sshd')"
 t "slot rootfs boot"      ALLOW "$(b 'cd /mnt/root/boot && cat /data/uImage-arm1 > uImage')"
 t "rauc mark-good"        ALLOW "$(b 'rauc status mark-good booted')"
 t "fw_setenv mentioned"   ALLOW "$(b 'echo "re-arm via rauc, not fw_setenv"')"
@@ -252,6 +303,45 @@ rc=$?
 if [ $rc -eq 2 ]; then r="ok  "; pass=$((pass+1)); else r="FAIL"; fail=$((fail+1)); fi
 printf '%s expected=BLOCK got=%-5s  hatch in ENVIRONMENT only\n' "$r" "$([ $rc -eq 2 ] && echo BLOCK || echo ALLOW)"
 
+echo "--- worktree: the map lives in the PRIMARY tree only ---"
+# `local/` is gitignored, so a linked worktree never has one. Resolving the map
+# as `$REPO/local/...` therefore found nothing from a worktree and rules 1 and 3
+# fail-opened THERE -- which is where device work is done, so the guard was inert
+# in its most important location and said nothing about it.
+#
+# A REAL `git worktree`, not a hand-made directory pair: the resolution runs
+# `git rev-parse --git-common-dir`, and a fixture that does not exercise that
+# call would pass whether or not the resolution works.
+#
+# git exports GIT_DIR, GIT_INDEX_FILE and friends to its hooks, and this suite
+# runs from .githooks/pre-commit by way of tools/ci-guards.sh. Left in place
+# they aim the fixture's `git init` -- and the guard's own `rev-parse` -- back
+# at THIS repository, whose primary tree does have a map: the case would then
+# pass on a resolution it never exercised. Unset for the fixture and for the
+# guard alike.
+GITUNSET=(-u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_OBJECT_DIRECTORY
+          -u GIT_COMMON_DIR -u GIT_PREFIX -u GIT_NAMESPACE
+          -u GIT_ALTERNATE_OBJECT_DIRECTORIES)
+if env "${GITUNSET[@]}" git -c init.defaultBranch=main init -q "$T/primary" \
+   && env "${GITUNSET[@]}" git -C "$T/primary" -c user.email=guard@test -c user.name=guard \
+        commit -q --allow-empty -m init \
+   && env "${GITUNSET[@]}" git -C "$T/primary" worktree add -q "$T/wt" -b guard-test-wt; then
+    mkdir -p "$T/primary/local"
+    cp "$T/device-identity.md" "$T/primary/local/device-identity.md"
+    # -u, because the suite exports KIOSK_IDENTITY_FILE globally and this case
+    # is about the DEFAULT resolution path -- with the override in place it would
+    # pass without the primary tree ever being consulted.
+    TENV=("${GITUNSET[@]}" -u KIOSK_IDENTITY_FILE "CLAUDE_PROJECT_DIR=$T/wt")
+    t "worktree prod OTA"     BLOCK "$(b "just kiosk-ota host=root@$PROD")"
+    t "worktree prod reboot"  BLOCK "$(b "ssh root@$PROD reboot")"
+    t "worktree prod suppress" BLOCK "$(b "ssh root@$PROD uptime 2>/dev/null")"
+    t "worktree bench OTA"    ALLOW "$(b "just kiosk-ota host=root@$BENCH")"
+    TENV=()
+else
+    fail=$((fail+1))
+    printf 'FAIL expected=BLOCK got=-      git worktree fixture could not be built -- worktree resolution NOT measured\n'
+fi
+
 echo "--- fail-open: no identity map (a fresh clone, or CI) ---"
 # The prod rules cannot fire without the map, and that is deliberate: a guard
 # that blocked every device command on a checkout with no local/ would be turned
@@ -259,6 +349,15 @@ echo "--- fail-open: no identity map (a fresh clone, or CI) ---"
 # CLAUDE.md and CONTRIBUTING.md both say the guard is only as good as the map.
 KIOSK_IDENTITY_FILE="$T/does-not-exist.md" t "prod op, no map" ALLOW "$(b "just kiosk-ota host=root@$PROD")"
 KIOSK_IDENTITY_FILE="$T/does-not-exist.md" t "boot write, no map" BLOCK "$(b 'echo x > /boot/cmdline.txt')"
+# Degraded, but not SILENT. Without the notice, "the prod rules found nothing to
+# block" and "the prod rules were switched off entirely" are the same output.
+printf '%s' "$(b "just kiosk-ota host=root@$PROD")" > "$T/nomap.json"
+notice=$(KIOSK_IDENTITY_FILE="$T/does-not-exist.md" "$G" < "$T/nomap.json" 2>&1 > /dev/null)
+case "$notice" in
+    *INERT*) r="ok  "; pass=$((pass+1)) ;;
+    *)       r="FAIL"; fail=$((fail+1)) ;;
+esac
+printf '%s expected=NOTICE                   no-map fail-open announces itself on stderr\n' "$r"
 
 echo
 printf 'pass=%s fail=%s\n' "$pass" "$fail"
