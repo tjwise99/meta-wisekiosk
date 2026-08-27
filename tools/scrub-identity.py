@@ -24,7 +24,9 @@ Two halves, because they fail differently:
   KNOWN      the literal strings in gitignored `local/device-identity.md`,
              substring-matched. Only this half can catch a hostname or an SSID,
              because neither has a recognisable shape -- and it can only run
-             where that file exists.
+             where that file exists. Being gitignored, it exists in the PRIMARY
+             worktree only, so it is resolved through the shared git directory
+             rather than under the tree being scanned.
 
 When the map is absent the run reports PARTIAL, names the half that did not run,
 and FAILS: a check that cannot see the map must not claim the tree is scrubbed,
@@ -128,9 +130,40 @@ def repo_root(argv_root):
     return Path(top)
 
 
+def map_path(root):
+    """Where `root`'s identity map lives, resolved through the SHARED git dir.
+
+    `local/` is gitignored, so it exists in the PRIMARY worktree and nowhere
+    else. Looking only under the tree being scanned therefore found nothing from
+    a linked worktree: the strict routes refused to run at all there, and the
+    `--allow-partial` route quietly dropped to a pattern-only scan -- losing the
+    one half that can see a hostname, an SSID or a PSK hash, in a tree that is
+    about to be pushed.
+
+    `git rev-parse --git-common-dir` names the shared git directory (the primary
+    tree's `.git`, whichever worktree asks), so its parent is the primary
+    worktree root. The answer is relative to `root` from the primary tree itself
+    and absolute from a linked one, so both spellings are handled. The map under
+    `root` still wins when it is there, which keeps an explicitly passed root
+    authoritative over its own tree.
+    """
+    direct = root / MAP_REL
+    if direct.exists():
+        return direct
+    result = subprocess.run(['git', 'rev-parse', '--git-common-dir'], cwd=root,
+                            capture_output=True, text=True)
+    shared = result.stdout.strip()
+    if result.returncode != 0 or not shared:
+        return direct
+    shared = Path(shared)
+    if not shared.is_absolute():
+        shared = root / shared
+    return shared.parent / MAP_REL
+
+
 def load_map(root):
     """[(key, real, placeholder)] for the scanned rows, or None if no map."""
-    path = root / MAP_REL
+    path = map_path(root)
     if not path.exists():
         return None
     rows, inside = [], False
@@ -176,6 +209,14 @@ def main():
 
     root = repo_root(argv[1] if len(argv) > 1 else None)
     rows = load_map(root)
+
+    # Degraded, but never silently. The stdout PARTIAL line below reaches the
+    # caller who reads the report; this reaches the one who only reads the exit
+    # code, which `--allow-partial` makes 0. Same sentence the device guard says
+    # when its own copy of this map is out of reach.
+    if rows is None:
+        print(f'{SELF}: no {MAP_REL} reachable from {root} -- the KNOWN half '
+              '(hostname, SSID, PSK hash) is INERT for this run.', file=sys.stderr)
 
     findings, rewritten, scanned = [], [], 0
 
