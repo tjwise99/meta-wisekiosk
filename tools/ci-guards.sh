@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Repository invariants. CI and the pre-commit hook run this same script, so a
-# guard cannot pass locally and fail in CI, or the reverse.
+# Repository invariants. CI and the pre-commit hook run this same script, so the
+# guard set cannot diverge. A guard may still fail closed locally where the host
+# lacks a prerequisite CI installs -- guard 4 needs PyYAML (README "Quick
+# start") -- which is a missing prerequisite, not a divergent verdict on the tree.
 #
 # These are deliberately dependency-light: no bitbake, no network. A Yocto build
 # is hours on this tree and cannot gate a commit; what CAN gate a commit is
@@ -117,16 +119,16 @@ done < <(git ls-files -- '*.sh' "${scan3[@]}")
 # file wins, so a duplicated name is discarded with no warning at all.
 #
 # Cannot-check is not check-clean: without a YAML parser this fails closed
-# rather than exit 0 on a search it could not perform -- the same rule the
-# identity scan states for a missing map. CI installs PyYAML before this runs,
-# so a green CI means the files were parsed; a local route without it fails
-# here with the fix in the message. The message names the missing tool, so it
-# reads as "cannot check", not the older false positive of "every kas file is
-# invalid YAML".
+# rather than exit 0 on a search it could not perform, as the identity scan
+# fails closed for a missing map. CI installs PyYAML before this runs, so a
+# green CI means the files were parsed; a local route without it fails here,
+# pointing at the README prerequisite. The message names the missing tool, so
+# it reads as "cannot check", not the older false positive of "every kas file
+# is invalid YAML".
 if ! command -v python3 > /dev/null; then
     bad "guard 4 cannot check YAML: python3 not available"
 elif ! python3 -c 'import yaml' 2>/dev/null; then
-    bad "guard 4 cannot check YAML: python3 has no yaml module -- run 'python3 -m pip install pyyaml' (CI installs it automatically)"
+    bad "guard 4 cannot check YAML: python3 has no yaml module -- install PyYAML; see README \"Quick start\" for a PEP-668-safe route. CI installs it automatically."
 else
     badyaml=0
     while IFS= read -r f; do
