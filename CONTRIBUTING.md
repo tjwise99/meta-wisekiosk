@@ -51,6 +51,13 @@ configuration and runs everywhere. The known-value half reads `local/device-iden
 gitignored and therefore absent in CI — so a run there reports PARTIAL, never "clean". A hostname or
 an SSID has no recognisable shape; only the map can catch one, and only where the map exists.
 
+**A PARTIAL scan exits 1.** A run that could not perform half its search must not return the code
+for "nothing found", so the absence of the map is a finding wherever the map could exist. The one
+caller that structurally cannot hold it — CI, which clones without `local/` — passes
+`--allow-partial` and carries the reason in its own step. On a checkout with no map the pre-commit
+hook and `just guards` therefore fail where CI passes: create `local/device-identity.md`, or pass
+`--allow-partial` yourself and know that a hostname or an SSID went unlooked-for.
+
 ## Documentation conventions
 
 **Colocation, and one owner per fact.** Documentation lives beside the code it explains — a recipe's
@@ -111,8 +118,10 @@ which is why `.claude/hooks/guard.sh` ships with `guard-test.sh` beside it and w
 Each question is an obligation on the author that leaves no artifact, so no check decides it — the
 reviewer is the mechanism. `.claude/hooks/review-diff.py` selects the groups below from the paths a
 commit records and puts those questions in front of the model before the commit lands; the group
-names there and the `**Group**` headings here are one taxonomy authored in two files, so a rename in
-either place silently selects nothing.
+names there and the `**Group**` headings here are one taxonomy authored in two files, and a rename in
+either place would silently select nothing. [`tools/ci-guards.sh`](tools/ci-guards.sh) guard 13 holds
+the two sides equal — a name on one side only, or a group carrying no numbered question, fails the
+guards.
 
 **Cite a question by number *and* name** — `question 9, *One-way lock*`. A bare number resolves
 silently to whatever occupies it after a renumber.

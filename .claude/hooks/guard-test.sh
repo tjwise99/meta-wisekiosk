@@ -10,6 +10,13 @@
 # EVERY rule is tested in BOTH directions. A guard that fires on legal input is
 # its own failure, and a must-block case hides that completely.
 #
+# Both directions of every INPUT SHAPE the guard normalises, too, not only of
+# every rule. A suite with no heredoc must-block case and no sudo-prefixed case
+# reported pass=60 fail=0 while the guard allowed an OTA to prod inside
+# `ssh … 'bash -s' <<'EOF'` and `sudo bmaptool copy <image> /dev/sda` against a
+# fixed disk: "the guard passed" and "the guard never looked" were identical for
+# those two paths. A new normalisation step needs its own pair of cases.
+#
 # Identity and sysfs are FIXTURES, never this machine and never the real map:
 #   - the real map is gitignored, so a test reading it could not run in CI, and
 #     a test with real values baked in would publish them (this repo is PUBLIC);
@@ -39,8 +46,18 @@ mkdir -p "$T/sys/block/sdz" "$T/sys/block/sdy"
 echo 0 > "$T/sys/block/sdz/removable"   # a fixed disk
 echo 1 > "$T/sys/block/sdy/removable"   # a card reader
 
+# A /dev fixture, for the same reason sysfs is one. `/dev/disk/by-id/...` is a
+# symlink to a disk node, and taking only its leading component made it an
+# unknown name -- which is the ALLOWED path, so a by-id write to the system disk
+# went through. Resolving needs a real symlink, and a real one on this machine
+# would make the case untestable in CI.
+mkdir -p "$T/dev/disk/by-id"
+: > "$T/dev/sdz"
+ln -s ../../sdz "$T/dev/disk/by-id/fixture-fixed-disk"
+
 export KIOSK_IDENTITY_FILE="$T/device-identity.md"
 export KIOSK_SYSFS_ROOT="$T/sys"
+export KIOSK_DEV_ROOT="$T/dev"
 
 pass=0; fail=0
 t() { # $1=label $2=expect $3=payload
@@ -57,6 +74,8 @@ b() { jq -nc --arg c "$1" '{tool_name:"Bash",tool_input:{command:$c}}'; }
 e() { jq -nc --arg f "$1" '{tool_name:"Edit",tool_input:{file_path:$f}}'; }
 
 PROD='198.51.100.7'; BENCH='198.51.100.14'; PHOST='fixture-board0-wifi'
+# Assembled, so no line in this file is itself the banned spelling.
+KILLPAT='pk''ill'; GREPPAT='pg''rep'
 
 echo "--- must BLOCK: rule 1, destructive op aimed at PROD ---"
 t "prod OTA by address"   BLOCK "$(b "just kiosk-ota host=root@$PROD")"
@@ -65,6 +84,17 @@ t "prod rauc install"     BLOCK "$(b "ssh root@$PROD rauc install /data/update.r
 t "prod bare reboot"      BLOCK "$(b "ssh root@$PROD reboot")"
 t "prod reprovision"      BLOCK "$(b "tools/provision.sh device root@$PROD")"
 t "prod scp-style target" BLOCK "$(b "just kiosk-send-direct host=root@$PROD:/data")"
+# The hostname in ssh-target position, with no `user@` to key on. `-l root <host>`
+# and a bare `ssh <host> <cmd>` are ordinary spellings, and matching the bare
+# TOKEN is not available here -- it is also the MACHINE name (see the ALLOW
+# cases below). Position is what separates them.
+t "prod ssh, no user@"    BLOCK "$(b "ssh $PHOST reboot")"
+t "prod ssh -l root"      BLOCK "$(b "ssh -l root $PHOST reboot")"
+t "prod host= no user@"   BLOCK "$(b "just kiosk-ota host=$PHOST")"
+# THE heredoc regression. tools/kiosk-ssh.sh documents `'bash -s' <<'EOF'` as the
+# way to batch remote work, so this is the encouraged spelling, not an evasion --
+# and stripping the body disarmed rules 1, 4 and 5 for it.
+t "prod OTA in heredoc"   BLOCK "$(b "$(printf "tools/kiosk-ssh.sh root@%s 'bash -s' <<'EOF'\nrauc install /data/update.raucb\nreboot\nEOF" "$PROD")")"
 
 echo "--- must BLOCK: rule 2, image write to a non-removable device ---"
 t "flash to fixed disk"   BLOCK "$(b 'just flash /dev/sdz')"
@@ -72,8 +102,20 @@ t "dd to nvme"            BLOCK "$(b 'dd if=core-image.wic of=/dev/nvme0n1 bs=4M
 t "dd to virtio disk"     BLOCK "$(b 'dd if=core-image.wic of=/dev/vda bs=4M')"
 t "bmaptool to fixed"     BLOCK "$(b 'bmaptool copy core-image.wic.bz2 /dev/sdz')"
 t "dd to fixed partition" BLOCK "$(b 'dd if=x.img of=/dev/sdz1')"
+# Every one of these needs root, and justfiles/deploy.just runs bmaptool under
+# sudo, so the sudo-prefixed form is the NATURAL hand-run spelling -- it moved
+# the writer off command position and the whole rule stopped applying.
+t "sudo bmaptool"         BLOCK "$(b 'sudo bmaptool copy core-image.wic.bz2 /dev/sdz')"
+t "sudo dd, quoted of="   BLOCK "$(b "sudo dd if=x.wic of='/dev/sdz' bs=4M")"
+t "device via variable"   BLOCK "$(b 'D=/dev/sdz; sudo dd if=x.wic of=$D')"
+t "provision-fresh-card"  BLOCK "$(b 'just provision-fresh-card /dev/sdz')"
+t "redirect to disk"      BLOCK "$(b 'cat core-image.wic > /dev/sdz')"
+t "tee to disk"           BLOCK "$(b 'cat core-image.wic | sudo tee /dev/sdz > /dev/null')"
+t "wipefs a disk"         BLOCK "$(b 'sudo wipefs -a /dev/sdz')"
+t "mkfs a partition"      BLOCK "$(b 'sudo mkfs.vfat /dev/sdz1')"
+t "by-id path"            BLOCK "$(b 'sudo dd if=x.wic of=/dev/disk/by-id/fixture-fixed-disk bs=4M')"
 
-echo "--- must BLOCK: rules 3-6 ---"
+echo "--- must BLOCK: rules 3-7 ---"
 t "ssh + suppress"        BLOCK "$(b "ssh root@$BENCH uptime 2>/dev/null")"
 t "array form + suppress" BLOCK "$(b "ssh=(ssh -o BatchMode=yes root@$BENCH)
 timeout 60 \"\${ssh[@]}\" uptime 2>/dev/null")"
@@ -88,6 +130,13 @@ t "tee into /boot"        BLOCK "$(b 'echo x | tee /boot/config.txt')"
 t "sed -i on /boot"       BLOCK "$(b 'sed -i s/a/b/ /boot/cmdline.txt')"
 t "fw_setenv"             BLOCK "$(b 'fw_setenv bootdelay 0')"
 t "exit-echo after pipe"  BLOCK "$(b 'just verify | tail -50 ; echo "exit=$?"')"
+t "kiosk-ssh + suppress"  BLOCK "$(b "tools/kiosk-ssh.sh root@$BENCH uptime 2>/dev/null")"
+t "pkill bare -f"         BLOCK "$(b "$KILLPAT -f doseresp.sh")"
+t "pgrep after &&"        BLOCK "$(b "cd /tmp && $GREPPAT -f nettest")"
+t "pkill combined -af"    BLOCK "$(b "$KILLPAT -af foo")"
+# The other two rules the heredoc strip disarmed. A shell reads these bodies.
+t "lifeline in heredoc"   BLOCK "$(b "$(printf "ssh root@%s bash <<'EOF'\nsystemctl disable sshd\nEOF" "$BENCH")")"
+t "/boot in heredoc"      BLOCK "$(b "$(printf "bash <<'EOF'\necho x > /boot/cmdline.txt\nEOF")")"
 
 echo "--- must ALLOW: the legal variants ---"
 t "bench OTA by address"  ALLOW "$(b "just kiosk-ota host=root@$BENCH")"
@@ -98,18 +147,28 @@ t "bench OTA by name"     ALLOW "$(b 'just kiosk-ota host=root@fixture-bench')"
 # the prod hostname and false-block every explicit-path delivery.
 t "MACHINE name in paths" ALLOW "$(b "just kiosk-send-direct bundle=build/tmp-$PHOST/deploy/images/$PHOST/update-bundle-$PHOST.raucb host=root@$BENCH")"
 t "MACHINE= assignment"   ALLOW "$(b "MACHINE=$PHOST just build")"
+t "MACHINE name, ls path" ALLOW "$(b "ls build/tmp-$PHOST/deploy/images/$PHOST/")"
 echo "--- must ALLOW: observing PROD is not destroying it ---"
 t "prod soak-summary"     ALLOW "$(b "just soak-summary root@$PROD 24")"
 t "prod screenshot"       ALLOW "$(b "just screenshot root@$PROD")"
 t "prod backup"           ALLOW "$(b "just kiosk-backup host=root@$PROD")"
 t "prod rauc-status"      ALLOW "$(b "just rauc-status root@$PROD")"
 t "prod preflight"        ALLOW "$(b "just kiosk-preflight host=root@$PROD")"
+# Reading the soak log for reboot events is the primary legitimate activity on
+# prod, and the block message promises observation is allowed. An unanchored
+# `reboot` alternative blocked exactly this.
+t "prod grep for reboot"  ALLOW "$(b "ssh root@$PROD 'grep -c reboot /var/log/messages'")"
+t "prod soak | grep"      ALLOW "$(b "just soak-summary root@$PROD 24 | grep reboot")"
 echo "--- must ALLOW: rule 2's legal targets ---"
 t "flash to card reader"  ALLOW "$(b 'just flash /dev/sdy')"
 t "dd to removable part"  ALLOW "$(b 'dd if=x.img of=/dev/sdy1')"
 t "flash to mmcblk"       ALLOW "$(b 'just flash /dev/mmcblk0')"
 t "README placeholder"    ALLOW "$(b 'just flash /dev/sdX')"
-echo "--- must ALLOW: rules 3-6 ---"
+t "sudo bmaptool to card" ALLOW "$(b 'sudo bmaptool copy core-image.wic.bz2 /dev/sdy')"
+t "fresh card to reader"  ALLOW "$(b 'just provision-fresh-card /dev/sdy')"
+t "lsblk names a disk"    ALLOW "$(b 'lsblk -o NAME,SIZE,RM,MODEL /dev/sdz')"
+t "2>/dev/null, no disk"  ALLOW "$(b 'ls /nonexistent 2>/dev/null')"
+echo "--- must ALLOW: rules 3-7 ---"
 t "ssh, no suppress"      ALLOW "$(b "ssh root@$BENCH uptime")"
 t "UserKnownHosts"        ALLOW "$(b "ssh -o UserKnownHostsFile=/dev/null root@$BENCH uptime")"
 t "local suppress only"   ALLOW "$(b 'grep foo bar 2>/dev/null')"
@@ -132,6 +191,15 @@ t "rauc mark-good"        ALLOW "$(b 'rauc status mark-good booted')"
 t "fw_setenv mentioned"   ALLOW "$(b 'echo "re-arm via rauc, not fw_setenv"')"
 t "pipe, no exit echo"    ALLOW "$(b 'just verify | tail -50')"
 t "heredoc body mentions" ALLOW "$(b "$(printf 'git commit -F - <<EOF\nnote: fw_setenv is refused by the guard\nEOF')")"
+# The other direction of the same fix: a body no shell reads is still data. The
+# opener names a file, not an interpreter, so `.sh` in a path must not arm it.
+t "doc heredoc mentions"  ALLOW "$(b "$(printf "cat > docs/note.md <<'EOF'\nrauc install on prod is refused, as is a reboot there\nEOF")")"
+t "script heredoc, data"  ALLOW "$(b "$(printf "cat > tools/example.sh <<'EOF'\nfw_setenv bootdelay 0\nEOF")")"
+t "known_hosts edit"      ALLOW "$(b "ssh-keygen -R $BENCH 2>/dev/null")"
+t "read .ssh, suppressed" ALLOW "$(b "cat ~/.ssh/known_hosts 2>/dev/null | grep -c $BENCH")"
+t "pgrep -x -f exact"     ALLOW "$(b "$GREPPAT -x -f '/bin/bash /tmp/x.sh'")"
+t "pkill -x by name"      ALLOW "$(b "$KILLPAT -x surf")"
+t "pkill in an echo"      ALLOW "$(b "echo 'do not use $KILLPAT -f here'")"
 t "edit outside the repo" ALLOW "$(e /home/tjwise/elsewhere/NOTES.md)"
 
 echo "--- escape hatch: authorized /boot write ---"

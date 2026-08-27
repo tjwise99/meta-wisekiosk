@@ -10,8 +10,10 @@ feeds that text to the model, which answers the questions and re-runs the commit
 No prompt reaches the human. Fires the same way inside subagents.
 
 The group names here and the `**Group**` headings in CONTRIBUTING.md are one
-taxonomy authored in two files: a rename in either place silently selects no
-questions, which reads as a clean commit. Change both or neither.
+taxonomy authored in two files: a rename in either place would silently select no
+questions, which reads as a clean commit. `tools/ci-guards.sh` guard 13 holds the
+two sides equal, so a one-word rename fails the guards instead of disarming a
+question group.
 
 A marker keyed on the staged content (`git write-tree`, plus the unstaged tracked
 diff under `-a`) is the loop guard: the first attempt at a given content-state
@@ -345,7 +347,13 @@ def parse_checklist(contributing_path):
 # in the tree. Matched on the whole path, not a prefix: the RAUC bundle recipe,
 # the rotation tooling and the rotation write-up live in three different
 # directories and every one of them is the same review question.
-SECRET_PATH = re.compile(r"(rauc|sign|secrets?|keyring|gitleaks|\bkeys?\b)", re.I)
+#
+# `sign` is word-bounded like `keys?` beside it. Unbounded it matched the `sign`
+# inside `design`, `assign` and `signal`, so every docs/design/* and *design*
+# tooling path drew the keyring and site-secret questions — and a reader trained
+# to wave three irrelevant questions through is how a real question 9 gets waved
+# through.
+SECRET_PATH = re.compile(r"(rauc|\bsign(ing|ed|er|s)?\b|secrets?|keyring|gitleaks|\bkeys?\b)", re.I)
 
 
 def select_groups(changed):
@@ -354,7 +362,8 @@ def select_groups(changed):
     The six names below are authored twice, here and as `**Group**` headings in
     CONTRIBUTING.md's "## Review checklist". They must match character for
     character; a name that matches nothing selects no questions and the commit
-    goes through looking reviewed.
+    goes through looking reviewed. `tools/ci-guards.sh` guard 13 compares the two
+    sets and fails on any name present on one side only.
     """
     needed = set()
     for path in changed:
@@ -376,18 +385,35 @@ def select_groups(changed):
         if SECRET_PATH.search(norm):
             needed.add("RAUC / signing / secrets")
 
-        # Anything that gates, builds or drives — including the hooks and the
-        # guard's own self-test.
-        if norm == "Justfile" or norm.startswith(
+        # Anything that gates, builds or drives — including the hooks, the
+        # guard's own self-test, and the interpreter environment they all run
+        # under. A `uv.lock` bump changes what `tools/scrub-identity.py` and
+        # `tools/doc-links.py` execute as surely as editing them does, and
+        # dependabot opens exactly that pull request.
+        if norm in ("Justfile", "pyproject.toml", "uv.lock", ".python-version") or norm.startswith(
             ("tools/", "justfiles/", ".github/", ".claude/", ".githooks/")
         ):
             needed.add("Tooling, guards & CI")
+
+        # `.gitignore` is what keeps local/ — the identity map, the keys, the raw
+        # captures — out of a PUBLIC tree. Removing one line publishes all of it.
+        if norm == ".gitignore":
+            needed.add("RAUC / signing / secrets")
 
         # Every tracked Markdown file, wherever it lives: documentation in this
         # repository sits beside the code it explains, so a recipe's README is
         # as much in scope as anything under docs/.
         if norm.startswith("docs/") or norm.endswith(".md"):
             needed.add("Docs & investigations")
+
+    # A changed path that matches nothing must not read as "no review needed".
+    # main() treats an empty set as exactly that and lets the commit through with
+    # no question and no marker claimed, so a path this function has not learned
+    # about yet is silently exempt — the one outcome no branch above intends.
+    # Everything in this repository that is not layer, build config, patch,
+    # secret-adjacent or prose is machinery, so that is where the fallback lands.
+    if changed and not needed:
+        needed.add("Tooling, guards & CI")
 
     return needed
 

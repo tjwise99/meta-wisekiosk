@@ -173,6 +173,18 @@ def main():
                     tgt = f.resolve()
                 if anchor:
                     n_anchor += 1
+                    # An anchored DIRECTORY link is the violation CONTRIBUTING.md
+                    # names ("never anchor a directory link -- anchor its
+                    # README.md"), and it exists, so the check above passes it
+                    # through. Reading it as a file raised IsADirectoryError and
+                    # killed the run: the contributor got a traceback instead of
+                    # a diagnostic, every later link in the file went unreported,
+                    # and the citation scan never ran at all. Name the violation
+                    # the rule already forbids.
+                    if tgt.is_dir():
+                        broken.append(f'{rel}:{lineno}  anchored directory link '
+                                      f'(anchor its README.md instead) -> {target}')
+                        continue
                     known = {slug(h) for h in head_cache.get(tgt, headings(tgt))}
                     if slug(anchor) not in known:
                         broken.append(f'{rel}:{lineno}  no such heading -> {target}')

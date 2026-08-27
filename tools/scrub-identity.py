@@ -4,6 +4,11 @@
     scrub-identity.py --check [root]    exit 1 if any identifier is present
     scrub-identity.py --apply [root]    rewrite tracked files, print what changed
 
+`--check --allow-partial` downgrades a missing map from a failure to a reported
+degradation. It is for the one caller that structurally cannot have the map --
+CI, which clones without gitignored `local/`. Everywhere else the absence is a
+finding: see "Two halves" below.
+
 This repository is public and none of what it must not publish is
 credential-shaped -- an SSID, a LAN address, a hostname, a MAC, a machine-id and
 a PSK hash all pass gitleaks untouched while together fingerprinting one
@@ -21,9 +26,11 @@ Two halves, because they fail differently:
              because neither has a recognisable shape -- and it can only run
              where that file exists.
 
-When the map is absent the run reports PARTIAL and names the half that did not
-run. It never prints "clean" for a scan it did not perform: a check that cannot
-see the map must not claim the tree is scrubbed.
+When the map is absent the run reports PARTIAL, names the half that did not run,
+and FAILS: a check that cannot see the map must not claim the tree is scrubbed,
+and an exit code of 0 claims exactly that to every caller that only reads the
+code. `--allow-partial` is how a caller that cannot ever have the map says so out
+loud, in its own file, where a reader sees the limit.
 
 Scope is `git ls-files` -- the tracked set is exactly what publishing publishes,
 and it excludes `build/`, `sources/` and `local/` for free.
@@ -83,11 +90,34 @@ PATTERNS = [
         re.compile(r'\b[Ss]erial\b\s*[:=]\s*`?[0-9a-f]{16}\b'),
         'a Pi serial identifies one physical unit; keep it in local/',
     ),
+    (
+        'machine-id',
+        # A machine-id is 32 hex with no delimiters, so a bare shape matches the
+        # MIT LIC_FILES_CHKSUM md5 in nine recipe files. What distinguishes one
+        # is its CONTEXT: it names the journal directory, or it sits beside the
+        # words machine-id / KIOSK_MACHINE_ID. Without this the value was
+        # reachable only through the KNOWN half -- which needs gitignored
+        # local/device-identity.md and therefore never runs in CI, and a real
+        # machine-id in a journal path published on that route.
+        re.compile(r'(?:/var/log/journal/|[Mm]achine[-_ ]?[Ii][Dd][^\n]{0,60}?)'
+                   r'(?<![0-9A-Za-z])[0-9a-f]{32}(?![0-9A-Za-z])'),
+        'a machine-id identifies one installed unit; keep it in local/ and cite it as <KIOSK_MACHINE_ID>',
+    ),
 ]
 
 # This file necessarily contains every pattern it searches for, as source. A
 # scanner that fails on its own source is a scanner nobody can commit.
 SELF = 'tools/scrub-identity.py'
+
+
+def partial_rc(allow_partial):
+    """Exit code for a scan that could not run in full."""
+    if allow_partial:
+        print('  (--allow-partial: the caller has declared it cannot hold the map)')
+        return 0
+    print(f'  FAILED -- run this where {MAP_REL} exists, or pass --allow-partial to '
+          'accept a pattern-only scan.')
+    return 1
 
 
 def repo_root(argv_root):
@@ -136,12 +166,15 @@ def tracked(root):
 
 
 def main():
-    mode = sys.argv[1] if len(sys.argv) > 1 else '--check'
+    argv = [a for a in sys.argv[1:] if a != '--allow-partial']
+    allow_partial = '--allow-partial' in sys.argv[1:]
+
+    mode = argv[0] if argv else '--check'
     if mode not in ('--check', '--apply'):
-        print(f'usage: {SELF} [--check|--apply] [root]', file=sys.stderr)
+        print(f'usage: {SELF} [--check|--apply] [--allow-partial] [root]', file=sys.stderr)
         return 2
 
-    root = repo_root(sys.argv[2] if len(sys.argv) > 2 else None)
+    root = repo_root(argv[1] if len(argv) > 1 else None)
     rows = load_map(root)
 
     findings, rewritten, scanned = [], [], 0
@@ -182,14 +215,17 @@ def main():
             print(f'  {f}')
         return 1
 
+    # A partial scan is not a clean scan. The half that can see a hostname, an
+    # SSID or a PSK hash is precisely the half that did not run, so exiting 0
+    # here reports "nothing found" for a search that was never performed.
     if rows is None:
         print(f'  PARTIAL -- no {MAP_REL}, so the KNOWN half did not run. '
               'Pattern scan found nothing; a hostname or SSID leak would not be visible here.')
-        return 0
+        return partial_rc(allow_partial)
     if not rows:
         print(f'  PARTIAL -- {MAP_REL} has no usable rows inside its ```identity fence, '
               'so the KNOWN half scanned nothing.')
-        return 0
+        return partial_rc(allow_partial)
 
     print('  clean -- no identity in any tracked file')
     return 0

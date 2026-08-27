@@ -46,7 +46,7 @@ else
 fi
 
 # A ~4.5 h build the summary should not silently drop, and which also means the
-# build tree must not be edited (guard.sh rule 7).
+# build tree must not be edited (guard.sh rule 8).
 builds=$(timeout 5 docker ps --format '{{.Names}} {{.Status}} {{.Image}}' 2>/dev/null | grep -i kas)
 [ -n "$builds" ] && { add ""; add "BUILD RUNNING (do not edit the build tree):"; add "    $builds"; }
 

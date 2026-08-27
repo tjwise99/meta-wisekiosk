@@ -591,6 +591,24 @@ else
     else
         ok "the identity scan is wired into the hook, the workflow and the justfile"
     fi
+
+    # And RUN it here too. This script is the allowlisted entry point an agent
+    # reaches for, so "guards passed" printed by it must not be readable as "no
+    # identity in the tree": a MAC seeded into a tracked CLAUDE.md left this
+    # script green (guard 6 sees addresses, gitleaks sees credential shapes)
+    # while the identity scan reported it on the same tree. The cost is one
+    # extra pass over the tracked files on the routes that also call it.
+    #
+    # --allow-partial belongs HERE and not in the route calls: this script runs
+    # in CI, where gitignored local/device-identity.md structurally cannot
+    # exist. Refusing to exit 0 on a scan that could not run in full is the
+    # route's job, where the map is present.
+    if out11=$("$scrub11" --check --allow-partial 2>&1); then
+        ok "no device identity in any tracked file ($(printf '%s\n' "$out11" | head -n1))"
+    else
+        bad "guard 11: device identity in a tracked file -- do not publish:"
+        printf '%s\n' "$out11" | sed 's/^/        /'
+    fi
 fi
 
 # --- 12. the device guard must still pass its own self-test ---------------
@@ -606,6 +624,67 @@ elif out12=$(bash "$guardtest12" 2>&1); then
 else
     bad "the device guard FAILS its own self-test:"
     printf '%s\n' "$out12" | grep -E '^(FAIL|pass=)' | sed 's/^/        /'
+fi
+
+# --- 13. the review checklist is ONE taxonomy, authored in two files ------
+# .claude/hooks/review-diff.py selects `**Group**` names; CONTRIBUTING.md's
+# "## Review checklist" defines them. Both files say in prose that a rename in
+# either place silently selects nothing -- and prose is what a one-word rename
+# walks past. A group that matches nothing yields zero questions, and zero
+# questions is exactly what a clean commit looks like: staging the site-secrets
+# template with `**RAUC / signing / secrets**` renamed committed it with no
+# review question at all, and no gate saw it.
+rd13=".claude/hooks/review-diff.py"
+cb13="CONTRIBUTING.md"
+if [ ! -f "$rd13" ] || [ ! -f "$cb13" ]; then
+    bad "guard 13: $rd13 or $cb13 missing -- the review checklist taxonomy cannot be checked"
+elif ! command -v python3 > /dev/null 2>&1; then
+    bad "guard 13: python3 missing -- the review checklist taxonomy cannot be checked"
+else
+    out13=$(python3 - "$rd13" "$cb13" <<'PY'
+import re
+import sys
+
+src = open(sys.argv[1], encoding='utf-8').read()
+doc = open(sys.argv[2], encoding='utf-8').read()
+
+# Read from the source as literals rather than by importing: importing runs a
+# PreToolUse hook, and a list kept here by hand would make this file a THIRD
+# author of the same taxonomy.
+selected = set(re.findall(r'needed\.add\(\s*"([^"]+)"\s*\)', src))
+
+parts = doc.split('## Review checklist', 1)
+headings, questions, current = set(), {}, None
+if len(parts) > 1:
+    for line in re.split(r'\n## ', parts[1])[0].splitlines():
+        m = re.match(r'^\*\*([^*]+)\*\*\s*$', line)
+        if m:
+            current = m.group(1).strip()
+            headings.add(current)
+        elif current and re.match(r'^\d+\.\s+\*\*[^*]+\*\*', line):
+            questions[current] = questions.get(current, 0) + 1
+
+problems = []
+if not selected:
+    problems.append(f'no group name read out of {sys.argv[1]} -- the extraction went stale')
+if not headings:
+    problems.append(f'no **Group** heading under "## Review checklist" in {sys.argv[2]}')
+problems += [f'{sys.argv[1]} selects "{n}", which is no **Group** heading in {sys.argv[2]}'
+             for n in sorted(selected - headings)]
+problems += [f'{sys.argv[2]} group "{n}" is selected by no path rule in {sys.argv[1]}'
+             for n in sorted(headings - selected)]
+problems += [f'group "{n}" carries no numbered question, so selecting it asks nothing'
+             for n in sorted(headings) if not questions.get(n)]
+
+print('\n'.join(problems))
+PY
+    )
+    if [ -n "$out13" ]; then
+        bad "guard 13: the review checklist taxonomy differs between the two files that author it:"
+        printf '%s\n' "$out13" | sed 's/^/        /'
+    else
+        ok "the review checklist taxonomy agrees in CONTRIBUTING.md and review-diff.py"
+    fi
 fi
 
 if [ "$fail" -ne 0 ]; then

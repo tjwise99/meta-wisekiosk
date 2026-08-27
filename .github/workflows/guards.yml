@@ -50,10 +50,15 @@ jobs:
       # The half gitleaks and the guards' IP check structurally cannot see: a
       # hostname, an SSID, a MAC, a board serial, a machine-id. Its own step so
       # a failure names the identity scan rather than "guards", and so it runs
-      # even when an earlier step failed. The known-value half reads gitignored
-      # local/device-identity.md, which no clone has, so a run here is the
-      # pattern half and says so -- it reports PARTIAL, never "clean".
-      # ci-guards guard 11 asserts this step still exists.
+      # even when an earlier step failed. ci-guards guard 11 asserts this step
+      # still exists.
+      #
+      # --allow-partial is a DECLARED limit, not a convenience: the known-value
+      # half reads gitignored local/device-identity.md, which a clone cannot
+      # have, so this step is the pattern half only and a hostname or an SSID is
+      # invisible to it. Everywhere the map does exist the scan fails rather
+      # than exit 0 on a search it could not perform. Closing the gap needs the
+      # map in the runner, not a looser scanner.
       - name: Scan for device identity
         if: ${{ !cancelled() }}
-        run: tools/scrub-identity.py --check
+        run: tools/scrub-identity.py --check --allow-partial
