@@ -9,7 +9,7 @@
 # Run by hand:  tools/ci-guards.sh
 
 set -uo pipefail
-cd "$(git rev-parse --show-toplevel)"
+cd "$(git rev-parse --show-toplevel)" || exit 1
 
 fail=0
 bad() { printf 'FAIL  %s\n' "$*"; fail=1; }
@@ -47,16 +47,16 @@ fi
 # The paths are checked for existence first. grep over a path that no longer
 # exists reports nothing and this guard would read green, which is how a layer
 # rename silently disarms it.
-scan1b="kiosk-zero-w.yaml meta-wisekiosk includes patches"
+scan1b=(kiosk-zero-w.yaml meta-wisekiosk includes patches)
 missing1b=""
-for p in $scan1b; do
+for p in "${scan1b[@]}"; do
     [ -e "$p" ] || missing1b="$missing1b $p"
 done
 if [ -n "$missing1b" ]; then
     bad "guard 1b cannot scan -- path renamed or removed:$missing1b"
 fi
 sitevals=$(grep -rnE '\$\{(WIFI_SSID|WIFI_PSK_HASH|KIOSK_URL|KIOSK_HOSTNAME|KIOSK_MACHINE_ID|KIOSK_NAMESERVER)\}' \
-    $scan1b 2>/dev/null \
+    "${scan1b[@]}" 2>/dev/null \
     | grep -vE ':[[:space:]]*#' \
     | grep -vE '^patches/[^:]+:[0-9]+:-')
 if [ -n "$sitevals" ]; then
@@ -92,13 +92,13 @@ fi
 # them; the existence check keeps a rename from silently shrinking the scan,
 # same as guard 1b. The pre-commit hook is in that set: it is the thing that
 # runs this script, so a syntax error in it disarms every guard here.
-scan3="meta-wisekiosk/recipes-core/kiosk-netcheck/files/kiosk-netcheck \
-       meta-wisekiosk/recipes-core/kiosk-provision/files/kiosk-provision \
-       meta-wisekiosk/recipes-core/kiosk-recover/files/kiosk-recover \
-       meta-wisekiosk/recipes-core/kiosk-session/files/kiosk-launch \
-       .githooks/pre-commit"
+scan3=(meta-wisekiosk/recipes-core/kiosk-netcheck/files/kiosk-netcheck
+       meta-wisekiosk/recipes-core/kiosk-provision/files/kiosk-provision
+       meta-wisekiosk/recipes-core/kiosk-recover/files/kiosk-recover
+       meta-wisekiosk/recipes-core/kiosk-session/files/kiosk-launch
+       .githooks/pre-commit)
 missing3=""
-for p in $scan3; do [ -e "$p" ] || missing3="$missing3 $p"; done
+for p in "${scan3[@]}"; do [ -e "$p" ] || missing3="$missing3 $p"; done
 [ -n "$missing3" ] && bad "guard 3 cannot scan -- path renamed or removed:$missing3"
 badsh=0
 while IFS= read -r f; do
@@ -108,7 +108,7 @@ while IFS= read -r f; do
         printf '%s\n' "$err" | sed 's/^/        /'
         badsh=1
     fi
-done < <(git ls-files -- '*.sh' $scan3)
+done < <(git ls-files -- '*.sh' "${scan3[@]}")
 [ "$badsh" -eq 0 ] && ok "shell scripts parse"
 
 # --- 4. kas configs must be valid YAML ------------------------------------
@@ -142,9 +142,9 @@ if command -v gitleaks > /dev/null; then
     # Explicit --config: gitleaks does discover .gitleaks.toml on its own, but a
     # silently-unfound allowlist would fail the known finding on every run, and
     # a check that is always red gates nothing.
-    glargs=""
-    [ -f .gitleaks.toml ] && glargs="--config .gitleaks.toml"
-    if gitleaks detect $glargs --no-banner --redact --exit-code 1; then
+    glargs=()
+    [ -f .gitleaks.toml ] && glargs=(--config .gitleaks.toml)
+    if gitleaks detect "${glargs[@]}" --no-banner --redact --exit-code 1; then
         ok "gitleaks found no leaks"
     else
         bad "gitleaks reported findings"

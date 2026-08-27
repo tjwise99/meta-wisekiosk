@@ -30,7 +30,7 @@ NOW=$(cut -d. -f1 /proc/uptime)
 # xwininfo -tree, not -children: surf sets override-redirect, so the window is
 # absent from the client list and is not a direct child of root either.
 TITLE=''
-for try in 1 2 3 4 5; do
+for _ in 1 2 3 4 5; do
 	for id in $(xwininfo -root -tree 2>/dev/null | awk '/^ +0x/ { print $1 }'); do
 		t=$(xprop -id "$id" WM_NAME 2>/dev/null | sed 's/^WM_NAME(STRING) = "//; s/"$//')
 		case "$t" in *'| T '*) TITLE="$t" ;; esac

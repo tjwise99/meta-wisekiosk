@@ -38,6 +38,9 @@ WAIT=${3:-180}
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 
 ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10)
+# "$@" is this function's own arguments, forwarded to form the remote command --
+# client-side expansion is the point, and there is no remote value to quote.
+# shellcheck disable=SC2029
 ssh_dev() { ssh "${ssh_opts[@]}" "$HOST" "$@"; }
 
 mkdir -p "$OUTDIR"

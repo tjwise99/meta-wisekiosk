@@ -136,7 +136,7 @@ if [ "$mode" = "image" ]; then
             refuse "the image was not built from HEAD:"
             printf '        image: %s\n' "$commit" >&2
             printf '        HEAD : %s\n' "$HEAD" >&2
-            printf '        run `just build` -- the host sha is in do_image'\''s\n' >&2
+            printf "        run \`just build\` -- the host sha is in do_image's\n" >&2
             printf '        signature (kiosk-buildinfo-cachesafe), so a moved HEAD re-stamps.\n' >&2
             printf '        Or check out the commit the image came from.\n' >&2
         else

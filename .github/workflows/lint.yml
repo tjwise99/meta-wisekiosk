@@ -1,0 +1,64 @@
+name: lint
+
+# Static analysis for the surfaces CodeQL cannot see: the shell scripts (which
+# are most of this repo -- provisioning, OTA, flashing, the guards themselves)
+# and the workflow files. Neither needs a Yocto build, so both can gate a PR.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: shellcheck
+        run: |
+          set -euo pipefail
+          shellcheck --version   # preinstalled on ubuntu-latest runners
+          # Every tracked shell script: *.sh/*.bash by extension, plus any file
+          # whose shebang invokes sh/bash (e.g. .githooks/pre-commit, which has
+          # no extension). Justfile [script('bash')] bodies are embedded in
+          # .just files and are not lintable here -- a known blind spot.
+          # docs/issue_investigation/ is excluded on purpose, not by oversight:
+          # those are frozen record-of-record scripts, exactly as they were run.
+          shebang() {
+            local f line
+            git ls-files -- ':!:docs/issue_investigation/**' | while IFS= read -r f; do
+              [ -f "$f" ] || continue
+              line=$(head -n1 -- "$f" 2>/dev/null || true)
+              case "$line" in
+                '#!'*sh|'#!'*sh\ *) printf '%s\n' "$f" ;;
+              esac
+            done
+          }
+          mapfile -t files < <( { git ls-files -- '*.sh' '*.bash' ':!:docs/issue_investigation/**'; shebang; } | sort -u | sed '/^$/d')
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No shell scripts found -- failing rather than passing empty."; exit 1
+          fi
+          printf 'Linting %d files:\n' "${#files[@]}"; printf '  %s\n' "${files[@]}"
+          shellcheck -x -- "${files[@]}"
+
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          VER=1.7.7
+          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${VER}/actionlint_${VER}_linux_amd64.tar.gz" -o /tmp/actionlint.tgz
+          sudo tar -xzf /tmp/actionlint.tgz -C /usr/local/bin actionlint
+          actionlint -version
+
+      - name: Run actionlint
+        # actionlint also runs shellcheck over each workflow's run: blocks
+        # (shellcheck is preinstalled), so the inline shell in every workflow is
+        # linted too, not just the standalone scripts above.
+        run: actionlint -color
