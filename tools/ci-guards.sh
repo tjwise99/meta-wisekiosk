@@ -554,6 +554,60 @@ else
     fi
 fi
 
+# --- 11. the identity scan must stay wired into every route ---------------
+# Guard 6 above sees RFC1918 addresses and nothing else. A hostname, an SSID, a
+# MAC, a board serial, a machine-id and a PSK hash are none of them
+# credential-shaped and none of them address-shaped, so gitleaks and guard 6
+# both pass while the tree publishes the site. tools/scrub-identity.py is what
+# sees those, and it is run once per route rather than from here -- running it
+# from inside this script AND from the hook and the workflow would scan the tree
+# twice on every commit.
+#
+# So what is asserted here is the WIRING, as guard 10 does for the
+# reproducibility gate: dropping the call from the hook, the workflow or the
+# justfile is a one-line edit that leaves every file parsing and every other
+# guard green. Comments are stripped first, so a mention in prose cannot green
+# it. Paths are existence-checked, as 1b/3/7/8/9/10.
+scrub11="tools/scrub-identity.py"
+call11="$scrub11 --check"
+if [ ! -x "$scrub11" ]; then
+    bad "guard 11: $scrub11 missing or not executable -- nothing scans for device identity"
+else
+    unwired11=""
+    for f in .githooks/pre-commit .github/workflows/guards.yml Justfile; do
+        if [ ! -f "$f" ]; then
+            unwired11="$unwired11 $f(missing)"
+            continue
+        fi
+        # grep -c and compare, never `| grep -q`: -q exits on the first hit, the
+        # producer dies of SIGPIPE at 141, and pipefail returns that -- the test
+        # would be false precisely when the pattern matches.
+        n11=$(grep -vE '^[[:space:]]*#' "$f" | grep -cF -- "$call11")
+        [ "$n11" -eq 0 ] && unwired11="$unwired11 $f"
+    done
+    if [ -n "$unwired11" ]; then
+        bad "guard 11: the identity scan is not wired into every route -- a tracked hostname, SSID, MAC or machine-id would publish unseen; missing from:"
+        for u in $unwired11; do printf '        %s\n' "$u"; done
+    else
+        ok "the identity scan is wired into the hook, the workflow and the justfile"
+    fi
+fi
+
+# --- 12. the device guard must still pass its own self-test ---------------
+# .claude/hooks/guard.sh blocks destructive operations aimed at the prod board
+# and image writes to a fixed disk. A guard nobody exercises is indistinguishable
+# from a guard that matches nothing, so its self-test is a repository invariant,
+# not a convenience: an edit that opens a rule fails here.
+guardtest12=".claude/hooks/guard-test.sh"
+if [ ! -f "$guardtest12" ]; then
+    bad "guard 12: $guardtest12 missing -- the device guard is no longer self-tested"
+elif out12=$(bash "$guardtest12" 2>&1); then
+    ok "the device guard passes its self-test ($(printf '%s\n' "$out12" | tail -n1))"
+else
+    bad "the device guard FAILS its own self-test:"
+    printf '%s\n' "$out12" | grep -E '^(FAIL|pass=)' | sed 's/^/        /'
+fi
+
 if [ "$fail" -ne 0 ]; then
     printf '\nguards FAILED\n'
     exit 1

@@ -92,10 +92,18 @@ spotless: clean
 # === Repository guards ===
 
 # Run the same checks CI runs. Fast, needs no build.
+#
+# Both run even when the first fails, matching `verify` and the pre-commit hook:
+# two independent findings are worth more than the first one twice.
 [group('guards')]
-[doc("Run repository guards: secrets, template, shell syntax, YAML, gitleaks, IPs, service reachability, recovery wiring, trailing-; hooks")]
+[script('bash')]
+[doc("Run repository guards: secrets, template, shell syntax, YAML, gitleaks, IPs, service reachability, recovery wiring, trailing-; hooks, guard wiring, guard self-test, device identity")]
 guards:
-    tools/ci-guards.sh
+    rc=0
+    tools/ci-guards.sh || rc=1
+    tools/scrub-identity.py --check || rc=1
+    if [ $rc -ne 0 ]; then echo; echo "guards FAILED"; fi
+    exit $rc
 
 # Point git at .githooks so pre-commit runs the guards. Hooks are not carried by
 # a clone, so this is per-checkout and has to be run once by hand.

@@ -46,3 +46,14 @@ jobs:
       - name: Check Markdown cross-references
         if: ${{ !cancelled() }}
         run: python3 tools/doc-links.py
+
+      # The half gitleaks and the guards' IP check structurally cannot see: a
+      # hostname, an SSID, a MAC, a board serial, a machine-id. Its own step so
+      # a failure names the identity scan rather than "guards", and so it runs
+      # even when an earlier step failed. The known-value half reads gitignored
+      # local/device-identity.md, which no clone has, so a run here is the
+      # pattern half and says so -- it reports PARTIAL, never "clean".
+      # ci-guards guard 11 asserts this step still exists.
+      - name: Scan for device identity
+        if: ${{ !cancelled() }}
+        run: tools/scrub-identity.py --check

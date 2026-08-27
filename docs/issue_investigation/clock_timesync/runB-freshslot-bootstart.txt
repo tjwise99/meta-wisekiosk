@@ -1,6 +1,6 @@
 Warning: Permanently added '<BENCH>' (ED25519) to the list of known hosts.
 == fresh-slot boot: first kernel journal line (the clock at boot start) ==
-2026-08-26T01:26:11-04:00 <BENCH-HOST> systemd-journald[86]: Time spent on flushing to /var/log/journal/58e33d6d0d2a45cda670a88c06723dc8 is 1.300142s for 425 entries.
+2026-08-26T01:26:11-04:00 <BENCH-HOST> systemd-journald[86]: Time spent on flushing to /var/log/journal/<KIOSK_MACHINE_ID> is 1.300142s for 425 entries.
 == timesyncd restoring the persisted clock ==
 2026-08-26T01:26:14-04:00 <BENCH-HOST> systemd-timesyncd[188]: Network configuration changed, trying to establish connection.
 2026-08-26T01:26:15-04:00 <BENCH-HOST> systemd-timesyncd[188]: Network configuration changed, trying to establish connection.

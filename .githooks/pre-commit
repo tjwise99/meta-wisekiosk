@@ -31,4 +31,9 @@ fi
 
 tools/ci-guards.sh || rc=1
 python3 tools/doc-links.py || rc=1
+# Named here rather than folded into ci-guards.sh, for the same reason
+# doc-links.py is: this is the last gate before a push to a PUBLIC remote, and
+# each scanner runs exactly once per route. ci-guards guard 11 asserts this call
+# is still here, so deleting it fails the guards rather than going quiet.
+tools/scrub-identity.py --check || rc=1
 exit $rc

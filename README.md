@@ -8,8 +8,21 @@ Updates are RAUC A/B over U-Boot, delivered over the LAN. Site configuration —
 hostname, machine-id — is **never** in the image; it is written to the device's `/data` partition by
 provisioning and read at runtime.
 
-The page the kiosk shows is served by a separate system elsewhere on the LAN that this repository
-neither builds nor deploys. Only its URL enters here, as site config.
+The page the kiosk shows is **WiseKiosk** ([`tjwise99/WiseKiosk`](https://github.com/tjwise99/WiseKiosk)),
+a separate system served from elsewhere on the LAN that this repository neither builds nor deploys.
+Only its URL enters here, as site config — `KIOSK_URL` in `secrets.yaml`, written to the device's
+`/data` at provisioning.
+
+> ### Related project
+>
+> That boundary is being moved. WiseKiosk epic
+> [#208 appliance-first-class](https://github.com/tjwise99/WiseKiosk/issues/208) brings the board
+> inside WiseKiosk's requirements boundary and bakes the application into this image, so the app
+> stops being a URL this repository points at and becomes something it ships. The two repositories
+> stay separate. This is in progress and will change the paragraph above.
+
+How to work in this repository — the gates, the conventions and the review checklist — is
+[CONTRIBUTING.md](CONTRIBUTING.md); the rules an AI agent works under are [CLAUDE.md](CLAUDE.md).
 
 > ## Attribution
 >
@@ -36,6 +49,10 @@ The repository is a project, not a layer. Exactly one directory in it is a BitBa
 
 ```
 meta-wisekiosk/                    <- the repository (project scaffolding)
+├── README.md, CONTRIBUTING.md     what this is; how to change it and get it merged
+├── CLAUDE.md                      working rules for an AI agent, and who owns which fact
+├── .claude/                       session settings and hooks: the commit self-review, the
+│                                  device guard and its self-test, the compaction snapshot
 ├── kiosk-zero-w.yaml              kas config: the one entry point
 ├── includes/                      repo pins and machine config, pulled in by the above
 │   ├── base.yaml                  every repo + commit, incl. meta-autonomos and its patches
@@ -50,7 +67,8 @@ meta-wisekiosk/                    <- the repository (project scaffolding)
 │   └── recipes-*/
 ├── Justfile, justfiles/           build, OTA and device commands
 ├── tools/                         provisioning, bundle delivery, device debugging, doc gate,
-│                                  CI guards, the build-commit writer and reproducibility gate
+│                                  CI guards, the identity scan, the build-commit writer and
+│                                  reproducibility gate
 ├── docs/                          layers-and-kas.md, issue_investigation/
 └── sources/                       gitignored; everything kas fetches lands here
 ```

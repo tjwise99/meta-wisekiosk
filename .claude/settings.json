@@ -1,0 +1,69 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/CONTRIBUTING.md\"; m=\"The SessionStart hook in .claude/settings.json could not deliver CONTRIBUTING.md from $f. Read it before changing anything in this repository.\"; n=\"CONTRIBUTING.md for this repository, injected at session start, up to but excluding the review checklist. That is a review artifact and reaches you before a commit, scoped to the paths that commit records, from .claude/hooks/review-diff.py.\\n\\n\"; out=$(sed '/^## Review checklist/,$d' \"$f\" 2>/dev/null | jq -Rs --arg m \"$m\" --arg note \"$n\" 'if test(\"\\\\S\") then {hookSpecificOutput:{hookEventName:\"SessionStart\",additionalContext:($note + .)}} else {hookSpecificOutput:{hookEventName:\"SessionStart\",additionalContext:$m}} end' 2>/dev/null) && printf '%s' \"$out\" || printf '%s\\n' \"$m\"",
+            "statusMessage": "Loading CONTRIBUTING.md"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git *)",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/review-diff.py\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard.sh\""
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-design-surfaces.py\""
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/precompact.sh\""
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(just verify)",
+      "Bash(just links)",
+      "Bash(just guards)",
+      "Bash(just image)",
+      "Bash(just --list)",
+      "Bash(just find:*)",
+      "Bash(tools/ci-guards.sh)",
+      "Bash(tools/scrub-identity.py --check)",
+      "Bash(python3 tools/doc-links.py)",
+      "Bash(python3 tools/doc-image.py check)",
+      "Bash(bash .claude/hooks/guard-test.sh)"
+    ]
+  }
+}
