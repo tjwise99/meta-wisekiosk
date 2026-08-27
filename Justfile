@@ -144,23 +144,16 @@ image:
 
 # === Image audit ===
 
-# What the last audit build found: counts by every status the manifest carries,
-# and the unpatched findings listed. Reading only -- which finding matters is a
-# person's judgement, so this reports and never gates.
 [group('audit')]
 [doc("Report the CVE findings from the last audit build (skips if unbuilt)")]
 cve:
     python3 tools/cve-report.py check
 
-# The SBOM every ordinary build already emits. No audit build needed.
 [group('audit')]
 [doc("Report the SBOM the last build emitted (skips if unbuilt)")]
 sbom:
     python3 tools/sbom-report.py check
 
-# cve-check fetches the NVD database, so it rides an overlay fragment that only
-# this recipe joins on -- an ordinary `just build` keeps that fetch off its path.
-# write-build-rev.sh runs first, exactly as `build` does; see docs/cve-and-sbom.md.
 [group('audit')]
 [doc("Build with cve-check inherited, writing a CVE manifest beside the image")]
 cve-build:

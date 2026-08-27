@@ -173,11 +173,8 @@ local_conf_header:
     # See meta-wisekiosk/classes/kiosk-buildinfo-cachesafe.bbclass.
     IMAGE_CLASSES += "kiosk-buildinfo-cachesafe"
 
-    # The SBOM every build already emits (#69). create-spdx reaches this tree
-    # transitively -- autonomos.conf requires poky.conf, which inherits it --
-    # so a poky or meta-autonomos bump can drop it with nothing here noticing.
-    # Naming it makes the SBOM a property of this image rather than of an
-    # upstream default. See docs/cve-and-sbom.md.
+    # Named here, not left to poky.conf's transitive inherit, so an upstream
+    # bump cannot drop the SBOM (#69). See docs/cve-and-sbom.md.
     INHERIT += "create-spdx"
 
   # update-bundle.bb packages whichever image RAUC_SLOT_rootfs names, and its
