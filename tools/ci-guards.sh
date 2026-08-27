@@ -115,13 +115,18 @@ done < <(git ls-files -- '*.sh' "${scan3[@]}")
 # A kas file that does not parse fails hours into a build, or worse, silently
 # drops a block: kas merges local_conf_header by BLOCK NAME and the top-level
 # file wins, so a duplicated name is discarded with no warning at all.
+#
+# Cannot-check is not check-clean: without a YAML parser this fails closed
+# rather than exit 0 on a search it could not perform -- the same rule the
+# identity scan states for a missing map. CI installs PyYAML before this runs,
+# so a green CI means the files were parsed; a local route without it fails
+# here with the fix in the message. The message names the missing tool, so it
+# reads as "cannot check", not the older false positive of "every kas file is
+# invalid YAML".
 if ! command -v python3 > /dev/null; then
-    printf 'skip  python3 not available, YAML not parsed\n'
+    bad "guard 4 cannot check YAML: python3 not available"
 elif ! python3 -c 'import yaml' 2>/dev/null; then
-    # Distinguishing "cannot check" from "check failed" matters: the first
-    # version of this reported every kas file as invalid YAML on a host whose
-    # python3 simply lacked the module, which reads as a broken repository.
-    printf 'skip  python3 has no yaml module, YAML not parsed\n'
+    bad "guard 4 cannot check YAML: python3 has no yaml module -- run 'python3 -m pip install pyyaml' (CI installs it automatically)"
 else
     badyaml=0
     while IFS= read -r f; do
