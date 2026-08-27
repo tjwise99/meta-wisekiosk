@@ -5,8 +5,9 @@ name: codeql
 # unpinned actions, over-broad tokens). It does NOT see shell -- most of this
 # repo's logic and its whole flash/ssh/dd surface -- which lint.yml (shellcheck)
 # covers instead; nor the built image's packages, which BitBake's cve-check
-# would cover. A green run here is a statement about the scaffolding, not the
-# appliance.
+# covers from a local audit build that no workflow runs -- see
+# docs/cve-and-sbom.md. A green run here is a statement about the scaffolding,
+# not the appliance.
 on:
   push:
     branches: [main]
