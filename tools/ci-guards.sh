@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Repository invariants. CI and the pre-commit hook run this same script, so the
 # guard set cannot diverge. A guard may still fail closed locally where the host
-# lacks a prerequisite CI installs -- guard 4 needs PyYAML (README "Quick
-# start") -- which is a missing prerequisite, not a divergent verdict on the tree.
+# lacks a prerequisite CI installs -- guard 4 needs PyYAML (see the README
+# prerequisites) -- which is a missing prerequisite, not a divergent verdict on the tree.
 #
 # These are deliberately dependency-light: no bitbake, no network. A Yocto build
 # is hours on this tree and cannot gate a commit; what CAN gate a commit is
@@ -128,7 +128,7 @@ done < <(git ls-files -- '*.sh' "${scan3[@]}")
 if ! command -v python3 > /dev/null; then
     bad "guard 4 cannot check YAML: python3 not available"
 elif ! python3 -c 'import yaml' 2>/dev/null; then
-    bad "guard 4 cannot check YAML: python3 has no yaml module -- install PyYAML; see README \"Quick start\" for a PEP-668-safe route. CI installs it automatically."
+    bad "guard 4 cannot check YAML: python3 has no yaml module -- install PyYAML; see the README prerequisites for a PEP-668-safe route. CI installs it automatically."
 else
     badyaml=0
     while IFS= read -r f; do
