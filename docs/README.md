@@ -4,6 +4,7 @@
 |---|---|
 | [`layers-and-kas.md`](layers-and-kas.md) | How does a tree of YAML and recipes become an image, for someone who has not used Yocto — and which commit is a given image from? |
 | [`rauc-key-rotation.md`](rauc-key-rotation.md) | How do you replace the RAUC signing key the devices trust, and why must it happen in a fixed order? |
+| [`cve-and-sbom.md`](cve-and-sbom.md) | What is the image made of, which of those packages carry published vulnerabilities, and how do you find out? |
 | [`issue_investigation/TEMPLATE.md`](issue_investigation/TEMPLATE.md) | What shape must an issue investigation take, and what must every test run in it name? |
 | [`issue_investigation/boot_cpu_saturation/`](issue_investigation/boot_cpu_saturation/README.md) | Across a boot, is the single core doing work, waiting on hardware, or queued behind something else? |
 | [`issue_investigation/wlan0_udev_queue/`](issue_investigation/wlan0_udev_queue/README.md) | What occupies the gap between the WiFi chip appearing on the bus and `wlan0` existing, and what is removing it worth? |

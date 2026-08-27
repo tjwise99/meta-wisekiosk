@@ -142,6 +142,24 @@ links:
 image:
     python3 tools/doc-image.py check
 
+# === Image audit ===
+
+[group('audit')]
+[doc("Report the CVE findings from the last audit build (skips if unbuilt)")]
+cve:
+    python3 tools/cve-report.py check
+
+[group('audit')]
+[doc("Report the SBOM the last build emitted (skips if unbuilt)")]
+sbom:
+    python3 tools/sbom-report.py check
+
+[group('audit')]
+[doc("Build with cve-check inherited, writing a CVE manifest beside the image")]
+cve-build:
+    tools/write-build-rev.sh
+    kas-container build {{config}}:includes/cve-audit.yaml
+
 # Write per-site config to a device's /data. The image carries none of it.
 [group('provision')]
 [doc("Provision a reachable device's /data from secrets.yaml")]

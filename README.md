@@ -57,6 +57,7 @@ meta-wisekiosk/                    <- the repository (project scaffolding)
 ├── includes/                      repo pins and machine config, pulled in by the above
 │   ├── base.yaml                  every repo + commit, incl. meta-autonomos and its patches
 │   ├── rauc.yaml
+│   ├── cve-audit.yaml             opt-in cve-check overlay, joined on by `just cve-build`
 │   └── platforms/
 │       ├── raspberrypi.yaml
 │       └── raspberrypi-zero-w.yaml
@@ -69,7 +70,8 @@ meta-wisekiosk/                    <- the repository (project scaffolding)
 ├── tools/                         provisioning, bundle delivery, device debugging, doc gate,
 │                                  CI guards, the identity scan, the build-commit writer and
 │                                  reproducibility gate
-├── docs/                          layers-and-kas.md, issue_investigation/
+├── docs/                          layers-and-kas.md, rauc-key-rotation.md, cve-and-sbom.md,
+│                                  issue_investigation/
 └── sources/                       gitignored; everything kas fetches lands here
 ```
 
@@ -247,3 +249,6 @@ Two more fixes belong upstream but did not need a patch, because a downstream la
   issue #7 debug-tweaks empty root password, which carries the detail.
 - **Screen blanking over a long idle is unverified.** `-s 0 -dpms -nocursor` moved from lightdm into
   the kiosk unit; that failure only appears after ~20 minutes.
+- **The image's packages are scanned for CVEs only when somebody asks.** The scan is a manual opt-in
+  audit build on a build host, and nothing detects that the last one was months ago. Deciding which
+  finding matters is manual too. [CVE and SBOM](docs/cve-and-sbom.md)

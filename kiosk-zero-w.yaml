@@ -173,6 +173,10 @@ local_conf_header:
     # See meta-wisekiosk/classes/kiosk-buildinfo-cachesafe.bbclass.
     IMAGE_CLASSES += "kiosk-buildinfo-cachesafe"
 
+    # Named here, not left to poky.conf's transitive inherit, so an upstream
+    # bump cannot drop the SBOM (#69). See docs/cve-and-sbom.md.
+    INHERIT += "create-spdx"
+
   # update-bundle.bb packages whichever image RAUC_SLOT_rootfs names, and its
   # default is autonomos-devel -- a different image, with no surf and no kiosk
   # unit. Installing that bundle would replace the slot and report success.
