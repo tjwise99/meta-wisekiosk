@@ -2,7 +2,7 @@
 # Repository invariants. CI and the pre-commit hook run this same script, so the
 # guard set cannot diverge. A guard may still fail closed locally where the host
 # lacks a prerequisite CI installs -- guard 4 needs PyYAML (see the README
-# prerequisites) -- which is a missing prerequisite, not a divergent verdict on the tree.
+# prerequisites) -- a missing prerequisite, not a divergent verdict on the tree.
 #
 # These are deliberately dependency-light: no bitbake, no network. A Yocto build
 # is hours on this tree and cannot gate a commit; what CAN gate a commit is
