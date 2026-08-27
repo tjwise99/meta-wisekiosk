@@ -5,8 +5,8 @@
 
 create-spdx runs on every build -- kiosk-zero-w.yaml names it so that stays true
 across an upstream bump -- so unlike the CVE manifest this needs no audit build.
-What it did not do until now is surface: the documents landed under deploy/ and
-nothing said they were there or how many there were.
+What it does not do is surface what it wrote: the documents land under deploy/
+and nothing there says they are present or how many of them there are.
 
 Counts come from the SPDX documents themselves and from the image manifest,
 which are two independent statements about the same image. The manifest lists
@@ -54,9 +54,11 @@ def newest(top: Path, pattern: str):
 
     By mtime, resolved and de-duplicated. The deploy directory is not clamped to
     SOURCE_DATE_EPOCH the way the rootfs is, so a file's own timestamp is the
-    build that wrote it."""
+    build that wrote it. A resolved path that does not exist is a symlink whose
+    target was pruned, and is skipped rather than stat'ed."""
     unique = {p.resolve() for p in top.glob(pattern)}
-    found = sorted(unique, key=lambda p: p.stat().st_mtime, reverse=True)
+    found = sorted((p for p in unique if p.exists()),
+                   key=lambda p: p.stat().st_mtime, reverse=True)
     return found[0] if found else None
 
 
@@ -82,11 +84,17 @@ def check() -> int:
     for arch, n in sorted(per_arch.items()):
         print(f"{n:6d}  {arch}")
 
-    built = datetime.fromtimestamp(root.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+    # From a file the build wrote, not from the version directory: a directory's
+    # mtime moves only when an entry is added or removed, so an incremental
+    # rebuild into the same arch directories would leave it reading weeks old.
+    # The roll-up archive is the per-build artifact; the newest package document
+    # stands in for a tree whose image task has not run.
+    archive = newest(top, ARCHIVE_GLOB)
+    stamp = archive or max(documents, key=lambda p: p.stat().st_mtime)
+    built = datetime.fromtimestamp(stamp.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
     print(f"\n{len(documents)} SPDX package documents, "
           f"SPDX {root.name}, in {root.relative_to(top)} (built {built})")
 
-    archive = newest(top, ARCHIVE_GLOB)
     if archive is None:
         # Not a failure: the per-package documents above are the SBOM. The
         # archive is the shippable roll-up of them, and its absence is worth

@@ -160,10 +160,8 @@ sbom:
 
 # cve-check fetches the NVD database, so it rides an overlay fragment that only
 # this recipe joins on -- an ordinary `just build` keeps that fetch off its path.
-# write-build-rev.sh first, exactly as `build` does: kas alone builds the tree
-# against the PREVIOUS commit and the reproducibility gate refuses the image.
+# write-build-rev.sh runs first, exactly as `build` does; see docs/cve-and-sbom.md.
 [group('audit')]
-[script('bash')]
 [doc("Build with cve-check inherited, writing a CVE manifest beside the image")]
 cve-build:
     tools/write-build-rev.sh

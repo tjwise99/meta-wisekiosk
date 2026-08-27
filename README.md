@@ -249,7 +249,6 @@ Two more fixes belong upstream but did not need a patch, because a downstream la
   issue #7 debug-tweaks empty root password, which carries the detail.
 - **Screen blanking over a long idle is unverified.** `-s 0 -dpms -nocursor` moved from lightdm into
   the kiosk unit; that failure only appears after ~20 minutes.
-- **The image's packages are scanned for CVEs only when somebody asks.** `cve-check` rides an opt-in
-  audit build on a build host, never CI: a full build runs for hours, and a required check that can
-  never run reads green while measuring nothing. Nothing detects a stale scan, and deciding which
-  finding matters is manual. [CVE and SBOM](docs/cve-and-sbom.md)
+- **The image's packages are scanned for CVEs only when somebody asks.** The scan is a manual opt-in
+  audit build on a build host, and nothing detects that the last one was months ago. Deciding which
+  finding matters is manual too. [CVE and SBOM](docs/cve-and-sbom.md)
