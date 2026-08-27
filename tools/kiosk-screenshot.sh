@@ -57,10 +57,17 @@ REMOTE=/data/kiosk-screenshot.$$.png
 
 # Clock and capture in ONE invocation: two invocations put an unknown gap
 # between the reference time and the pixels it is supposed to date.
+#
+# $REMOTE carries this run's local PID and must expand HERE, on the client, so
+# the staged path is the one the scp below fetches. Deliberate, not an oversight.
+# shellcheck disable=SC2029
 DEVICE_TIME=$(ssh "${ssh_opts[@]}" "$HOST" "date '+%H:%M:%S'; DISPLAY=:0 import -window root $REMOTE") || {
     echo "capture failed on the device" >&2; exit 1; }
 
 scp "${ssh_opts[@]}" "$HOST:$REMOTE" "$OUT" > /dev/null || { echo "could not fetch $REMOTE" >&2; exit 1; }
+# Same client-side $REMOTE as the capture above: this must remove the exact path
+# this run staged, not whatever a remote expansion would produce.
+# shellcheck disable=SC2029
 ssh "${ssh_opts[@]}" "$HOST" "rm -f $REMOTE" || true
 
 [ -s "$OUT" ] || { echo "$OUT is empty -- the capture did not survive the copy" >&2; exit 1; }

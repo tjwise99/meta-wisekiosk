@@ -16,9 +16,15 @@ DEADLINE=120
 IFACE=wlan0
 TARGET=
 
-# Test and site overrides. /data survives both an OTA and a slot reflash.
+# Test and site overrides. /data survives both an OTA and a slot reflash. The
+# .example beside this script documents that file's format, and is what the
+# linter follows below to see DEADLINE/IFACE/TARGET assigned from a source.
 CONF=/data/kiosk-netcheck.conf
 if [ -r "$CONF" ]; then
+    # SCRIPTDIR, so the name resolves from any working directory, not just the
+    # repository root.
+    # shellcheck source-path=SCRIPTDIR
+    # shellcheck source=kiosk-netcheck.conf.example
     . "$CONF"
 fi
 
@@ -54,6 +60,9 @@ eval "$(rauc status --output-format=shell)"
 
 fallback=
 for i in $RAUC_SLOTS; do
+    # Cleared per slot: each eval below re-assigns, and an empty value can never
+    # match "booted"/"good", so a slot missing a field cannot inherit the last.
+    state='' status='' bootname=''
     eval "state=\$RAUC_SLOT_STATE_$i"
     eval "status=\$RAUC_SLOT_BOOT_STATUS_$i"
     eval "bootname=\$RAUC_SLOT_BOOTNAME_$i"

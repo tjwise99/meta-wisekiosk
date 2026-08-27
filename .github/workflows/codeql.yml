@@ -1,0 +1,51 @@
+name: codeql
+
+# CodeQL analyses the languages GitHub can parse from source: this repo's own
+# Python tooling and the GitHub Actions workflows themselves (script injection,
+# unpinned actions, over-broad tokens). It does NOT see shell -- most of this
+# repo's logic and its whole flash/ssh/dd surface -- which lint.yml (shellcheck)
+# covers instead; nor the built image's packages, which BitBake's cve-check
+# would cover. A green run here is a statement about the scaffolding, not the
+# appliance.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, so a newly-published query catches code that has not changed.
+    - cron: "0 7 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - python
+          - actions
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # security-extended: broader security pack, chosen because the point
+          # of this workflow is hardening, not the lightest triage load.
+          queries: security-extended
+
+      # python and actions are no-build languages -- no autobuild/compile step.
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

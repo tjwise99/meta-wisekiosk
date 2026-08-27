@@ -16,9 +16,11 @@ rc=0
 # optional. Chain to it explicitly so our hooks do not silently drop that
 # guarantee. If it is armed and missing, that is itself a failure, not a skip.
 global_dir=$(git config --global core.hooksPath 2>/dev/null)
+# \~ , not "~": a case pattern is tilde-expanded, so the tilde is escaped to
+# match the literal character git stored.
 case "$global_dir" in
-    "~/"*) global_dir="$HOME/${global_dir#\~/}" ;;
-    "~")   global_dir="$HOME" ;;
+    \~/*) global_dir="$HOME/${global_dir#\~/}" ;;
+    \~)   global_dir="$HOME" ;;
 esac
 if [ -n "$global_dir" ]; then
     if [ -x "$global_dir/pre-commit" ]; then

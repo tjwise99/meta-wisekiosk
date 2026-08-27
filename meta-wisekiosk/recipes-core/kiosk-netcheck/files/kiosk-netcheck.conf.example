@@ -1,0 +1,28 @@
+# Example of /data/kiosk-netcheck.conf -- the site and test override file that
+# kiosk-netcheck sources at runtime. This file is NOT installed and NOT read on a
+# device: it documents the format, and it is what the source directive in
+# kiosk-netcheck points the linter at, so the three assignments the real file is
+# allowed to make are visible to static analysis.
+#
+# It carries no shebang and a .example name deliberately: both are what keep it
+# out of the shellcheck script set as a script in its own right.
+#
+# The real file lives on /data, which survives both an OTA and a slot reflash, so
+# an override set there outlives every update. It is sourced by a /bin/sh script:
+# plain NAME=value assignments only, no logic.
+#
+# Every value below is the script's own default, used here as a PLACEHOLDER.
+# Nothing site-specific belongs in this repository -- it is public.
+
+# Seconds to wait for a usable LAN before good-marking is withheld.
+DEADLINE=120
+
+# Interface whose default route names the gateway to ping.
+IFACE=wlan0
+
+# Ping this host instead of the interface's default gateway. Empty is the normal
+# case and means "take the gateway from the route table". Pointing it at an
+# unroutable address is how the no-LAN branch is exercised on the bench: it fails
+# the check while the real network stays up, so the lifeline into the board is
+# never the thing under test.
+TARGET=
