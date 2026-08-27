@@ -1,13 +1,12 @@
 version: 2
 
-# Dependabot covers only the dependency surfaces GitHub can parse from a
-# manifest: the Actions this repo's workflows call, and the uv-managed Python
-# toolchain (uv.lock + pyproject.toml). It does NOT and cannot manage the Yocto
-# layer pins that
-# actually build the image -- poky, meta-openembedded, meta-arm, meta-autonomos
-# and their SRCREVs live as git revisions in includes/base.yaml and are updated
-# by hand against upstream, because kas/BitBake pinning is invisible to it. A
-# green Dependabot here is not a claim that the build inputs are current.
+# Dependabot manages the one dependency surface GitHub can parse here: the
+# Actions this repo's workflows call. It does NOT and cannot see the toolchain
+# that builds the image. The build runs inside a container via kas-container,
+# whose version is pinned by hand in the README, and the Yocto layer SRCREVs --
+# poky, meta-openembedded, meta-arm, meta-autonomos -- live as git revisions in
+# includes/base.yaml, updated by hand against upstream. A green Dependabot here
+# is not a claim that the build inputs are current.
 updates:
   - package-ecosystem: github-actions
     directory: /
@@ -24,25 +23,6 @@ updates:
       # Batch the routine bumps into one reviewable PR; let a major (a
       # potentially breaking action upgrade) arrive on its own.
       actions-minor:
-        update-types:
-          - minor
-          - patch
-
-  # uv, not pip: this project is uv-managed (uv.lock is the source of truth);
-  # the pip ecosystem would update pyproject.toml but never the lockfile.
-  - package-ecosystem: uv
-    directory: /
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: build
-    labels:
-      - dependencies
-      - python
-    groups:
-      python-minor:
         update-types:
           - minor
           - patch

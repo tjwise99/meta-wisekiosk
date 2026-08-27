@@ -397,12 +397,9 @@ def select_groups(changed):
         if SECRET_PATH.search(norm):
             needed.add("RAUC / signing / secrets")
 
-        # Anything that gates, builds or drives — including the hooks, the
-        # guard's own self-test, and the interpreter environment they all run
-        # under. A `uv.lock` bump changes what `tools/scrub-identity.py` and
-        # `tools/doc-links.py` execute as surely as editing them does, and
-        # dependabot opens exactly that pull request.
-        if norm in ("Justfile", "pyproject.toml", "uv.lock", ".python-version") or norm.startswith(
+        # Anything that gates, builds or drives — the recipes, the hooks, the
+        # guard's own self-test, the workflows.
+        if norm == "Justfile" or norm.startswith(
             ("tools/", "justfiles/", ".github/", ".claude/", ".githooks/")
         ):
             needed.add("Tooling, guards & CI")
