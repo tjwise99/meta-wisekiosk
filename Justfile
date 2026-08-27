@@ -142,6 +142,33 @@ links:
 image:
     python3 tools/doc-image.py check
 
+# === Image audit ===
+
+# What the last audit build found: counts by every status the manifest carries,
+# and the unpatched findings listed. Reading only -- which finding matters is a
+# person's judgement, so this reports and never gates.
+[group('audit')]
+[doc("Report the CVE findings from the last audit build (skips if unbuilt)")]
+cve:
+    python3 tools/cve-report.py check
+
+# The SBOM every ordinary build already emits. No audit build needed.
+[group('audit')]
+[doc("Report the SBOM the last build emitted (skips if unbuilt)")]
+sbom:
+    python3 tools/sbom-report.py check
+
+# cve-check fetches the NVD database, so it rides an overlay fragment that only
+# this recipe joins on -- an ordinary `just build` keeps that fetch off its path.
+# write-build-rev.sh first, exactly as `build` does: kas alone builds the tree
+# against the PREVIOUS commit and the reproducibility gate refuses the image.
+[group('audit')]
+[script('bash')]
+[doc("Build with cve-check inherited, writing a CVE manifest beside the image")]
+cve-build:
+    tools/write-build-rev.sh
+    kas-container build {{config}}:includes/cve-audit.yaml
+
 # Write per-site config to a device's /data. The image carries none of it.
 [group('provision')]
 [doc("Provision a reachable device's /data from secrets.yaml")]
