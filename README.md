@@ -83,8 +83,11 @@ behind those changes are indexed in **[docs/README.md](docs/README.md)**.
 ## Quick start
 
 `kas-container` runs the build inside a container, so a working **Docker or Podman** is a
-prerequisite. The flash and OTA paths additionally need `git`, `debugfs` (`e2fsprogs`) and `openssl`
-on the host, and refuse rather than skip when one is missing.
+prerequisite. The flash and OTA paths additionally need `git`, `debugfs` (`e2fsprogs`) and `openssl`,
+and the repository guards (`just guards` and the pre-commit hook) need **PyYAML** for `python3` to
+validate the kas YAML — all of them refuse rather than skip when one is missing. On an
+externally-managed (PEP 668) `python3`, install PyYAML with a virtualenv, the distro's
+`python3-yaml`, or `python3 -m pip install --break-system-packages pyyaml`.
 
 ```sh
 curl -L -o ~/bin/kas-container https://raw.githubusercontent.com/siemens/kas/5.4/kas-container
