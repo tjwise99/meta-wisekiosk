@@ -114,7 +114,7 @@ t "dd to fixed partition" BLOCK "$(b 'dd if=x.img of=/dev/sdz1')"
 # the writer off command position and the whole rule stopped applying.
 t "sudo bmaptool"         BLOCK "$(b 'sudo bmaptool copy core-image.wic.bz2 /dev/sdz')"
 t "sudo dd, quoted of="   BLOCK "$(b "sudo dd if=x.wic of='/dev/sdz' bs=4M")"
-t "device via variable"   BLOCK "$(b 'D=/dev/sdz; sudo dd if=x.wic of=$D')"
+t "device via variable"   BLOCK "$(b "D=/dev/sdz; sudo dd if=x.wic of=\$D")"
 t "provision-fresh-card"  BLOCK "$(b 'just provision-fresh-card /dev/sdz')"
 t "redirect to disk"      BLOCK "$(b 'cat core-image.wic > /dev/sdz')"
 t "tee to disk"           BLOCK "$(b 'cat core-image.wic | sudo tee /dev/sdz > /dev/null')"
