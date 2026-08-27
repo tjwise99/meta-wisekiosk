@@ -554,6 +554,174 @@ else
     fi
 fi
 
+# --- 11. the identity scan must stay wired into every route ---------------
+# Guard 6 above sees RFC1918 addresses and nothing else. A hostname, an SSID, a
+# MAC, a board serial, a machine-id and a PSK hash are none of them
+# credential-shaped and none of them address-shaped, so gitleaks and guard 6
+# both pass while the tree publishes the site. tools/scrub-identity.py is what
+# sees those, and it is run once per route rather than from here -- running it
+# from inside this script AND from the hook and the workflow would scan the tree
+# twice on every commit.
+#
+# So what is asserted here is the WIRING, as guard 10 does for the
+# reproducibility gate: dropping the call from the hook, the workflow or the
+# justfile is a one-line edit that leaves every file parsing and every other
+# guard green. Comments are stripped first, so a mention in prose cannot green
+# it. Paths are existence-checked, as 1b/3/7/8/9/10.
+#
+# The STRENGTH of each call is asserted too, not just its presence. `--check` is
+# a substring of `--check --allow-partial`, so a presence test alone reads green
+# on a route that has had the known-value half switched off -- and that half is
+# the only thing that sees a hostname, an SSID or a machine-id. Where the map
+# exists the scan must be able to fail; where it structurally cannot (a clone in
+# CI) the workflow declares the limit. So --allow-partial belongs on the
+# workflow route and on NEITHER strict one, and both directions are checked: a
+# strict route that gains the flag fails here, and a workflow route that loses
+# it fails here too.
+#
+# The Justfile is read as the `guards` RECIPE, not as a file: a call elsewhere in
+# it is a different route, and a rename of the recipe must fail here rather than
+# silently widen the scan.
+scrub11="tools/scrub-identity.py"
+call11="$scrub11 --check"
+part11="--allow-partial"
+if [ ! -x "$scrub11" ]; then
+    bad "guard 11: $scrub11 missing or not executable -- nothing scans for device identity"
+else
+    unwired11=""
+    loose11=""
+    for route11 in ".githooks/pre-commit:strict" ".github/workflows/guards.yml:partial" "Justfile:strict"; do
+        f=${route11%:*}
+        want11=${route11##*:}
+        if [ ! -f "$f" ]; then
+            unwired11="$unwired11 $f(missing)"
+            continue
+        fi
+        case "$f" in
+            Justfile) body11=$(awk '/^guards:/ { inr = 1; next } inr && /^[^[:space:]]/ { exit } inr' "$f") ;;
+            *)        body11=$(cat "$f") ;;
+        esac
+        # grep -c and compare, never `| grep -q`: -q exits on the first hit, the
+        # producer dies of SIGPIPE at 141, and pipefail returns that -- the test
+        # would be false precisely when the pattern matches.
+        calls11=$(printf '%s\n' "$body11" | grep -vE '^[[:space:]]*#' | grep -F -- "$call11")
+        n11=$(printf '%s\n' "$calls11" | grep -cF -- "$call11")
+        if [ "$n11" -eq 0 ]; then
+            unwired11="$unwired11 $f"
+            continue
+        fi
+        p11=$(printf '%s\n' "$calls11" | grep -cF -- "$part11")
+        if [ "$want11" = strict ] && [ "$p11" -ne 0 ]; then
+            loose11="$loose11 $f($part11-on-a-strict-route)"
+        elif [ "$want11" = partial ] && [ "$p11" -ne "$n11" ]; then
+            loose11="$loose11 $f(declared-limit-dropped)"
+        fi
+    done
+    if [ -n "$unwired11" ]; then
+        bad "guard 11: the identity scan is not wired into every route -- a tracked hostname, SSID, MAC or machine-id would publish unseen; missing from:"
+        for u in $unwired11; do printf '        %s\n' "$u"; done
+    elif [ -n "$loose11" ]; then
+        bad "guard 11: a route runs the identity scan at the wrong strength -- $part11 belongs on the workflow route ONLY, where the gitignored map structurally cannot exist:"
+        for u in $loose11; do printf '        %s\n' "$u"; done
+    else
+        ok "the identity scan is wired into the hook, the workflow and the justfile, strict on both local routes"
+    fi
+
+    # And RUN it here too. This script is the allowlisted entry point an agent
+    # reaches for, so "guards passed" printed by it must not be readable as "no
+    # identity in the tree": a MAC seeded into a tracked CLAUDE.md left this
+    # script green (guard 6 sees addresses, gitleaks sees credential shapes)
+    # while the identity scan reported it on the same tree. The cost is one
+    # extra pass over the tracked files on the routes that also call it.
+    #
+    # --allow-partial belongs HERE and not in the route calls: this script runs
+    # in CI, where gitignored local/device-identity.md structurally cannot
+    # exist. Refusing to exit 0 on a scan that could not run in full is the
+    # route's job, where the map is present.
+    if out11=$("$scrub11" --check --allow-partial 2>&1); then
+        ok "no device identity in any tracked file ($(printf '%s\n' "$out11" | head -n1))"
+    else
+        bad "guard 11: device identity in a tracked file -- do not publish:"
+        printf '%s\n' "$out11" | sed 's/^/        /'
+    fi
+fi
+
+# --- 12. the device guard must still pass its own self-test ---------------
+# .claude/hooks/guard.sh blocks destructive operations aimed at the prod board
+# and image writes to a fixed disk. A guard nobody exercises is indistinguishable
+# from a guard that matches nothing, so its self-test is a repository invariant,
+# not a convenience: an edit that opens a rule fails here.
+guardtest12=".claude/hooks/guard-test.sh"
+if [ ! -f "$guardtest12" ]; then
+    bad "guard 12: $guardtest12 missing -- the device guard is no longer self-tested"
+elif out12=$(bash "$guardtest12" 2>&1); then
+    ok "the device guard passes its self-test ($(printf '%s\n' "$out12" | tail -n1))"
+else
+    bad "the device guard FAILS its own self-test:"
+    printf '%s\n' "$out12" | grep -E '^(FAIL|pass=)' | sed 's/^/        /'
+fi
+
+# --- 13. the review checklist is ONE taxonomy, authored in two files ------
+# .claude/hooks/review-diff.py selects `**Group**` names; CONTRIBUTING.md's
+# "## Review checklist" defines them. Both files say in prose that a rename in
+# either place silently selects nothing -- and prose is what a one-word rename
+# walks past. A group that matches nothing yields zero questions, and zero
+# questions is exactly what a clean commit looks like: staging the site-secrets
+# template with `**RAUC / signing / secrets**` renamed committed it with no
+# review question at all, and no gate saw it.
+rd13=".claude/hooks/review-diff.py"
+cb13="CONTRIBUTING.md"
+if [ ! -f "$rd13" ] || [ ! -f "$cb13" ]; then
+    bad "guard 13: $rd13 or $cb13 missing -- the review checklist taxonomy cannot be checked"
+elif ! command -v python3 > /dev/null 2>&1; then
+    bad "guard 13: python3 missing -- the review checklist taxonomy cannot be checked"
+else
+    out13=$(python3 - "$rd13" "$cb13" <<'PY'
+import re
+import sys
+
+src = open(sys.argv[1], encoding='utf-8').read()
+doc = open(sys.argv[2], encoding='utf-8').read()
+
+# Read from the source as literals rather than by importing: importing runs a
+# PreToolUse hook, and a list kept here by hand would make this file a THIRD
+# author of the same taxonomy.
+selected = set(re.findall(r'needed\.add\(\s*"([^"]+)"\s*\)', src))
+
+parts = doc.split('## Review checklist', 1)
+headings, questions, current = set(), {}, None
+if len(parts) > 1:
+    for line in re.split(r'\n## ', parts[1])[0].splitlines():
+        m = re.match(r'^\*\*([^*]+)\*\*\s*$', line)
+        if m:
+            current = m.group(1).strip()
+            headings.add(current)
+        elif current and re.match(r'^\d+\.\s+\*\*[^*]+\*\*', line):
+            questions[current] = questions.get(current, 0) + 1
+
+problems = []
+if not selected:
+    problems.append(f'no group name read out of {sys.argv[1]} -- the extraction went stale')
+if not headings:
+    problems.append(f'no **Group** heading under "## Review checklist" in {sys.argv[2]}')
+problems += [f'{sys.argv[1]} selects "{n}", which is no **Group** heading in {sys.argv[2]}'
+             for n in sorted(selected - headings)]
+problems += [f'{sys.argv[2]} group "{n}" is selected by no path rule in {sys.argv[1]}'
+             for n in sorted(headings - selected)]
+problems += [f'group "{n}" carries no numbered question, so selecting it asks nothing'
+             for n in sorted(headings) if not questions.get(n)]
+
+print('\n'.join(problems))
+PY
+    )
+    if [ -n "$out13" ]; then
+        bad "guard 13: the review checklist taxonomy differs between the two files that author it:"
+        printf '%s\n' "$out13" | sed 's/^/        /'
+    else
+        ok "the review checklist taxonomy agrees in CONTRIBUTING.md and review-diff.py"
+    fi
+fi
+
 if [ "$fail" -ne 0 ]; then
     printf '\nguards FAILED\n'
     exit 1

@@ -33,4 +33,11 @@ fi
 
 tools/ci-guards.sh || rc=1
 python3 tools/doc-links.py || rc=1
+# Named here as well as inside ci-guards.sh guard 11, and the duplicate scan is
+# the point: this call is the STRICT one. ci-guards runs the scanner with
+# --allow-partial because it also runs in CI, where the identity map cannot
+# exist; here the map does exist, so a run that cannot see it is a failure
+# rather than a pass. ci-guards guard 11 asserts this call is still here, so
+# deleting it fails the guards rather than going quiet.
+tools/scrub-identity.py --check || rc=1
 exit $rc
