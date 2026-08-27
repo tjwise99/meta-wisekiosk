@@ -66,17 +66,20 @@ win_ps() {
 # `timeout` is what bounds a filtered port, which otherwise hangs for the
 # kernel's full SYN retry.
 tcp_open() {
-    timeout 4 bash -c 'exec 3<>/dev/tcp/$1/$2' _ "$1" "$2" 2>/dev/null
+    # The \$ are escaped, not expanded: $1/$2 are the CHILD bash's positionals,
+    # passed as arguments, so no value is ever interpolated into the script text.
+    timeout 4 bash -c "exec 3<>/dev/tcp/\$1/\$2" _ "$1" "$2" 2>/dev/null
 }
 
 # The banner is whatever the server volunteers before we say anything. Reading
 # it is not a login attempt and leaves no session behind.
 tcp_banner() {
-    timeout 5 bash -c '
-        exec 3<>/dev/tcp/$1/$2 || exit 1
+    # Escaped \$ as in tcp_open: every $ below belongs to the child bash.
+    timeout 5 bash -c "
+        exec 3<>/dev/tcp/\$1/\$2 || exit 1
         IFS= read -r -t 3 line <&3
-        printf "%s" "$line"
-    ' _ "$1" "$2" 2>/dev/null | tr -d '\r'
+        printf '%s' \"\$line\"
+    " _ "$1" "$2" 2>/dev/null | tr -d '\r'
 }
 
 # Same probe from the Windows side, for a port WSL's NAT cannot reach.

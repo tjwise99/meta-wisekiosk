@@ -48,7 +48,7 @@ if [ "${1:-}" = "--empirical" ]; then
     elif [ "$(printf '%s' "$OUT" | grep -ciE 'signature|verif|not trusted|unknown ca|certificate')" -gt 0 ]; then
         echo "  ok: old-signed bundle rejected for a signature/trust reason"
     else
-        echo "FAIL: old-signed bundle failed, but NOT for a signature reason -- inconclusive:"; echo "$OUT" | sed 's/^/    /'; rc=1
+        echo "FAIL: old-signed bundle failed, but NOT for a signature reason -- inconclusive:"; printf '%s\n' "$OUT" | sed 's/^/    /'; rc=1
     fi
 
     echo "== empirical positive: a NEW-signed bundle must be ACCEPTED"

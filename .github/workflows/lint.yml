@@ -25,9 +25,11 @@ jobs:
           # whose shebang invokes sh/bash (e.g. .githooks/pre-commit, which has
           # no extension). Justfile [script('bash')] bodies are embedded in
           # .just files and are not lintable here -- a known blind spot.
+          # docs/issue_investigation/ is excluded on purpose, not by oversight:
+          # those are frozen record-of-record scripts, exactly as they were run.
           shebang() {
             local f line
-            git ls-files | while IFS= read -r f; do
+            git ls-files -- ':!:docs/issue_investigation/**' | while IFS= read -r f; do
               [ -f "$f" ] || continue
               line=$(head -n1 -- "$f" 2>/dev/null || true)
               case "$line" in
@@ -35,13 +37,12 @@ jobs:
               esac
             done
           }
-          mapfile -t files < <( { git ls-files -- '*.sh' '*.bash'; shebang; } | sort -u | sed '/^$/d')
+          mapfile -t files < <( { git ls-files -- '*.sh' '*.bash' ':!:docs/issue_investigation/**'; shebang; } | sort -u | sed '/^$/d')
           if [ "${#files[@]}" -eq 0 ]; then
             echo "No shell scripts found -- failing rather than passing empty."; exit 1
           fi
           printf 'Linting %d files:\n' "${#files[@]}"; printf '  %s\n' "${files[@]}"
-          # SC1091: sourced files that are not present in the CI checkout.
-          shellcheck -x -e SC1091 -- "${files[@]}"
+          shellcheck -x -- "${files[@]}"
 
   actionlint:
     runs-on: ubuntu-latest
