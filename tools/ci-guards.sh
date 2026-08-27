@@ -568,28 +568,63 @@ fi
 # justfile is a one-line edit that leaves every file parsing and every other
 # guard green. Comments are stripped first, so a mention in prose cannot green
 # it. Paths are existence-checked, as 1b/3/7/8/9/10.
+#
+# The STRENGTH of each call is asserted too, not just its presence. `--check` is
+# a substring of `--check --allow-partial`, so a presence test alone reads green
+# on a route that has had the known-value half switched off -- and that half is
+# the only thing that sees a hostname, an SSID or a machine-id. Where the map
+# exists the scan must be able to fail; where it structurally cannot (a clone in
+# CI) the workflow declares the limit. So --allow-partial belongs on the
+# workflow route and on NEITHER strict one, and both directions are checked: a
+# strict route that gains the flag fails here, and a workflow route that loses
+# it fails here too.
+#
+# The Justfile is read as the `guards` RECIPE, not as a file: a call elsewhere in
+# it is a different route, and a rename of the recipe must fail here rather than
+# silently widen the scan.
 scrub11="tools/scrub-identity.py"
 call11="$scrub11 --check"
+part11="--allow-partial"
 if [ ! -x "$scrub11" ]; then
     bad "guard 11: $scrub11 missing or not executable -- nothing scans for device identity"
 else
     unwired11=""
-    for f in .githooks/pre-commit .github/workflows/guards.yml Justfile; do
+    loose11=""
+    for route11 in ".githooks/pre-commit:strict" ".github/workflows/guards.yml:partial" "Justfile:strict"; do
+        f=${route11%:*}
+        want11=${route11##*:}
         if [ ! -f "$f" ]; then
             unwired11="$unwired11 $f(missing)"
             continue
         fi
+        case "$f" in
+            Justfile) body11=$(awk '/^guards:/ { inr = 1; next } inr && /^[^[:space:]]/ { exit } inr' "$f") ;;
+            *)        body11=$(cat "$f") ;;
+        esac
         # grep -c and compare, never `| grep -q`: -q exits on the first hit, the
         # producer dies of SIGPIPE at 141, and pipefail returns that -- the test
         # would be false precisely when the pattern matches.
-        n11=$(grep -vE '^[[:space:]]*#' "$f" | grep -cF -- "$call11")
-        [ "$n11" -eq 0 ] && unwired11="$unwired11 $f"
+        calls11=$(printf '%s\n' "$body11" | grep -vE '^[[:space:]]*#' | grep -F -- "$call11")
+        n11=$(printf '%s\n' "$calls11" | grep -cF -- "$call11")
+        if [ "$n11" -eq 0 ]; then
+            unwired11="$unwired11 $f"
+            continue
+        fi
+        p11=$(printf '%s\n' "$calls11" | grep -cF -- "$part11")
+        if [ "$want11" = strict ] && [ "$p11" -ne 0 ]; then
+            loose11="$loose11 $f($part11-on-a-strict-route)"
+        elif [ "$want11" = partial ] && [ "$p11" -ne "$n11" ]; then
+            loose11="$loose11 $f(declared-limit-dropped)"
+        fi
     done
     if [ -n "$unwired11" ]; then
         bad "guard 11: the identity scan is not wired into every route -- a tracked hostname, SSID, MAC or machine-id would publish unseen; missing from:"
         for u in $unwired11; do printf '        %s\n' "$u"; done
+    elif [ -n "$loose11" ]; then
+        bad "guard 11: a route runs the identity scan at the wrong strength -- $part11 belongs on the workflow route ONLY, where the gitignored map structurally cannot exist:"
+        for u in $loose11; do printf '        %s\n' "$u"; done
     else
-        ok "the identity scan is wired into the hook, the workflow and the justfile"
+        ok "the identity scan is wired into the hook, the workflow and the justfile, strict on both local routes"
     fi
 
     # And RUN it here too. This script is the allowlisted entry point an agent

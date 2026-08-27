@@ -141,6 +141,13 @@ Bash)
                 -*) continue ;;
             esac
             if [ -z "$target" ]; then target=$w; continue; fi
+            # A privilege or assignment prefix is not the remote command --
+            # `ssh <board> 'sudo reboot'` reboots the board, and reading the
+            # prefix as the verb made `sudo` a one-word bypass of rule 1.
+            case "$w" in
+                sudo | doas | env | nice | ionice | command | time) continue ;;
+                [A-Za-z_]*=*) continue ;;
+            esac
             printf '%s\t%s\n' "$target" "$w"
             target=""
             armed=0
@@ -157,6 +164,16 @@ Bash)
     # The pair is what makes this safe: `MACHINE=<host>` normalises to a different
     # pair and does not match.
     host_arg() { [[ $norm == *" host $1 "* ]]; }
+
+    # Command position, tolerating the privilege and assignment prefixes the real
+    # invocations carry. Every rule below that anchors a VERB anchors it with
+    # this: a bare `(^|[;&|(]|&&|\|\|)[[:space:]]*` anchor is defeated by typing
+    # `sudo` in front, and `sudo` is the natural hand-run spelling for most of
+    # what these rules protect -- a /boot write, a reboot, an image write all
+    # need root, and justfiles/deploy.just itself runs `"${SUDO[@]}" bmaptool`.
+    # Anything using the bare anchor is a hole; the self-test carries a
+    # sudo-prefixed must-block case per rule so a regression fails the build.
+    CMDPOS='(^|[;&|(]|&&|\|\|)[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*((sudo|doas|env|nice|ionice|command|time)[[:space:]]+(-[^[:space:]]+[[:space:]]+)*)*'
 
     # --- RULE 1 -- destructive operation aimed at the PROD board -------------
     # The prod unit is wall-mounted and carries the live soak run (issue #40).
@@ -185,17 +202,20 @@ Bash)
         ssh_target "$prod_host" && targets_prod=1
         host_arg "$prod_host" && targets_prod=1
     fi
-    # `reboot` is anchored the way every other alternative here is. Unanchored it
-    # fired on the word itself, and `ssh <prod> 'grep -c reboot /var/log/messages'`
-    # is an OBSERVATION -- reading the soak log for reboot events is the main
-    # legitimate activity on that board, and the block message promises
-    # observation is allowed. Two verb positions: after a shell separator, and as
-    # the remote command of an ssh (`ssh_verb`), which is where an argument to a
-    # grep is not.
+    # The power verbs are anchored the way every other alternative here is.
+    # Unanchored, `reboot` fired on the word itself, and
+    # `ssh <prod> 'grep -c reboot /var/log/messages'` is an OBSERVATION --
+    # reading the soak log for reboot events is the main legitimate activity on
+    # that board, and the block message promises observation is allowed. Two
+    # verb positions: command position (CMDPOS, so a `sudo` prefix is not a way
+    # past it), and the remote command of an ssh (`ssh_verb`), which is where an
+    # argument to a grep is not.
     prod_reboot=0
-    ssh_verb reboot && prod_reboot=1
+    for v in reboot shutdown halt poweroff; do
+        ssh_verb "$v" && prod_reboot=1
+    done
     if [ "$targets_prod" -eq 1 ] && { [ "$prod_reboot" -eq 1 ] || printf '%s' "$code" | grep -qE \
-        '(just[[:space:]]+(kiosk-ota|kiosk-install|kiosk-send-direct|kiosk-rollback|kiosk-reboot|reboot|rauc-install|provision-device|bootprofile|flash)([[:space:]]|$)|rauc[[:space:]]+install|systemctl[[:space:]]+(reboot|poweroff)|(^|[;&|(]|&&|\|\|)[[:space:]]*reboot([[:space:]]|$)|tools/provision\.sh[[:space:]]+device|tools/rauc-rotate)'; }; then
+        "just[[:space:]]+(kiosk-ota|kiosk-install|kiosk-send-direct|kiosk-rollback|kiosk-reboot|reboot|rauc-install|provision-device|bootprofile|flash)([[:space:]]|$)|rauc[[:space:]]+install|systemctl[[:space:]]+(reboot|poweroff)|${CMDPOS}(reboot|shutdown|halt|poweroff)([[:space:]]|$)|tools/provision\.sh[[:space:]]+device|tools/rauc-rotate"; }; then
         cat >&2 <<'MSG'
 BLOCKED: that is a destructive operation aimed at the PROD board.
 
@@ -223,14 +243,11 @@ MSG
     # README's own `/dev/sdX` placeholder) is not evidence of a system disk, and
     # failing closed on the unknown would make the rule unusable.
     #
-    # Command position tolerates the privilege and assignment prefixes the real
-    # invocations carry: every one of these needs root, justfiles/deploy.just
-    # runs `"${SUDO[@]}" bmaptool copy`, and a bare `(dd|bmaptool)` anchor let
-    # `sudo bmaptool copy <image> /dev/sda` straight through. The writer list is
-    # not just dd/bmaptool either -- a redirect, `tee`, `wipefs` or `mkfs` reach
-    # the same platter -- and `just provision-fresh-card <device>` mounts and
-    # writes partition 4 as root one README line below `just flash`.
-    CMDPOS='(^|[;&|(]|&&|\|\|)[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*((sudo|doas|env|nice|ionice|command|time)[[:space:]]+(-[^[:space:]]+[[:space:]]+)*)*'
+    # CMDPOS is what let `sudo bmaptool copy <image> /dev/sda` through when this
+    # rule used a bare `(dd|bmaptool)` anchor. The writer list is not just
+    # dd/bmaptool either -- a redirect, `tee`, `wipefs` or `mkfs` reach the same
+    # platter -- and `just provision-fresh-card <device>` mounts and writes
+    # partition 4 as root one README line below `just flash`.
     if printf '%s' "$code" | grep -qE \
         "${CMDPOS}(dd|bmaptool|wipefs|mkfs(\.[A-Za-z0-9]+)?|sgdisk|sfdisk|fdisk|parted|blkdiscard)([[:space:]]|$)|just[[:space:]]+(flash|provision-fresh-card)([[:space:]]|$)|of=[\"']?/dev/|>[[:space:]]*[\"']?/dev/(sd|hd|vd|xvd|nvme|mmcblk|loop|disk)|[[:space:]]tee([[:space:]]+-[^[:space:]]+)*[[:space:]]+[\"']?/dev/"; then
         # `/dev/disk/by-id/...` is captured whole and resolved: taking only the
@@ -367,10 +384,10 @@ MSG
     # passed a test that exported the variable, and opened the gate the first
     # time it was really used.
     if ! printf '%s' "$cmd" | grep -qE '(^|[[:space:]])KIOSK_ALLOW_BOOT_WRITE=1[[:space:]]' && {
-         printf '%s' "$code" | grep -qE '(^|[;&|(]|&&|\|\|)[[:space:]]*fw_setenv([[:space:]]|$)' ||
+         printf '%s' "$code" | grep -qE "${CMDPOS}fw_setenv([[:space:]]|$)" ||
          printf '%s' "$code" | grep -qE ">>?[[:space:]]*/boot/" ||
-         printf '%s' "$code" | grep -qE "(^|[;&|(]|&&|\|\|)[[:space:]]*(rm|tee|truncate|dd|sed)([[:space:]][^|;&]*)?${B}" ||
-         printf '%s' "$code" | grep -qE "(^|[;&|(]|&&|\|\|)[[:space:]]*(cp|mv)[[:space:]][^|;&]*${B}[^[:space:]|;&]*[[:space:]]*($|[;&|])"
+         printf '%s' "$code" | grep -qE "${CMDPOS}(rm|tee|truncate|dd|sed)([[:space:]][^|;&]*)?${B}" ||
+         printf '%s' "$code" | grep -qE "${CMDPOS}(cp|mv)[[:space:]][^|;&]*${B}[^[:space:]|;&]*[[:space:]]*($|[;&|])"
        }; then
         cat >&2 <<'MSG'
 BLOCKED: writing to /boot on a kiosk board.
@@ -414,7 +431,7 @@ MSG
     # host-wide rule to inherit: the global guard covers PR merges and nothing
     # else. `-x -f '<exact argv>'` is the safe spelling and stays allowed --
     # the first option token has to END in f for this to fire.
-    if printf '%s' "$code" | grep -qE '(^|[;&|(]|&&|\|\|)[[:space:]]*(pkill|pgrep)[[:space:]]+-[a-zA-Z]*f([[:space:]]|$)'; then
+    if printf '%s' "$code" | grep -qE "${CMDPOS}(pkill|pgrep)[[:space:]]+-[a-zA-Z]*f([[:space:]]|$)"; then
         cat >&2 <<'MSG'
 BLOCKED: a bare -f on pkill/pgrep matches this harness's own shell command line,
 because the pattern you are searching for is IN that command line. Killed the

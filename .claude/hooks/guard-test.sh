@@ -95,6 +95,13 @@ t "prod host= no user@"   BLOCK "$(b "just kiosk-ota host=$PHOST")"
 # way to batch remote work, so this is the encouraged spelling, not an evasion --
 # and stripping the body disarmed rules 1, 4 and 5 for it.
 t "prod OTA in heredoc"   BLOCK "$(b "$(printf "tools/kiosk-ssh.sh root@%s 'bash -s' <<'EOF'\nrauc install /data/update.raucb\nreboot\nEOF" "$PROD")")"
+# A power verb on a board is run as root, so `sudo` in front of it is the
+# NATURAL spelling, not an evasion -- and it moved the verb off command position
+# and out of the ssh remote-command slot, which disarmed the whole rule.
+t "prod sudo reboot"      BLOCK "$(b "ssh root@$PROD 'sudo reboot'")"
+t "prod sudo reboot bare" BLOCK "$(b "ssh root@$PROD sudo reboot")"
+t "prod shutdown -r"      BLOCK "$(b "ssh root@$PROD 'shutdown -r now'")"
+t "prod local sudo reboot" BLOCK "$(b "ssh root@$PROD uptime && sudo reboot")"
 
 echo "--- must BLOCK: rule 2, image write to a non-removable device ---"
 t "flash to fixed disk"   BLOCK "$(b 'just flash /dev/sdz')"
@@ -129,11 +136,29 @@ t "rm from /boot"         BLOCK "$(b 'rm /boot/cmdline.txt')"
 t "tee into /boot"        BLOCK "$(b 'echo x | tee /boot/config.txt')"
 t "sed -i on /boot"       BLOCK "$(b 'sed -i s/a/b/ /boot/cmdline.txt')"
 t "fw_setenv"             BLOCK "$(b 'fw_setenv bootdelay 0')"
+# Every /boot writer needs root on the board, so the sudo-prefixed form is the
+# spelling a hand-run actually takes -- and it moved the writer off command
+# position, which switched rule 5 off for all of these at once. `doas` and a
+# `VAR=1 ` assignment are the same hole spelled differently.
+t "sudo sed -i on /boot"  BLOCK "$(b 'sudo sed -i s/a/b/ /boot/cmdline.txt')"
+t "sudo rm from /boot"    BLOCK "$(b 'sudo rm /boot/cmdline.txt')"
+t "sudo truncate /boot"   BLOCK "$(b 'sudo truncate -s0 /boot/config.txt')"
+t "sudo dd into /boot"    BLOCK "$(b 'sudo dd if=k.img of=/boot/uImage')"
+t "sudo cp INTO /boot"    BLOCK "$(b 'sudo cp /data/uImage /boot/uImage')"
+t "sudo mv INTO /boot"    BLOCK "$(b 'sudo mv new.dtb /boot/overlay.dtb')"
+t "pipe to sudo tee"      BLOCK "$(b 'echo x | sudo tee /boot/config.txt')"
+t "sudo fw_setenv"        BLOCK "$(b 'sudo fw_setenv bootdelay 0')"
+t "doas sed on /boot"     BLOCK "$(b 'doas sed -i s/a/b/ /boot/cmdline.txt')"
+t "assignment + sed"      BLOCK "$(b 'FOO=1 sed -i s/a/b/ /boot/cmdline.txt')"
 t "exit-echo after pipe"  BLOCK "$(b 'just verify | tail -50 ; echo "exit=$?"')"
 t "kiosk-ssh + suppress"  BLOCK "$(b "tools/kiosk-ssh.sh root@$BENCH uptime 2>/dev/null")"
 t "pkill bare -f"         BLOCK "$(b "$KILLPAT -f doseresp.sh")"
 t "pgrep after &&"        BLOCK "$(b "cd /tmp && $GREPPAT -f nettest")"
 t "pkill combined -af"    BLOCK "$(b "$KILLPAT -af foo")"
+# Killing another user's process needs root, so this is the ordinary spelling
+# too -- and the harness's own command line is still what the -f matches.
+t "sudo pkill bare -f"    BLOCK "$(b "sudo $KILLPAT -f doseresp.sh")"
+t "env pgrep bare -f"     BLOCK "$(b "env $GREPPAT -f nettest")"
 # The other two rules the heredoc strip disarmed. A shell reads these bodies.
 t "lifeline in heredoc"   BLOCK "$(b "$(printf "ssh root@%s bash <<'EOF'\nsystemctl disable sshd\nEOF" "$BENCH")")"
 t "/boot in heredoc"      BLOCK "$(b "$(printf "bash <<'EOF'\necho x > /boot/cmdline.txt\nEOF")")"
@@ -159,6 +184,9 @@ t "prod preflight"        ALLOW "$(b "just kiosk-preflight host=root@$PROD")"
 # `reboot` alternative blocked exactly this.
 t "prod grep for reboot"  ALLOW "$(b "ssh root@$PROD 'grep -c reboot /var/log/messages'")"
 t "prod soak | grep"      ALLOW "$(b "just soak-summary root@$PROD 24 | grep reboot")"
+# The other direction of the sudo-prefix fix: skipping the prefix must land on
+# the REAL verb, not on the argument of a grep one word further along.
+t "prod sudo grep reboot" ALLOW "$(b "ssh root@$PROD 'sudo grep -c reboot /var/log/messages'")"
 echo "--- must ALLOW: rule 2's legal targets ---"
 t "flash to card reader"  ALLOW "$(b 'just flash /dev/sdy')"
 t "dd to removable part"  ALLOW "$(b 'dd if=x.img of=/dev/sdy1')"
@@ -186,6 +214,10 @@ t "cat FROM /boot"        ALLOW "$(b 'cat /boot/uImage > /data/uImage-A')"
 # "a-r-m" contains "rm": arch/arm/boot/dts/ once blocked a read-only ls of the
 # kernel source tree. /boot/ only counts when it STARTS a path.
 t "arm/boot in a path"    ALLOW "$(b 'ls build/work-shared/kernel-source/arch/arm/boot/dts/overlays/')"
+# Tolerating the prefix must not turn READS of /boot into writes.
+t "sudo read /boot"       ALLOW "$(b 'sudo cat /boot/cmdline.txt')"
+t "sudo ls /boot"         ALLOW "$(b 'sudo ls -l /boot/')"
+t "sudo cp FROM /boot"    ALLOW "$(b 'sudo cp /boot/uImage /data/uImage-known-good')"
 t "slot rootfs boot"      ALLOW "$(b 'cd /mnt/root/boot && cat /data/uImage-arm1 > uImage')"
 t "rauc mark-good"        ALLOW "$(b 'rauc status mark-good booted')"
 t "fw_setenv mentioned"   ALLOW "$(b 'echo "re-arm via rauc, not fw_setenv"')"
@@ -209,10 +241,10 @@ echo "--- escape hatch: authorized /boot write ---"
 # are exercised, and the second IS the regression -- an earlier guard read the
 # variable, passed a test that exported it, and opened the gate in real use.
 #
-# The payload is a REDIRECT, not `cp`. A `VAR=1 ` prefix moves `cp` off command
-# position, so a `cp` payload would be allowed even with the marker check deleted
-# -- it would pass while measuring nothing. The redirect rule has no
-# command-position anchor, so the ALLOW can only come from the marker.
+# The payload is a REDIRECT, not `cp`: the redirect shape carries no
+# command-position anchor at all, so this ALLOW can come only from the marker
+# check. An anchored writer could be allowed by the anchor instead -- passing
+# while measuring nothing.
 t "hatch in command text" ALLOW "$(b 'KIOSK_ALLOW_BOOT_WRITE=1 cat /data/cmdline.txt > /boot/cmdline.txt')"
 printf '%s' "$(b 'cat /data/cmdline.txt > /boot/cmdline.txt')" > "$T/hatch.json"
 KIOSK_ALLOW_BOOT_WRITE=1 "$G" < "$T/hatch.json" > /dev/null 2>&1
