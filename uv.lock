@@ -12,6 +12,27 @@ wheels = [
 ]
 
 [[package]]
+name = "colorama"
+version = "0.4.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697, upload-time = "2022-10-25T02:36:22.414Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335, upload-time = "2022-10-25T02:36:20.889Z" },
+]
+
+[[package]]
+name = "colorlog"
+version = "6.12.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8c/55/ba79756cb90c8d69d599d57785398ac87bba7b19c80e87f4e8a562197c93/colorlog-6.12.0.tar.gz", hash = "sha256:2a7924c1dadf18b22a0eb8b06d1c7b01d5341707ec1641eb6fcc4fde0c3e8e5f", size = 18151, upload-time = "2026-07-23T13:40:40.71Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d4/19/0b6647bf5e331521e55d2b63bfbdc210bd9cd605189273f03614a05f702d/colorlog-6.12.0-py3-none-any.whl", hash = "sha256:30d392604e9110045a2c2aeefc27d7a017abbab63f3a8aee594eac0801df784e", size = 12239, upload-time = "2026-07-23T13:40:39.562Z" },
+]
+
+[[package]]
 name = "distro"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -73,18 +94,22 @@ wheels = [
 
 [[package]]
 name = "kas"
-version = "5.0"
+version = "5.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "colorlog" },
     { name = "distro" },
     { name = "gitpython" },
     { name = "jsonschema" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bb/97/69e515d6c0de2b85d576a77c59c3b58ed5f5b01ed6d6218a0e5c7637f38c/kas-5.0.tar.gz", hash = "sha256:9b00d56726b6a303c2bd9c0b65896b5b1f185849075c51a397c7f7d4eb46e375", size = 82504, upload-time = "2025-10-17T13:15:48.194Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/eb/3a/9f60008561f0a0020570b2a06afbfa2c885db2ffb56c0904e5b56b5cc122/kas-5.5.tar.gz", hash = "sha256:ae6b7be8d4396dabcbbef9f7d4fb3d4516b9f5038920cc7914d86e3ebe2ef687", size = 88617, upload-time = "2026-08-21T15:03:26.767Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/56/39/32d29d2a07468f6586d9e1ce1e67e5a8789937e2829656b6d0671f22cc9d/kas-5.5-py3-none-any.whl", hash = "sha256:93e5f49295fa3c6f3348d66ff2189dc7a13638c5fc1669aad7db001cf4fc254d", size = 96534, upload-time = "2026-08-21T15:03:25.159Z" },
+]
 
 [[package]]
-name = "meta-autonomos"
+name = "meta-wisekiosk"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
