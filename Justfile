@@ -160,10 +160,16 @@ cve-scan:
     python3 tools/cve-scan.py check
 
 [group('audit')]
+[doc("Report what changed in the CVE picture since the previous audit build (skips if <2)")]
+cve-delta:
+    python3 tools/cve-delta.py check
+
+[group('audit')]
 [doc("Build with cve-check inherited, writing a CVE manifest beside the image")]
 cve-build:
     tools/write-build-rev.sh
     kas-container build {{config}}:includes/cve-audit.yaml
+    python3 tools/cve-delta.py snapshot
 
 # Write per-site config to a device's /data. The image carries none of it.
 [group('provision')]
