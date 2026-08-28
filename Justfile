@@ -165,7 +165,7 @@ cve-delta:
     python3 tools/cve-delta.py check
 
 [group('audit')]
-[doc("Report which pinned upstream layers their branch head has moved past (needs network)")]
+[doc("Report which pinned upstream repos have fallen behind their branch head (needs network)")]
 currency:
     python3 tools/layer-currency.py check
 
