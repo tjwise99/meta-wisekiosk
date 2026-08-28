@@ -37,6 +37,7 @@ just links          # cross-references only (this is the one CI requires)
 just guards         # repository invariants: secrets, identity, syntax, wiring
 just install-hooks  # once per clone: point core.hooksPath at .githooks
 bash .claude/hooks/guard-test.sh   # the device guard's own self-test
+python3 tools/cve-tools-test.py    # the CVE and currency tools' own self-test
 ```
 
 CI runs [`tools/ci-guards.sh`](tools/ci-guards.sh),
@@ -110,8 +111,10 @@ CI, not only a local run, and walk the checklist below against the diff.
 **A gate is not verified until you have watched it fail.** Seed the defect *and* the
 spelled-differently-but-valid variant, confirm the seed landed, and re-run the finding's own
 reproduction against the fix. A check that looks identical passing and failing has measured nothing —
-which is why `.claude/hooks/guard.sh` ships with `guard-test.sh` beside it and why every guard in
-[`tools/ci-guards.sh`](tools/ci-guards.sh) existence-checks the paths it scans before scanning them.
+which is why `.claude/hooks/guard.sh` ships with `guard-test.sh` beside it, why the CVE and currency
+tools ship with [`tools/cve-tools-test.py`](tools/cve-tools-test.py) beside them, and why every guard
+in [`tools/ci-guards.sh`](tools/ci-guards.sh) existence-checks the paths it scans before scanning
+them.
 
 ## Review checklist
 

@@ -729,6 +729,25 @@ PY
     fi
 fi
 
+# --- 14. the CVE tools must still pass their own self-test ----------------
+# tools/cve-report.py, cve-delta.py, cve-scan.py and layer-currency.py read a
+# manifest whose CVE SUMMARY is free NVD prose, and the field regex cannot tell
+# that prose from a record key. The tools report and never gate, so a parse that
+# quietly goes wrong prints a number nobody can tell from a right one. The
+# self-test drives seeded fixtures carrying the defect, which is the only thing
+# separating "the tools passed" from "the tools looked at nothing".
+cvetest14="tools/cve-tools-test.py"
+if [ ! -f "$cvetest14" ]; then
+    bad "guard 14: $cvetest14 missing -- the CVE tools are no longer self-tested"
+elif ! command -v python3 > /dev/null 2>&1; then
+    bad "guard 14: python3 missing -- the CVE tools cannot be self-tested"
+elif out14=$(python3 "$cvetest14" 2>&1); then
+    ok "the CVE tools pass their self-test ($(printf '%s\n' "$out14" | tail -n1))"
+else
+    bad "the CVE tools FAIL their own self-test:"
+    printf '%s\n' "$out14" | grep -E '^(FAIL|  |pass=)' | sed 's/^/        /'
+fi
+
 if [ "$fail" -ne 0 ]; then
     printf '\nguards FAILED\n'
     exit 1
