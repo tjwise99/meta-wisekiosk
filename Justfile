@@ -155,7 +155,7 @@ sbom:
     python3 tools/sbom-report.py check
 
 [group('audit')]
-[doc("Cross-check the SBOM against Grype for what cve-check missed (skips if unbuilt)")]
+[doc("Second-source findings the CVE manifest does not carry (skips if unbuilt)")]
 cve-scan:
     python3 tools/cve-scan.py check
 
