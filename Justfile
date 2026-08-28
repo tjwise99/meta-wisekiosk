@@ -165,6 +165,11 @@ cve-delta:
     python3 tools/cve-delta.py check
 
 [group('audit')]
+[doc("Report which pinned upstream layers their branch head has moved past (needs network)")]
+currency:
+    python3 tools/layer-currency.py check
+
+[group('audit')]
 [doc("Build with cve-check inherited: CVE manifest beside the image, snapshot in ~/.cache/wisekiosk")]
 cve-build:
     tools/write-build-rev.sh
