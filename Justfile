@@ -155,6 +155,11 @@ sbom:
     python3 tools/sbom-report.py check
 
 [group('audit')]
+[doc("Cross-check the SBOM against Grype for what cve-check missed (skips if unbuilt)")]
+cve-scan:
+    python3 tools/cve-scan.py check
+
+[group('audit')]
 [doc("Build with cve-check inherited, writing a CVE manifest beside the image")]
 cve-build:
     tools/write-build-rev.sh
