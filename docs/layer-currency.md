@@ -1,6 +1,14 @@
 # Layer currency
 
-This answers one question: **has upstream moved past the commits this image is pinned to?**
+This answers three questions about how old the image's software is, none of which needs a build:
+
+| Question | Command |
+|---|---|
+| Has upstream moved past the commits this image is pinned to, and is that pin worth anything? | `just currency` |
+| Is a newer recipe already sitting inside a layer that is `current`? | `just preferred-versions` |
+| What would bumping one pin actually close? | `just gap <repo>` |
+
+The first needs network and no checkout. The other two need a checkout and no network.
 
 The image is built from upstream repositories, each frozen at a `commit:` in `includes/`. Pinning them
 is deliberate, for the reasons [`layers-and-kas.md`](layers-and-kas.md) §"Bumping the upstream pin"
@@ -108,6 +116,53 @@ answer stays a person's, the same division the CVE tooling keeps in
 **It needs network, and it is point-in-time.** Every run asks the remotes fresh; there is no cached
 answer and no offline mode. Nothing is stored between runs either, so this reports a *state* and
 never a delta — it cannot tell you that poky moved since you last looked, only where it is now.
+
+## A newer recipe inside a `current` pin: `preferred-versions`
+
+A pin can be exactly on its branch head and the image still build an old recipe, because a pinned
+layer often carries several versions of one and a `PREFERRED_VERSION` decides which. That decision is
+frequently a weak `??=` default written upstream, by nobody here, and nothing else in the tree says
+when it has gone stale.
+
+```sh
+just preferred-versions
+```
+
+[`../tools/preferred-version.py`](../tools/preferred-version.py) reads every `PREFERRED_VERSION_<pn>`
+set under `sources/`, `includes/` and `meta-wisekiosk/`, globs the recipe files each layer ships for
+that recipe, and reports where the setting selects an older version than one already checked out
+beside it. Pure filesystem scan — no build, no network, no bitbake, about a second.
+
+It is the check that finds this, on today's tree:
+
+```
+behind  linux-raspberrypi  ??= '6.6.%' selects 6.6, but 6.12 is already checked out in sources/meta-raspberrypi/recipes-kernel/linux
+          set in sources/meta-raspberrypi/conf/machine/include/rpi-default-versions.inc
+```
+
+`linux-raspberrypi` carries **3723 of this image's 3941 unpatched findings**, and the pinned
+`meta-raspberrypi` commit already ships a 6.12 recipe — no pin bump involved. Whether to take it is
+an owner's call and a large one: a series bump changes the kernel ABI, the device trees and a
+WebKit-invalidating rebuild. The report states the choice; it does not make it.
+
+This does **not** overlap #81. That tracks `devtool check-upgrade-status`, which asks *upstream
+release feeds* whether a newer release exists and needs a configured build tree. This asks the
+opposite and much cheaper question: is a newer recipe **already here**, in a layer already pinned.
+Different input, different cost, different failure mode.
+
+Two limits, both stated in the report's own footer.
+
+**It compares the version in the recipe FILENAME.** The real `PV` is often an expression —
+`linux-raspberrypi` is `${LINUX_VERSION}+git` — and expanding it needs bitbake. A series decision is
+made on the filename anyway, so `%` is matched with its trailing separator dropped: `6.6.%` selects
+`linux-raspberrypi_6.6.bb`.
+
+**It does not read bitbake's override chain.** A setting in a machine conf applies only when that
+machine is built, so a finding sourced from another board's `conf/machine/` file is a finding about
+that board — the report names the file beside every line for exactly that reason. Settings whose
+value or recipe name expands a variable cannot be resolved at all; they are counted and named as
+`unread:` rather than dropped, because a check that silently skips what it could not read prints the
+same clean line as one that found nothing wrong.
 
 ## What a bump would be worth: `gap`
 

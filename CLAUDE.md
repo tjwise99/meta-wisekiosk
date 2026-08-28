@@ -21,7 +21,7 @@ One owner per fact. Read the owner; do not restate it here or anywhere else.
 | Which commit a *running* image was built from | `/etc/buildinfo` on the device |
 | Replacing the RAUC signing key, and the order it must happen in | [`docs/rauc-key-rotation.md`](docs/rauc-key-rotation.md) |
 | Scanning the image for CVEs, reading the SBOM, and what `CVE_STATUS` means | [`docs/cve-and-sbom.md`](docs/cve-and-sbom.md) |
-| Whether the pinned upstream repos have fallen behind their branch heads | [`docs/layer-currency.md`](docs/layer-currency.md) |
+| Whether the pins, or the recipes inside them, have fallen behind, and what a bump would close | [`docs/layer-currency.md`](docs/layer-currency.md) |
 | What was tried, what it cost, what was rejected | [`docs/issue_investigation/`](docs/issue_investigation/TEMPLATE.md) |
 | The shape every investigation takes, and R1-R3 | [`docs/issue_investigation/TEMPLATE.md`](docs/issue_investigation/TEMPLATE.md) |
 | Site configuration — SSID, PSK hash, URL, hostname, machine-id | out-of-tree `~/.config/wisekiosk/secrets.yaml` |
