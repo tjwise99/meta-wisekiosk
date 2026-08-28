@@ -18,6 +18,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from cve_manifest import (CVE, LAYER, PACKAGE, STATUS, UNPATCHED,
+                          ManifestError, records, report_hijacks)
+
 try:
     import yaml
 except ImportError:
@@ -50,14 +55,9 @@ SOURCES = "sources"
 ORIGIN = "origin"
 
 # The CVE manifest an audit build leaves behind, read to say what a pin is
-# WORTH. Without one every repo reports `unknown` rather than nothing.
+# WORTH. Without one every repo reports `unknown` rather than nothing. The
+# parser is shared with cve-report, cve-delta and cve-scan.
 MANIFEST_GLOB = "build/tmp-*/deploy/images/*/*.cve"
-RECORD_START = "LAYER"
-PACKAGE = "PACKAGE NAME"
-CVE = "CVE"
-STATUS = "CVE STATUS"
-UNPATCHED = "Unpatched"
-FIELD = re.compile(r"^([A-Z][A-Za-z0-9 ]*):[ ]?(.*)$")
 
 # A CVE named in a commit subject or body. Evidence of intent, never proof a
 # finding flips -- see `gap`'s closing note.
@@ -170,22 +170,13 @@ def newest_manifest(top: Path):
     return found[0] if found else None
 
 
-def manifest_records(manifest: Path):
-    """The manifest's records, as dicts. Reserved keys are first-write-wins:
-    CVE SUMMARY is free NVD prose and can hold a line shaped like one."""
-    rec, out = None, []
-    for line in manifest.read_text(errors="replace").splitlines():
-        m = FIELD.match(line)
-        if not m:
-            continue
-        key, value = m.group(1), m.group(2)
-        if key == RECORD_START:
-            rec = {}
-            out.append(rec)
-        if rec is None or key in rec:
-            continue
-        rec[key] = value
-    return out
+def manifest_records(manifest: Path, hijacks=None):
+    """The manifest's records, as dicts.
+
+    A prose line the field regex reads as a record key would otherwise put a
+    phantom record in the layer counts, which is a wrong CONTRIBUTION number
+    with nothing to show it went wrong."""
+    return list(records(manifest.read_text(errors="replace"), hijacks))
 
 
 def layers_of(name: str, entry: dict):
@@ -198,18 +189,27 @@ def layers_of(name: str, entry: dict):
     return tuple(declared) if isinstance(declared, dict) and declared else (name,)
 
 
-def contribution(recipes_by_layer, layers):
-    """What a repo's layers put in the image, as a phrase.
+def contribution(by_layer, layers):
+    """What a repo's layers put in the image, as (phrase, ranking weight).
 
-    Counted in RECIPES CARRYING CVE RECORDS, not recipes: a layer can contribute
-    a .bbappend or a class that changes the image without owning a record. So
-    zero here is `dependency only` on the CVE-attribution axis, not `unused`."""
-    if recipes_by_layer is None:
+    The phrase counts RECIPES CARRYING CVE RECORDS -- a layer can contribute a
+    .bbappend or a class that changes the image without owning a record, so
+    zero is `dependency only` on the CVE-attribution axis, not `unused`.
+
+    The WEIGHT is unpatched findings, which is a different number and the one
+    the ranking needs. meta-raspberrypi contributes a single recipe and owns
+    3723 of this image's 3941 unpatched findings; poky contributes 88 recipes
+    and owns 95. Ranking on the recipe count puts the pin worth bumping last."""
+    if by_layer is None:
         return UNKNOWN, -1
-    found = set().union(*(recipes_by_layer.get(n, set()) for n in layers)) \
+    recipes = set().union(*(by_layer[n][0] for n in layers if n in by_layer)) \
         if layers else set()
-    return (f"contributes {len(found)} recipe{'' if len(found) == 1 else 's'}"
-            if found else DEPENDENCY_ONLY), len(found)
+    unpatched = sum(by_layer[n][1] for n in layers if n in by_layer)
+    if not recipes:
+        return DEPENDENCY_ONLY, 0
+    return (f"contributes {len(recipes)} "
+            f"recipe{'' if len(recipes) == 1 else 's'}, "
+            f"{unpatched} unpatched"), unpatched
 
 
 def git(path: Path, *args, timeout=30):
@@ -299,14 +299,22 @@ def check() -> int:
         return refuse(why)
     repos, default_branch, pin_files = loaded
 
+    # Per layer: the recipes carrying records, and how many of their findings
+    # are unpatched. The first is what the report says, the second is what it
+    # ranks on -- see contribution().
     manifest = newest_manifest(top)
-    recipes_by_layer = None
+    hijacks, by_layer = [], None
     if manifest is not None:
-        recipes_by_layer = {}
-        for rec in manifest_records(manifest):
-            if rec.get(RECORD_START) and rec.get(PACKAGE):
-                recipes_by_layer.setdefault(rec[RECORD_START],
-                                            set()).add(rec[PACKAGE])
+        by_layer = {}
+        try:
+            parsed = manifest_records(manifest, hijacks)
+        except ManifestError as exc:
+            return refuse(f"{manifest.name}: {exc}")
+        for rec in parsed:
+            recipes, unpatched = by_layer.setdefault(rec[LAYER], (set(), 0))
+            recipes.add(rec[PACKAGE])
+            by_layer[rec[LAYER]] = (
+                recipes, unpatched + (rec.get(STATUS) == UNPATCHED))
 
     found, excluded = {BEHIND: [], CURRENT: []}, []
     for name, entry in sorted(repos.items()):
@@ -343,8 +351,7 @@ def check() -> int:
         head, why = ls_remote(url, branch)
         if why:
             return refuse(why)
-        phrase, weight = contribution(recipes_by_layer,
-                                      layers_of(name, entry))
+        phrase, weight = contribution(by_layer, layers_of(name, entry))
         found[BEHIND if head != commit else CURRENT].append(
             (name, branch, explicit is not None, commit, head, url, phrase,
              weight, ancestry(top, entry, commit, head)))
@@ -374,7 +381,7 @@ def check() -> int:
     total = len(found[BEHIND]) + len(found[CURRENT])
     print(f"\n{len(found[BEHIND])} of {total} pinned repositories behind the "
           f"branch head they track, {len(found[CURRENT])} current")
-    if recipes_by_layer is None:
+    if by_layer is None:
         print("contribution unknown throughout: no CVE manifest under "
               f"{MANIFEST_GLOB} -- `just cve-build` writes one")
     if excluded:
@@ -382,6 +389,7 @@ def check() -> int:
               "kas resolves it to this repository and there is no pin to "
               "compare")
     print(f"pins read from {', '.join(pin_files)}")
+    report_hijacks(hijacks)
     print("`behind` says the head has moved off the pin, not that the pin is "
           "unsafe; what those commits carry is a separate read. "
           "See docs/layer-currency.md.")
@@ -450,6 +458,7 @@ def gap(name: str, fetch: bool) -> int:
               "`layer-currency.py check`")
         return 0
 
+    hijacks = []
     log = git(where, "log", "--format=%s%n%b", f"{pin}..{head}")
     if log is None:
         return refuse(f"`git log {pin[:12]}..{ref}` failed in {path}")
@@ -463,13 +472,17 @@ def gap(name: str, fetch: bool) -> int:
               "them against -- `just cve-build` writes one")
         return 0
 
-    unpatched = [r for r in manifest_records(manifest)
+    try:
+        parsed = manifest_records(manifest, hijacks)
+    except ManifestError as exc:
+        return refuse(f"{manifest.name}: {exc}")
+    unpatched = [r for r in parsed
                  if r.get(STATUS) == UNPATCHED and r.get(CVE) in named]
     for r in sorted(unpatched, key=lambda r: (r.get(PACKAGE, ""),
                                               r.get(CVE, ""))):
         print(f"{r.get(CVE)}  {r.get(PACKAGE, '?')}  "
               f"CVSSv3 {r.get('CVSS v3 BASE SCORE', '?')}  "
-              f"[{r.get(RECORD_START, '?')}]")
+              f"[{r.get(LAYER, '?')}]")
 
     packages = {r.get(PACKAGE) for r in unpatched}
     print(f"\n{len(unpatched)} unpatched findings across {len(packages)} "
@@ -478,6 +491,7 @@ def gap(name: str, fetch: bool) -> int:
     print(f"pin:  {pin}\nhead: {head}  ({path}, "
           + ("fetched just now" if fetch
              else "as last fetched -- pass --fetch to update") + ")")
+    report_hijacks(hijacks)
     print("`would plausibly close` is what a commit message NAMES, not what a "
           "rebuild proves. The authoritative answer is bumping the pin and "
           "re-running `just cve-build`. See docs/layer-currency.md.")

@@ -34,10 +34,10 @@ board to OTA, reboot and abuse. Nothing destructive goes near prod.
 just                # the recipe roster, each beside what it does
 just verify         # every documentation check: cross-references + docs-vs-image
 just links          # cross-references only (this is the one CI requires)
-just guards         # repository invariants: secrets, identity, syntax, wiring
+just guards         # repository invariants: secrets, identity, syntax, wiring;
+                    # runs the device guard's and the CVE tools' self-tests too
 just install-hooks  # once per clone: point core.hooksPath at .githooks
-bash .claude/hooks/guard-test.sh   # the device guard's own self-test
-python3 tools/cve-tools-test.py    # the CVE and currency tools' own self-test
+bash .claude/hooks/guard-test.sh   # the device guard's self-test on its own
 ```
 
 CI runs [`tools/ci-guards.sh`](tools/ci-guards.sh),

@@ -152,9 +152,9 @@ image:
 # === Image audit ===
 
 [group('audit')]
-[doc("Report the CVE findings from the last audit build (skips if unbuilt)")]
-cve:
-    {{py}} tools/cve-report.py check
+[doc("Report the CVE findings from the last audit build (skips if unbuilt); --layer/--exclude/--min-cvss narrow the detail")]
+cve *args:
+    {{py}} tools/cve-report.py check {{args}}
 
 [group('audit')]
 [doc("Report the SBOM the last build emitted (skips if unbuilt)")]
@@ -178,7 +178,7 @@ currency:
 
 [group('audit')]
 [doc("Report where a PREFERRED_VERSION selects an older recipe than the pinned layer already ships (offline)")]
-preferred-versions:
+preferred-version:
     {{py}} tools/preferred-version.py check
 
 [group('audit')]

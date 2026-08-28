@@ -5,7 +5,7 @@ This answers three questions about how old the image's software is, none of whic
 | Question | Command |
 |---|---|
 | Has upstream moved past the commits this image is pinned to, and is that pin worth anything? | `just currency` |
-| Is a newer recipe already sitting inside a layer that is `current`? | `just preferred-versions` |
+| Is a newer recipe already sitting inside a layer that is `current`? | `just preferred-version` |
 | What would bumping one pin actually close? | `just gap <repo>` |
 
 The first needs network and no checkout. The other two need a checkout and no network.
@@ -44,7 +44,7 @@ chain, and guessing which pin wins is how a report comes back confident and wron
 One line per pinned repository, `behind` first:
 
 ```
-behind  poky  scarthgap (chain default)  <pinned sha> -> <head sha>  contributes 88 recipes  https://git.yoctoproject.org/git/poky
+behind  poky  scarthgap (chain default)  <pinned sha> -> <head sha>  contributes 88 recipes, 95 unpatched  https://git.yoctoproject.org/git/poky
           behind by 69 commits
 behind  meta-virtualization  scarthgap (chain default)  <pinned sha> -> <head sha>  contributes 0 (dependency only)  https://git.yoctoproject.org/meta-virtualization
 current  meta-rauc  scarthgap  <pinned sha>  contributes 1 recipe  https://github.com/rauc/meta-rauc.git
@@ -117,7 +117,7 @@ answer stays a person's, the same division the CVE tooling keeps in
 answer and no offline mode. Nothing is stored between runs either, so this reports a *state* and
 never a delta — it cannot tell you that poky moved since you last looked, only where it is now.
 
-## A newer recipe inside a `current` pin: `preferred-versions`
+## A newer recipe inside a `current` pin: `preferred-version`
 
 A pin can be exactly on its branch head and the image still build an old recipe, because a pinned
 layer often carries several versions of one and a `PREFERRED_VERSION` decides which. That decision is
@@ -125,11 +125,13 @@ frequently a weak `??=` default written upstream, by nobody here, and nothing el
 when it has gone stale.
 
 ```sh
-just preferred-versions
+just preferred-version
 ```
 
 [`../tools/preferred-version.py`](../tools/preferred-version.py) reads every `PREFERRED_VERSION_<pn>`
-set under `sources/`, `includes/` and `meta-wisekiosk/`, globs the recipe files each layer ships for
+set under `sources/`, `includes/`, `meta-wisekiosk/` **and the repository root** — so `just cve-build`'s
+own `kiosk-zero-w.yaml` is scanned, which is exactly where an owner setting
+`PREFERRED_VERSION_linux-raspberrypi = "6.12.%"` would put it. It globs the recipe files each layer ships for
 that recipe, and reports where the setting selects an older version than one already checked out
 beside it. Pure filesystem scan — no build, no network, no bitbake, about a second.
 
@@ -140,7 +142,8 @@ behind  linux-raspberrypi  ??= '6.6.%' selects 6.6, but 6.12 is already checked 
           set in sources/meta-raspberrypi/conf/machine/include/rpi-default-versions.inc
 ```
 
-`linux-raspberrypi` carries **3723 of this image's 3941 unpatched findings**, and the pinned
+As of the **2026-08-28 audit build**, `linux-raspberrypi` carried **3723 of that image's 3941
+unpatched findings** — run `just cve` for current numbers — and the pinned
 `meta-raspberrypi` commit already ships a 6.12 recipe — no pin bump involved. Whether to take it is
 an owner's call and a large one: a series bump changes the kernel ABI, the device trees and a
 WebKit-invalidating rebuild. The report states the choice; it does not make it.
@@ -175,9 +178,10 @@ just gap poky --fetch    # update sources/ first
 
 It walks `git log <pin>..origin/<branch>` in the clone `sources/` already holds, collects every CVE
 id the commit subjects and bodies name, and intersects that with the **unpatched** findings in the
-newest CVE manifest. Against the poky pin that is 69 commits naming 56 CVEs, of which **16 unpatched
-findings across 5 packages** — `curl`, `expat`, `glib-2.0`, `gnutls`, `nghttp2` — would plausibly
-close. It takes about a second and builds nothing.
+newest CVE manifest. Against the poky pin as of 2026-08-28 that was 69 commits naming 56 CVEs, of
+which **16 unpatched findings across 5 packages** — `curl`, `expat`, `glib-2.0`, `gnutls`,
+`nghttp2` — would plausibly close. Those counts move with every fetch and every audit build; run the
+command for today's. It takes about a second and builds nothing.
 
 Two things it deliberately will not do.
 
