@@ -22,7 +22,7 @@ branch that repo tracks. It needs network — no build, no checkout, no `sources
 a few seconds.
 
 Both the pins and the files holding them are found at run time: it scans `includes/` for YAML
-carrying a `repos:` block, and merges those blocks the way kas does. A pin added to an existing
+carrying a `repos:` block, and merges those blocks by name. A pin added to an existing
 include, or in a new one, is covered the day it lands with no change here. The report prints the
 files it read, so what it covered is on the page beside what it found.
 
@@ -31,8 +31,8 @@ files it read, so what it covered is on the page beside what it found.
 One line per pinned repository, `behind` first:
 
 ```
-behind   poky       scarthgap (chain default)  <pinned sha> -> <head sha>  https://git.yoctoproject.org/git/poky
-current  meta-rauc  scarthgap                  <pinned sha>               https://github.com/rauc/meta-rauc.git
+behind  poky  scarthgap (chain default)  <pinned sha> -> <head sha>  https://git.yoctoproject.org/git/poky
+current  meta-rauc  scarthgap  <pinned sha>  https://github.com/rauc/meta-rauc.git
 ```
 
 **`current`** means the pin *is* the branch head. **`behind`** means the head has moved off it, and

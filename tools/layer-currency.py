@@ -60,11 +60,12 @@ def nested(doc, *keys):
 def load_pins(top: Path):
     """Every repo entry under includes/, or a refusal message.
 
-    Returns the entries merged by name as kas merges them -- a later file
-    adding layers to a repo an earlier one pinned is one entry, not two -- with
-    the branch an entry declaring none inherits, and the files read. An entry
-    that is not a mapping is carried through unmerged, for check() to refuse
-    rather than normalise."""
+    Returns the entries merged by name -- a later file adding layers to a repo
+    an earlier one pinned is one entry, not two -- with the branch an entry
+    declaring none inherits, and the files read. Merged in path order; where
+    two files set one repo's key that order decides it, which is not kas's
+    include-chain precedence. An entry that is not a mapping is carried through
+    unmerged, for check() to refuse rather than normalise."""
     root = top / INCLUDES
     files = sorted({p for g in PIN_GLOBS for p in root.rglob(g)}) \
         if root.is_dir() else []
