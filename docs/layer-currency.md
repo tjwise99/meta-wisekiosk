@@ -26,6 +26,11 @@ carrying a `repos:` block, and merges those blocks by name. A pin added to an ex
 include, or in a new one, is covered the day it lands with no change here. The report prints the
 files it read, so what it covered is on the page beside what it found.
 
+Two files describing one repository merge into a single entry, which is what lets `meta-autonomos` be
+pinned in one file and gain a layer in another. Two files giving that repository a *different* `url:`,
+`commit:` or `branch:` refuse instead: kas settles that by include-chain order, this does not read the
+chain, and guessing which pin wins is how a report comes back confident and wrong.
+
 ## Reading the output
 
 One line per pinned repository, `behind` first:
@@ -83,8 +88,9 @@ up until somebody decides otherwise.
 A report it cannot complete **refuses and exits 2**, printing why. That covers everything between the
 question and the answer: PyYAML absent, an include file that will not parse, a `commit:` that is
 missing or not a full object name, a pin with no `url:` to compare it against, no branch resolvable,
-an entry shaped in a way it does not recognise, and any `git ls-remote` that fails, stalls, or
-answers with a ref that is not the one asked for.
+one repository pinned two different ways across two files, an entry shaped in a way it does not
+recognise, and any `git ls-remote` that fails, stalls, or answers with a ref that is not the one
+asked for.
 
 There is no third outcome and no skipped state. A repository quietly dropped from the report would
 read exactly like one that is current, so nothing is ever dropped quietly.

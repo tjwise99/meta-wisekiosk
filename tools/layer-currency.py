@@ -22,6 +22,10 @@ except ImportError:
 INCLUDES = "includes"
 PIN_GLOBS = ("*.yaml", "*.yml")
 
+# What a repo entry is asked about. Two files setting one of these differently
+# is decided by kas on include-chain order, which is not visible from here.
+PIN_KEYS = ("url", "commit", "branch")
+
 # A full object name. A short or symbolic pin is not comparable against what
 # ls-remote returns, and comparing it would report `behind` on spelling alone.
 SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -62,10 +66,11 @@ def load_pins(top: Path):
 
     Returns the entries merged by name -- a later file adding layers to a repo
     an earlier one pinned is one entry, not two -- with the branch an entry
-    declaring none inherits, and the files read. Merged in path order; where
-    two files set one repo's key that order decides it, which is not kas's
-    include-chain precedence. An entry that is not a mapping is carried through
-    unmerged, for check() to refuse rather than normalise."""
+    declaring none inherits, and the files read. Two files setting one repo's
+    url, commit or branch to different values refuse; setting it in one file
+    and not the other, or to the same value, merges. An entry that is not a
+    mapping is carried through unmerged, for check() to refuse rather than
+    normalise."""
     root = top / INCLUDES
     files = sorted({p for g in PIN_GLOBS for p in root.rglob(g)}) \
         if root.is_dir() else []
@@ -73,7 +78,7 @@ def load_pins(top: Path):
         return None, (f"{INCLUDES}/ holds no YAML file, so no pin could be "
                       "read")
 
-    repos, pin_files, defaults = {}, [], {}
+    repos, pin_files, defaults, pinned = {}, [], {}, {}
     for path in files:
         rel = path.relative_to(top).as_posix()
         try:
@@ -91,10 +96,25 @@ def load_pins(top: Path):
         pin_files.append(rel)
         for repo, entry in entries.items():
             entry = {} if entry is None else entry
+            # Keyed on the value's repr, so an unhashable one still compares
+            # and two files spelling it identically stay one value.
+            for key in PIN_KEYS if isinstance(entry, dict) else ():
+                if key in entry:
+                    pinned.setdefault((repo, key), {})[repr(entry[key])] = rel
             was = repos.get(repo)
             repos[repo] = ({**was, **entry}
                            if isinstance(was, dict) and isinstance(entry, dict)
                            else entry)
+
+    for (repo, key), values in sorted(pinned.items()):
+        if len(values) > 1:
+            return None, (f"{repo} is given more than one `{key}:` across the "
+                          "pin files ("
+                          + ", ".join(f"{f} -> {v}" for v, f
+                                      in sorted(values.items(),
+                                                key=lambda kv: kv[1]))
+                          + "), and which one kas would use is decided by an "
+                          "include chain this does not read")
 
     # Picking one of two chain defaults would resolve in silence a question
     # this cannot answer.
