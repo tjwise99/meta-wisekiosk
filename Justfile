@@ -165,7 +165,7 @@ cve-delta:
     python3 tools/cve-delta.py check
 
 [group('audit')]
-[doc("Build with cve-check inherited, writing a CVE manifest beside the image")]
+[doc("Build with cve-check inherited: CVE manifest beside the image, snapshot in ~/.cache/wisekiosk")]
 cve-build:
     tools/write-build-rev.sh
     kas-container build {{config}}:includes/cve-audit.yaml
