@@ -170,6 +170,11 @@ currency:
     python3 tools/layer-currency.py check
 
 [group('audit')]
+[doc("Report which unpatched CVEs bumping one pin would plausibly close (offline; --fetch to update sources/)")]
+gap repo *args:
+    python3 tools/layer-currency.py gap {{repo}} {{args}}
+
+[group('audit')]
 [doc("Build with cve-check inherited: CVE manifest beside the image, snapshot in ~/.cache/wisekiosk")]
 cve-build:
     tools/write-build-rev.sh
