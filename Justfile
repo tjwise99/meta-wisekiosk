@@ -172,6 +172,11 @@ cve-delta:
     {{py}} tools/cve-delta.py check
 
 [group('audit')]
+[doc("Re-judge the kernel's CVE findings against the sources this config compiles (skips if unbuilt)")]
+kernel-cve *args:
+    {{py}} tools/kernel-cve.py check {{args}}
+
+[group('audit')]
 [doc("Report which pinned upstream repos have fallen behind their branch head (needs network)")]
 currency:
     {{py}} tools/layer-currency.py check
