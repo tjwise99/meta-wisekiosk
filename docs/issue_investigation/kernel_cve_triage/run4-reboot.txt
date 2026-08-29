@@ -1,0 +1,10 @@
+back after 75s, boot_id b49aae38-2ffc-4cd4-973d-626620d76021
+Warning: Permanently added '<BENCH_ADDRESS>' (ED25519) to the list of known hosts.
+Booted from: rootfs.1 (B)
+      boot status: [32mgood[0m
+      boot status: [32mgood[0m
+active
+BOOT_ORDER=B A
+BOOT_A_LEFT=3
+BOOT_B_LEFT=3
+REBOOT_EXIT=0

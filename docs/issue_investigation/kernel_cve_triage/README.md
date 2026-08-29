@@ -25,7 +25,7 @@ behind the board's only lifeline survives, and the display renders live.
 Four runs. Runs 1 and 2 are audit builds on the build host, where the experiment is the build and
 there is no board; the machine and the image commit are named instead. Runs 3 and 4 are the bench
 board on two different images, so they are two runs and their numbers never share a table. The prod
-board was contacted once, read-only, and that capture is **not** a run — see Run 4.
+board was contacted twice, read-only both times, and neither is a run — see Run 4.
 
 | Run | Board (role) | Image commit | Harness / scripts | Result (1 line) |
 |---|---|---|---|---|
@@ -40,9 +40,26 @@ record. The single exception ran on the build host and never touched a device: s
 [Limits to carry with these findings](#limits-to-carry-with-these-findings) on the out-of-tree copy
 of poky's kernel-CVE filter.
 
-Raw captures are **not committed beside this README**. They carry the bench board's LAN address, its
-hostname and the site SSID, and this repository is public; the screenshots are framebuffer captures
-of the live page. They are named in backticks below and held out of tree.
+Every capture is committed beside this README. The text captures were passed through
+`tools/scrub-identity.py --apply` before they entered this public repository, which replaced the
+values it holds in the gitignored `local/device-identity.md` — the address reads `<BENCH_ADDRESS>`,
+the hostname `<BENCH_HOSTNAME>`, the SSID `<WIFI_SSID>`, the router `<ROUTER_ADDRESS>` and the
+machine-id `<KIOSK_MACHINE_ID>`. Six further values the pattern half can only *report* were redacted
+by hand: `<BENCH-MAC>`, `<AP-BSSID>`, `<BENCH-BROADCAST>`, `<BENCH-SUBNET>`,
+`<BENCH-HOSTKEY-FINGERPRINT>` and the fleet certificate's `<SPKI-FINGERPRINT>`. Two of those the
+gate cannot catch at all, and both were found by reading the captures rather than by running
+anything: `<BENCH-LINKLOCAL>` is an IPv6 link-local address, which is derived from the MAC by EUI-64
+and therefore *contains* it in a shape no MAC pattern matches, and `<KIOSK_MACHINE_ID-PREFIX>` is
+the first eight characters of the machine-id, which the known-value half misses because it matches
+only the full literal.
+
+That the gate cannot see them is measured, not assumed — see
+[Limits to carry with these findings](#limits-to-carry-with-these-findings).
+
+Nothing else was altered. The Yocto `MACHINE` name `raspberrypi0-wifi`, the layer revisions, the
+bundle checksums, the firmware version, every timestamp and the ANSI escapes are as captured. The
+screenshots are committed unmodified; each was read before it was committed, and the page they show
+carries no board identifier.
 
 ### Run 1 — build host, commit `58ce782`
 
@@ -98,8 +115,8 @@ of the live page. They are named in backticks below and held out of tree.
   association, the `brcmfmac` module and firmware version, unit states, `/data` free space, load and
   entropy. `just soak-summary <bench> 288` read the last 288 samples — 24 h — of the soak log on
   `/data`.
-- **Raw capture:** `bench-pre-baseline.txt`, `bench-pre-soak.txt`, `bench-pre-status.txt`, and the
-  screenshot `phase4b-bench-pre-ota-20260828.png`.
+- **Raw capture:** [`run3-baseline.txt`](run3-baseline.txt), [`run3-soak.txt`](run3-soak.txt),
+  [`run3-status.txt`](run3-status.txt), and the screenshot [`run3-screen.png`](run3-screen.png).
 
 ### Run 4 — bench, commit `c9905c4`
 
@@ -132,17 +149,30 @@ of the live page. They are named in backticks below and held out of tree.
      soak window.
   6. **Rollback was not exercised**, because nothing failed. `just kiosk-rollback` remains the
      documented, never-exercised path, and slot A still holds the 6.6.63 image marked good.
-- **Raw capture:** `run3-ota.txt`, `run3-reboot.txt`, `run3-validate.txt`, and the screenshot
-  `phase4b-bench-post-ota-20260828.png` (captured 2026-08-29; the filename's date stem is wrong and
-  is left as captured rather than silently corrected).
+- **Raw capture:** [`run4-ota.txt`](run4-ota.txt), [`run4-reboot.txt`](run4-reboot.txt),
+  [`run4-validate.txt`](run4-validate.txt), and the screenshot [`run4-screen.png`](run4-screen.png).
 
-**The prod reference capture is not a run.** One read-only `just screenshot` was taken against the
-prod board, to give a human something to compare the bench render against; the device guard
-classifies a screenshot as observation, and nothing else was run against prod in this investigation.
-It is not numbered as a run because **its image commit was never read**, and R1 is explicit that an
-unverifiable "probably this build" is not a commit. It therefore supports exactly one claim — that
-the two boards render the same page layout — and no metric in this document is derived from it. The
-capture is `phase4b-prod-reference-20260828.png`.
+**The prod reference capture is not a run, because prod cannot name its image commit.** One
+read-only `just screenshot` was taken against the prod board to give a human something to compare
+the bench render against, and later one read-only `grep ^meta-wisekiosk /etc/buildinfo`. Nothing
+else was run against prod in this investigation; the device guard classifies both as observation.
+
+The `/etc/buildinfo` read returned **`No such file or directory`**. That file is written by poky's
+`image-buildinfo` class, switched on in `kiosk-zero-w.yaml`, and prod runs an image built before
+that record shipped — so prod's commit is not merely unread, it is **unreadable from the device**.
+`/etc/version` is no help either: it reads `20180309123456`, the frozen `SOURCE_DATE_EPOCH`
+placeholder rather than a build date, and `/etc/os-release` carries only the distro version. Prod
+reports kernel 6.6.63 and `Booted from: rootfs.0 (A)`.
+
+R1 is explicit that an unverifiable "probably this build" is not a commit, so this is a named
+reference capture rather than a numbered run. It supports exactly one claim — that the two boards
+render the same page layout — and no metric in this document derives from it. The capture is
+[`prod-reference-screen.png`](prod-reference-screen.png).
+
+**That prod carries no build stamp is a finding in its own right**, and it is not this ticket's to
+fix. Every guarantee built on `/etc/buildinfo` — the reproducibility gate's "image names HEAD", the
+ability to say which commit the live unit is running — is unavailable for the one board that is
+wall-mounted and carries the live soak. It becomes available the next time prod takes an OTA.
 
 ## Configuration under test
 
@@ -265,7 +295,7 @@ Soak, N = 288 samples over 24.0 h, from the log on `/data`:
 | peak temperature | 47.1 °C |
 | samples throttled | 0 |
 
-Screenshot `phase4b-bench-pre-ota-20260828.png`: `mean=3.898`, so not blank, and the rendered clock
+Screenshot [`run3-screen.png`](run3-screen.png): `mean=3.898`, so not blank, and the rendered clock
 matched the device clock to the second — the render is live, not a frozen frame.
 
 ### Run 4 — bench, image `c9905c4`, post-OTA on 6.12.93
@@ -298,7 +328,7 @@ Soak, N = **3** samples over 0.2 h — a new series, deliberately not blended wi
 | peak temperature | 36.3 °C |
 | samples throttled | 0 |
 
-Screenshot `phase4b-bench-post-ota-20260828.png`: `mean=4.561`, not blank, and the rendered clock and
+Screenshot [`run4-screen.png`](run4-screen.png): `mean=4.561`, not blank, and the rendered clock and
 date matched the device to the second — live.
 
 ## Findings
@@ -516,8 +546,19 @@ taken — writing that partition is the one hands-on-class risk on this board.
   comparable to Run 3's −12.3 kB/h needs about 24 h on 6.12. This is elapsed time, not an unresolved
   risk.
 - **Rollback remains documented and never exercised.** Nothing failed, so nothing was rolled back.
-- **The prod board's image commit was never read**, which is why its screenshot is a reference
-  capture and not a run.
+- **`tools/scrub-identity.py` cannot see an IPv6 link-local address, and one encodes the board's
+  MAC.** Measured against this investigation's own captures by seeding each value back into a
+  committed file and re-running the gate: the board's MAC makes it exit 1, and the board's
+  link-local — the same six bytes in EUI-64 form, split by `ff:fe` with the universal/local bit
+  flipped and written as an IPv6 address — makes it report **clean and exit 0**. Publishing the
+  link-local publishes the MAC, and nothing in this repository says so. The redaction here was made
+  by reading the capture, not by running a check. The gate then demonstrated the gap a second time
+  unprompted: an earlier draft of this bullet quoted both values literally, and the gate refused the
+  MAC and passed the link-local straight through to this file. A check that would catch the next one
+  does not exist, and adding it is not this ticket's.
+- **The prod board cannot name its image commit** — it carries no `/etc/buildinfo`, having been
+  built before that record shipped. That is why its screenshot is a reference capture and not a run,
+  and it is a gap in the fleet's provenance rather than one in this investigation's method.
 - **The `filtered = 34` and `net = 635 → 2128` figures are an out-of-tree estimate**, produced by a
   one-line-modified copy of poky's script held in a scratchpad and never committed — this repository
   redistributes no part of poky. `just kernel-cve` itself reports nothing until the upstream defect

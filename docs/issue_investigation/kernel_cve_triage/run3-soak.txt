@@ -1,0 +1,11 @@
+tools/kiosk-ssh.sh root@<BENCH_ADDRESS> 'kiosk-soak.sh --summary 288'
+  samples          288 over 24.0 h
+  reboots          0
+  browser restarts 0
+  samples w/o browser  0 
+  rss_total range  170404 .. 171120 kB
+  rss_total ends   170996 -> 170700 kB (endpoint delta -296 -- NOT a rate)
+  slope            -12.3 kB/h  (n=288)
+  peak temp        47.1 C
+  peak load1       1.50  (includes the sampler wake-up itself)
+  throttled        0 sample(s) with thr != 0x0
