@@ -116,10 +116,14 @@ every repo declared across the kas include chain — `includes/base.yaml`, `incl
 `includes/platforms/raspberrypi.yaml` — into `sources/`: nine repositories, several GB and a long
 while before any compiling starts.
 
-A full build including WebKit takes **~4.5 h** on 8 cores / 11 GB. Anything that changes
-`DISTRO_FEATURES`, `MACHINE_FEATURES` or webkit's `PACKAGECONFIG` **invalidates WebKit and costs that
-again** — make those decisions before starting, not after. `config.txt`-only knobs (`GPU_MEM`, HDMI,
-overscan, UART) are free to change.
+A full build including WebKit takes **~4.5 h** on 8 cores / 11 GB. Four things invalidate WebKit and
+cost that again: a change to `DISTRO_FEATURES`, to `MACHINE_FEATURES`, to webkit's `PACKAGECONFIG`,
+or **a bump of the poky or meta-openembedded pin** — the last measured at 4 h 52 m of `webkitgtk3`
+alone ([kernel_cve_triage](docs/issue_investigation/kernel_cve_triage/README.md), where that bump
+closed no CVE at all). Make those decisions
+before starting, not after. `config.txt`-only knobs (`GPU_MEM`, HDMI, overscan, UART) are free to
+change, and so is the kernel's `PREFERRED_VERSION` — the kernel is outside webkit's dependency
+closure.
 
 ### Flashing a card
 

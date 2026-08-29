@@ -41,7 +41,8 @@ chain, and guessing which pin wins is how a report comes back confident and wron
 
 ## Reading the output
 
-One line per pinned repository, `behind` first:
+One line per pinned repository, `behind` first. The shape of a report carrying findings, from the run
+that drove the 2026-08-28 pin bump; where every pin sits on its head, only `current` lines appear:
 
 ```
 behind  poky  scarthgap (chain default)  <pinned sha> -> <head sha>  contributes 88 recipes, 95 unpatched  https://git.yoctoproject.org/git/poky
@@ -135,18 +136,26 @@ own `kiosk-zero-w.yaml` is scanned, which is exactly where an owner setting
 that recipe, and reports where the setting selects an older version than one already checked out
 beside it. Pure filesystem scan — no build, no network, no bitbake, about a second.
 
-It is the check that finds this, on today's tree:
+A finding looks like this:
 
 ```
-behind  linux-raspberrypi  ??= '6.6.%' selects 6.6, but 6.12 is already checked out in sources/meta-raspberrypi/recipes-kernel/linux
-          set in sources/meta-raspberrypi/conf/machine/include/rpi-default-versions.inc
+behind  u-boot  ?= '2023.07%' selects 2023.07.02, but 2025.04 is already checked out in sources/meta-lts-mixins/recipes-bsp/u-boot
+          set in sources/meta-arm/meta-arm-bsp/conf/machine/include/corstone1000.inc
 ```
 
-As of the **2026-08-28 audit build**, `linux-raspberrypi` carried **3723 of that image's 3941
-unpatched findings** — run `just cve` for current numbers — and the pinned
-`meta-raspberrypi` commit already ships a 6.12 recipe — no pin bump involved. Whether to take it is
-an owner's call and a large one: a series bump changes the kernel ABI, the device trees and a
-WebKit-invalidating rebuild. The report states the choice; it does not make it.
+Read the file named on the second line before acting: that one is set in another board's machine
+include and says nothing about this image. The report cannot tell the difference, which is why it
+names the file rather than ranking the finding.
+
+The kernel is this check's worked case — a weak `??=` inside a meta-raspberrypi pin that `check`
+correctly reports `current`. `kiosk-zero-w.yaml` carries the override that settled it; what the
+finding was worth, what it cost, and how it was validated on hardware is
+[`issue_investigation/kernel_cve_triage/`](issue_investigation/kernel_cve_triage/README.md).
+
+Whether to take a newer recipe is an owner's call, and for a kernel a large one — a series bump
+changes the ABI and the device trees, and wants validating on hardware before it reaches a board.
+What it costs to rebuild is [`../README.md`](../README.md) §"Quick start". The report states the
+choice; it does not make it.
 
 This does **not** overlap #81. That tracks `devtool check-upgrade-status`, which asks *upstream
 release feeds* whether a newer release exists and needs a configured build tree. This asks the
@@ -178,10 +187,14 @@ just gap poky --fetch    # update sources/ first
 
 It walks `git log <pin>..origin/<branch>` in the clone `sources/` already holds, collects every CVE
 id the commit subjects and bodies name, and intersects that with the **unpatched** findings in the
-newest CVE manifest. Against the poky pin as of 2026-08-28 that was 69 commits naming 56 CVEs, of
-which **16 unpatched findings across 5 packages** — `curl`, `expat`, `glib-2.0`, `gnutls`,
-`nghttp2` — would plausibly close. Those counts move with every fetch and every audit build; run the
-command for today's. It takes about a second and builds nothing.
+newest CVE manifest. Against the poky pin as it stood before the 2026-08-28 bump that was 69 commits
+naming 56 CVEs, of which **16 unpatched findings across 5 packages** — `curl`, `expat`, `glib-2.0`,
+`gnutls`, `nghttp2` — would plausibly close. The bump then closed exactly those 16, which is the one
+time this prediction has been checked against a rebuild
+([`issue_investigation/kernel_cve_triage/`](issue_investigation/kernel_cve_triage/README.md)). Where
+a pin sits on its branch head the range is empty, which is the second case below. Counts move with
+every fetch and every audit build; run the command for today's. It takes about a second and builds
+nothing.
 
 Two things it deliberately will not do.
 
