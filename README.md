@@ -10,7 +10,7 @@ provisioning and read at runtime.
 
 The page the kiosk shows is **WiseKiosk** ([`tjwise99/WiseKiosk`](https://github.com/tjwise99/WiseKiosk)),
 and this repository builds it from source into the image — both halves, at one pinned app commit.
-The backend serves the frontend's bundle over the loopback, so the display no longer depends on a
+The backend serves the frontend's bundle over the loopback, so the display does not depend on a
 remote origin being reachable. The app's configuration is the one part that is never baked: it lives
 at `/data/config/config.json` on the slot-shared partition, so it survives an A/B update.
 

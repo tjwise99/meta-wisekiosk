@@ -113,7 +113,11 @@ through `http.Dir`, which follows a symlink, and the page fetches `/config.json`
 root. `/data` is partition 4 and RAUC is configured for rootfs slots only —
 `meta-wisekiosk/recipes-core/rauc/files/raspberrypi0-wifi/system.conf:10-18` declares
 `slot.rootfs.0` as `mmcblk0p2` and `slot.rootfs.1` as `mmcblk0p3` and no boot slot — so neither an
-update nor this delivery can touch `/data` or the shared, A/B-unprotected `/boot`.
+update nor this delivery can touch `/data` or the shared, A/B-unprotected `/boot`. `config.json`
+itself is operator-supplied and nothing places it: `tools/provision.sh` writes four files into
+`/data/config` and `config.json` is not among them, so finding 2's lifecycle was driven by writing
+the file by hand over ssh. That gap is #97 provisioning has no path to place
+`/data/config/config.json`.
 
 **The kiosk browser has a local default that the site can still override.**
 `kiosk.service:14` sets `Environment=KIOSK_URL=http://localhost:8080` and line 19 reads
