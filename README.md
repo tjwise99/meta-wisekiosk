@@ -9,17 +9,20 @@ hostname, machine-id — is **never** in the image; it is written to the device'
 provisioning and read at runtime.
 
 The page the kiosk shows is **WiseKiosk** ([`tjwise99/WiseKiosk`](https://github.com/tjwise99/WiseKiosk)),
-a separate system served from elsewhere on the LAN that this repository neither builds nor deploys.
-Only its URL enters here, as site config — `KIOSK_URL` in `secrets.yaml`, written to the device's
-`/data` at provisioning.
+and this repository builds it from source into the image — both halves, at one pinned app commit.
+The backend serves the frontend's bundle over the loopback, so the display no longer depends on a
+remote origin being reachable. The app's configuration is the one part that is never baked: it lives
+at `/data/config/config.json` on the slot-shared partition, so it survives an A/B update.
+
+`KIOSK_URL` in `secrets.yaml` is now an optional override rather than how the page is reached — a
+site can still point the browser elsewhere, and the default is the local app.
 
 > ### Related project
 >
-> That boundary is being moved. WiseKiosk epic
+> WiseKiosk epic
 > [#208 appliance-first-class](https://github.com/tjwise99/WiseKiosk/issues/208) brings the board
-> inside WiseKiosk's requirements boundary and bakes the application into this image, so the app
-> stops being a URL this repository points at and becomes something it ships. The two repositories
-> stay separate. This is in progress and will change the paragraph above.
+> inside WiseKiosk's requirements boundary. The two repositories stay separate: the app commit is
+> pinned here in one place, and bumping it is an edit reviewed like any other pin.
 
 How to work in this repository — the gates, the conventions and the review checklist — is
 [CONTRIBUTING.md](CONTRIBUTING.md); the rules an AI agent works under are [CLAUDE.md](CLAUDE.md).
