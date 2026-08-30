@@ -5,10 +5,9 @@ Description=WiseKiosk backend: serves the frontend bundle and the API on :8080
 # would hold the LOCAL page behind WiFi for seconds and buy nothing. The
 # browser in kiosk.service does its own waiting.
 After=network.target data.mount
-# Wants, not Requires: /data carries config.json and nothing else this needs.
-# A /data that failed to mount must leave the app serving, with the page
-# rendering its own "configuration absent" state, rather than take the display
-# down with it.
+# Wants, not Requires: /data carries config.json and nothing else this unit
+# needs. A /data that failed to mount leaves this server running and serving;
+# config.json 404s and the page renders its own "configuration absent" state.
 Wants=data.mount
 
 [Service]

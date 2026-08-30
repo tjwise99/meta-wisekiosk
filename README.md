@@ -14,8 +14,12 @@ The backend serves the frontend's bundle over the loopback, so the display no lo
 remote origin being reachable. The app's configuration is the one part that is never baked: it lives
 at `/data/config/config.json` on the slot-shared partition, so it survives an A/B update.
 
-`KIOSK_URL` in `secrets.yaml` is now an optional override rather than how the page is reached — a
-site can still point the browser elsewhere, and the default is the local app.
+The kiosk browser unit defaults to that local app and treats `KIOSK_URL` as an optional override, so
+a site can still point the browser elsewhere. Provisioning does not share that default:
+[`tools/provision.sh`](tools/provision.sh) requires `KIOSK_URL` in `secrets.yaml` and always writes it
+into `/data/config/kiosk.conf`, which wins over the unit — so a provisioned board reaches the page
+through that value rather than through the local default. The rollout decision behind that gap is
+#96 provisioned boards keep their old `KIOSK_URL`.
 
 > ### Related project
 >
