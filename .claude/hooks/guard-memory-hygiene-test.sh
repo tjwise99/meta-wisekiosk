@@ -93,6 +93,15 @@ t "ready to merge, cited" ASK "$(w "$MEM" 'PR #82 is ready to merge; CI all-gree
 t "un-merged, alone"      ASK "$(w "$MEM" 'Everything on #83 landed, but it sits un-merged.')"
 t "mergeable, alone"      ASK "$(w "$MEM" 'The layer-currency work on #72 came back mergeable.')"
 t "merge-ready, alone"    ASK "$(w "$MEM" 'The delta-triage tooling on #71 sits merge-ready this week.')"
+# The shapes a roll-up is actually WRITTEN in. A separator of one space caught
+# none of these, and every one is a handoff an agent would reach for.
+t "markdown table row"    ASK "$(w "$MEM" '| PR #83 | merged | the kernel triage |')"
+t "bold, then colon"      ASK "$(w "$MEM" '- **#84**: open')"
+t "colon, no copula"      ASK "$(w "$MEM" 'Residual triage #84: closed')"
+t "em dash, shouted"      ASK "$(w "$MEM" 'Kernel triage #83 — MERGED')"
+t "negated"               ASK "$(w "$MEM" 'PR #83 has not been merged yet.')"
+t "still in draft"        ASK "$(w "$MEM" 'The #83 branch is still in draft.')"
+t "remains open"          ASK "$(w "$MEM" 'PR #83 remains open pending review.')"
 # The edit shapes. A hook that reads only `content` goes silent on every Edit,
 # and Edit is how a status line gets APPENDED to a memory that already exists.
 t "Edit new_string"       ASK "$(ed "$MEM" 'PR #83 is MERGEABLE, still un-merged (human-gated)')"
@@ -122,6 +131,11 @@ t "pure owner rule"       PASS "$(w "$MEM" 'Owner rule: investigations name the 
 # Shouted vocabulary with no ticket on the line is a rule ABOUT status, not a
 # record of one -- the header of the memory store itself is written this way.
 t "SHOUTED, no ticket"    PASS "$(w "$MEM" 'Never record whether a PR is MERGED or CLOSED here; run gh instead.')"
+# The separator class admits punctuation, which is what makes a table row bind.
+# A SENTENCE boundary must not: the status word there starts a new clause and
+# says nothing about the ticket before the full stop.
+t "sentence boundary"     PASS "$(w "$MEM" 'Reviewed #42. Closed questions are listed in the investigation.')"
+t "word between, lower"   PASS "$(w "$MEM" 'The #46 build stamp closes the reproducibility gap.')"
 t "clean local capture"   PASS "$(w "$LOCALNOTE" 'Bench board: 24 h soak, RSS flat, display renders at parity with prod.')"
 
 echo "--- must NO-OP: every other path and tool ---"

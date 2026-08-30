@@ -37,16 +37,25 @@ JARGON = re.compile(
     r"|mergeable"
     r"|awaiting\s+owner"
     r"|ready\s+to\s+merge"
-    r"|still\s+(?:open|blocked)"
+    r"|still\s+(?:open|blocked|pending|in\s+draft|a\s+draft)"
+    r"|not\s+(?:yet\s+)?(?:been\s+)?merged"
     r"|blocked[_\s-]by\s+#?\d+",
     re.I,
 )
 
 # `merged`, `closed`, `open` and `draft` are ordinary English, so proximity is
 # not enough -- "PR #40 ... closed no issue" is history in a legal lesson. The
-# tell is the label shape: the status word bound directly to the number.
+# tell is the label shape: the status word bound to the number by nothing but
+# punctuation or a copula. The separator class carries the table row, the bold
+# and the colon -- `| PR #83 | merged |`, `- **#84**: open`, `#83: closed` are
+# the shapes a handoff roll-up is actually written in, and a bare `\s*\(?\s*`
+# missed all three. It admits no word characters, so `#42 (#31 investigation`
+# and `#118 blocking #119` still stop at the first word. A sentence-ending `.`
+# is NOT in it: "Reviewed #42. Closed questions are listed there" binds nothing.
 LABEL = re.compile(
-    r"#\d+\s*\(?\s*(?:is|was|now|still|remains)?\s*(?:not\s+)?"
+    r"#\d+[\s|*_:()\[\]<>,—–-]*"
+    r"(?:(?:is|was|now|still|remains|has|have|had)[\s|*_]+)?"
+    r"(?:not\s+(?:yet\s+)?(?:been\s+)?)?"
     r"(?:merged|closed|open|draft|mergeable|merge-?ready)\b",
     re.I,
 )
