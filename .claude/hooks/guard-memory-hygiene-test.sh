@@ -28,7 +28,12 @@ MEM="/home/fixture/.claude/projects/-home-fixture-meta-wisekiosk/memory/lesson.m
 LOCALNOTE="/home/fixture/meta-wisekiosk/local/bench-notes.md"
 REPODOC="/home/fixture/meta-wisekiosk/docs/cve-and-sbom.md"
 
+PROJ="/home/fixture/meta-wisekiosk"
 export KIOSK_HOOK_TRACE=1
+# `local/` is resolved against the project root, so the scoping cases below mean
+# nothing without one -- with it unset every absolute local path would fall out
+# of scope and the suite would still read green.
+export CLAUDE_PROJECT_DIR="$PROJ"
 
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
@@ -117,6 +122,11 @@ t "local nested note"     ASK "$(w "/home/fixture/meta-wisekiosk/local/runs/soak
 # it did not expect fails open, and silence is the failure mode with no symptom.
 t "relative memory path"  ASK "$(w ".claude/projects/p/memory/lesson.md" 'PR #83 is MERGEABLE, still un-merged.')"
 t "relative local note"   ASK "$(w "local/bench-notes.md" 'PR #83 still un-merged, awaiting owner merge.')"
+t "PR named by URL"       ASK "$(w "$MEM" 'https://github.com/owner/repo/pull/83 is merge-ready and un-merged.')"
+t "shouted OPEN"          ASK "$(w "$MEM" 'Roll-up: #84 per-CVE triage OPEN.')"
+t "shouted BLOCKED"       ASK "$(w "$MEM" 'Roll-up: #80 residual triage BLOCKED on the currency work.')"
+t "pending merge"         ASK "$(w "$MEM" 'PR #83 approved, pending merge.')"
+t "awaiting review"       ASK "$(w "$MEM" 'PR #83 awaiting review from the owner.')"
 
 echo "--- must PASS: durable rules and lessons that merely CITE a ticket ---"
 # Real text from memories that survived the cleanup. Each quotes the status
@@ -140,12 +150,41 @@ t "SHOUTED, no ticket"    PASS "$(w "$MEM" 'Never record whether a PR is MERGED 
 # says nothing about the ticket before the full stop.
 t "sentence boundary"     PASS "$(w "$MEM" 'Reviewed #42. Closed questions are listed in the investigation.')"
 t "word between, lower"   PASS "$(w "$MEM" 'The #46 build stamp closes the reproducibility gap.')"
+# REFLOW. A line is not a unit of meaning. This is the `no-incomplete-prs` rule
+# unwrapped -- the same words that pass at every wrap width, on one long line.
+# A line-wide test made a legal lesson a finding on nothing but its formatting,
+# which no author could act on and no reviewer could predict.
+t "durable rule, one line" PASS "$(w "$MEM" 'Why: an open PR that closes nothing reads as done when it is not. Two violations, same rule: PR #40 (the soak instrument - only the measuring apparatus, closed no issue) and PR #42 (the write-up WITHOUT the fix, presented as mergeable). Both were converted to draft after the fact.')"
+# And the other direction at the same length: a shouted label stays a label
+# however far it sits from its ticket, so distance alone must not excuse it.
+t "shouted, far from tag"  ASK "$(w "$MEM" 'Kernel and CVE tooling on PR #83 (branch cve-triage) pr-ready COMPLETE, CI all-green, MERGEABLE, un-merged.')"
+# QUOTED. The useful spelling of this very rule names a ticket inside the
+# example -- "never write PR #83 is MERGEABLE into a memory" is the form worth
+# keeping, and the vague one is not. A gate that fires on the lesson it teaches
+# trains the reader to click through it.
+t "rule quotes an example" PASS "$(w "$MEM" 'Owner rule: a memory saying "#83 is merge-ready" is lying by the time you read it.')"
+# shellcheck disable=SC2016  # the backticks are the payload, not a substitution
+t "rule quotes, backtick"  PASS "$(w "$MEM" 'Never write `PR #83 is MERGEABLE, un-merged` into a memory.')"
+# TERMINAL history. A merge cannot be falsified by a later merge, so the date a
+# PR landed is durable fact -- the citation the spec names as a must-not-flag.
+t "cited with merge date"  PASS "$(w "$MEM" 'The reproducibility gate shipped in PR #51, merged 2026-08-26.')"
+t "comma, ordinary prose"  PASS "$(w "$MEM" 'Two violations, same rule: PR #40, closed no issue, and PR #42.')"
+# A fenced block is captured output. A lesson teaching "read state from gh"
+# necessarily shows what gh printed.
+# shellcheck disable=SC2016  # the fence backticks are the payload
+t "gh output in a fence"   PASS "$(w "$MEM" "$(printf 'Read state from gh, never from here:\n\n```\n#83  kernel triage  MERGED\n#84  per-CVE triage  OPEN\n```\n')")"
 t "clean local capture"   PASS "$(w "$LOCALNOTE" 'Bench board: 24 h soak, RSS flat, display renders at parity with prod.')"
 
 echo "--- must NO-OP: every other path and tool ---"
 t "repo doc, same text"   NOOP "$(w "$REPODOC" 'PR #83 is MERGEABLE, still un-merged (human-gated)')"
 t "repo CLAUDE.md"        NOOP "$(w "/home/fixture/meta-wisekiosk/CLAUDE.md" 'PR #83 is MERGEABLE, un-merged')"
-t "localhost, not local/" NOOP "$(w "/home/fixture/meta-wisekiosk/docs/localnotes.md" 'PR #83 is MERGEABLE, un-merged')"
+t "localhost, not local/" NOOP "$(w "$PROJ/docs/localnotes.md" 'PR #83 is MERGEABLE, un-merged')"
+# `local/` is the REPO's gitignored note tree, not any directory of that name.
+# An unanchored match takes in /usr/local, a vendored tree, and a docs/local/
+# a contributor adds for localisation.
+t "/usr/local"            NOOP "$(w "/usr/local/share/doc/notes.md" 'PR #83 is MERGEABLE, un-merged')"
+t "docs/local in repo"    NOOP "$(w "$PROJ/docs/local/architecture.md" 'PR #83 is MERGEABLE, un-merged')"
+t "vendored local/"       NOOP "$(w "$PROJ/node_modules/pkg/local/README.md" 'PR #83 is MERGEABLE, un-merged')"
 t "memory, not .md"       NOOP "$(w "/home/fixture/.claude/projects/p/memory/notes.txt" 'PR #83 is MERGEABLE, un-merged')"
 t "projects, no memory/"  NOOP "$(w "/home/fixture/.claude/projects/p/plan.md" 'PR #83 is MERGEABLE, un-merged')"
 t "Bash tool"             NOOP "$(jq -nc '{tool_name:"Bash",tool_input:{command:"gh pr view 83"}}')"
@@ -154,6 +193,13 @@ t "Read tool on memory"   NOOP "$(jq -nc --arg f "$MEM" '{tool_name:"Read",tool_
 echo "--- fail-open: a malformed payload must never interfere ---"
 t "not JSON"              NOOP "not json at all"
 t "empty stdin"           NOOP ""
+# Parseable but structurally wrong. A hook that dies on an unexpected TYPE, not
+# only on unparseable bytes, is a hook that gets uninstalled.
+t "tool_input is a list"  NOOP "$(jq -nc '{tool_name:"Write",tool_input:[1,2]}')"
+t "file_path is null"     NOOP "$(jq -nc '{tool_name:"Write",tool_input:{file_path:null,content:"PR #83 un-merged"}}')"
+# In scope, so the trace fires: these must reach a clean verdict, not a crash.
+t "content is a number"   PASS "$(jq -nc --arg f "$MEM" '{tool_name:"Write",tool_input:{file_path:$f,content:42}}')"
+t "edits is a string"     PASS "$(jq -nc --arg f "$MEM" '{tool_name:"MultiEdit",tool_input:{file_path:$f,edits:"nope"}}')"
 
 echo "--- the ask message must say where status belongs ---"
 msg=$(printf '%s' "$(w "$MEM" 'PR #83 is MERGEABLE, still un-merged (human-gated)')" \

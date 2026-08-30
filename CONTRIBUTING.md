@@ -108,10 +108,11 @@ the number and the name of anything renumberable, in the title and in the body.
 comment; agent memory and gitignored `local/` notes hold owner rules and durable lessons only. A
 status line copied into either is a second copy that a merge falsifies and nothing corrects, and the
 stale copy is the one the next reader acts on. Citing a ticket as history — "the reproducibility gate
-shipped in PR #51 build stamp" — is not status.
-[`.claude/hooks/guard-memory-hygiene.py`](.claude/hooks/guard-memory-hygiene.py) asks before such a
-write and never blocks: a rule about status has to quote the vocabulary it rules on, and only a human
-can tell that from narration.
+shipped in PR #51 build stamp" — is not status, and neither is a terminal fact like the date a pull
+request merged. [`.claude/hooks/guard-memory-hygiene.py`](.claude/hooks/guard-memory-hygiene.py) asks
+before such a write and never blocks; quoted examples and fenced captures are exempt, so a rule may
+name the spelling it forbids. It knows the vocabulary this store's handoffs used, not status in
+general — a phrasing outside that list passes, and the rule binds either way.
 
 ## Getting a change merged
 
@@ -121,11 +122,10 @@ CI, not only a local run, and walk the checklist below against the diff.
 **A gate is not verified until you have watched it fail.** Seed the defect *and* the
 spelled-differently-but-valid variant, confirm the seed landed, and re-run the finding's own
 reproduction against the fix. A check that looks identical passing and failing has measured nothing —
-which is why `.claude/hooks/guard.sh` and `guard-memory-hygiene.py` each ship with a `-test.sh`
-beside them, why the CVE and currency
-tools ship with [`tools/cve-tools-test.py`](tools/cve-tools-test.py) beside them, and why every guard
-in [`tools/ci-guards.sh`](tools/ci-guards.sh) existence-checks the paths it scans before scanning
-them.
+which is why `.claude/hooks/guard.sh` and `guard-memory-hygiene.py` each ship with a `-test.sh` beside
+them, why the CVE and currency tools ship with [`tools/cve-tools-test.py`](tools/cve-tools-test.py)
+beside them, and why every guard in [`tools/ci-guards.sh`](tools/ci-guards.sh) existence-checks the
+paths it scans before scanning them.
 
 ## Review checklist
 
