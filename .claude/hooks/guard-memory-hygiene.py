@@ -45,13 +45,10 @@ JARGON = re.compile(
 
 # `merged`, `closed`, `open` and `draft` are ordinary English, so proximity is
 # not enough -- "PR #40 ... closed no issue" is history in a legal lesson. The
-# tell is the label shape: the status word bound to the number by nothing but
-# punctuation or a copula. The separator class carries the table row, the bold
-# and the colon -- `| PR #83 | merged |`, `- **#84**: open`, `#83: closed` are
-# the shapes a handoff roll-up is actually written in, and a bare `\s*\(?\s*`
-# missed all three. It admits no word characters, so `#42 (#31 investigation`
-# and `#118 blocking #119` still stop at the first word. A sentence-ending `.`
-# is NOT in it: "Reviewed #42. Closed questions are listed there" binds nothing.
+# tell is the label shape: the status bound to the number by punctuation or a
+# copula and nothing else. The separator admits table furniture and no word
+# character, so `#42 (#31 investigation` stops at the first word; a sentence-
+# ending `.` is excluded, because a new clause binds nothing to the ticket.
 LABEL = re.compile(
     r"#\d+[\s|*_:()\[\]<>,—–-]*"
     r"(?:(?:is|was|now|still|remains|has|have|had)[\s|*_]+)?"
@@ -60,10 +57,9 @@ LABEL = re.compile(
     re.I,
 )
 
-# The same words shouted are a LABEL, not prose -- `#47 template MERGED` puts a
-# word between the number and the status and walks past LABEL, and that spelling
-# is as common in a status roll-up as the tight one. Case-sensitive, and still
-# requires a ticket on the line.
+# The same words shouted are a label wherever they sit, so a word may stand
+# between them and the number -- `#47 template MERGED`. Case-sensitive, and
+# still requires a ticket on the line.
 CAPS_STATUS = re.compile(r"\b(?:MERGED|CLOSED|MERGEABLE|MERGE-?READY|DRAFT|UN-?MERGED)\b")
 
 # A dated status block header is unambiguous on its own -- nothing durable is
