@@ -52,8 +52,15 @@ me() { jq -nc --arg f "$1" --arg c "$2" '{tool_name:"MultiEdit",tool_input:{file
 # grep -c and compare, never `| grep -q`: -q exits on the first hit, the
 # producer dies of SIGPIPE at 141, and pipefail returns that -- the test would
 # be false precisely when the pattern matches.
+#
+# TENV carries extra `env` arguments for the hook under test. The suite exports
+# CLAUDE_PROJECT_DIR globally, and the one case that matters most is its
+# ABSENCE -- an assignment prefix cannot express an unset, and a prefix on a
+# shell FUNCTION persists past the call in bash, which would silently re-point
+# every later case.
+TENV=()
 t() {
-  out=$(printf '%s' "$3" | python3 "$H" 2>"$T/err"); rc=$?
+  out=$(printf '%s' "$3" | env ${TENV+"${TENV[@]}"} python3 "$H" 2>"$T/err"); rc=$?
   err=$(cat "$T/err")
   asked=$(printf '%s' "$out" | grep -c '"permissionDecision": "ask"')
   scanned=$(printf '%s' "$err" | grep -c 'memory-hygiene: scanned')
@@ -169,6 +176,14 @@ t "rule quotes, backtick"  PASS "$(w "$MEM" 'Never write `PR #83 is MERGEABLE, u
 # PR landed is durable fact -- the citation the spec names as a must-not-flag.
 t "cited with merge date"  PASS "$(w "$MEM" 'The reproducibility gate shipped in PR #51, merged 2026-08-26.')"
 t "comma, ordinary prose"  PASS "$(w "$MEM" 'Two violations, same rule: PR #40, closed no issue, and PR #42.')"
+# CLAUSE. A ticket cited in one clause is not bound to a status word in another,
+# and a line joining them is one sentence away from any legal lesson. Without
+# the split these three -- all the SAME durable rule, differently phrased --
+# disagreed with each other, which teaches an author to rephrase until the
+# prompt stops rather than to move the status to the ticket.
+t "citation, other clause" PASS "$(w "$MEM" 'See #46 build stamp for the vardeps trick; the rule is never to record whether a PR is MERGED here.')"
+t "rule then precedent"    PASS "$(w "$MEM" 'Never present partial work as mergeable; see #47 template for the precedent that settled it.')"
+t "precedent then rule"    PASS "$(w "$MEM" 'Related: never call a non-closing PR merge-ready; the precedent is #47 template.')"
 # A fenced block is captured output. A lesson teaching "read state from gh"
 # necessarily shows what gh printed.
 # shellcheck disable=SC2016  # the fence backticks are the payload
@@ -185,6 +200,21 @@ t "localhost, not local/" NOOP "$(w "$PROJ/docs/localnotes.md" 'PR #83 is MERGEA
 t "/usr/local"            NOOP "$(w "/usr/local/share/doc/notes.md" 'PR #83 is MERGEABLE, un-merged')"
 t "docs/local in repo"    NOOP "$(w "$PROJ/docs/local/architecture.md" 'PR #83 is MERGEABLE, un-merged')"
 t "vendored local/"       NOOP "$(w "$PROJ/node_modules/pkg/local/README.md" 'PR #83 is MERGEABLE, un-merged')"
+
+echo "--- no CLAUDE_PROJECT_DIR: over-broad, never silent ---"
+# The anchoring above needs a project root. With none, an absolute path cannot be
+# made repo-relative, and the anchored pattern would match NOTHING -- every
+# `local/` note leaving scope in silence while memory kept working. Exporting the
+# variable for the whole suite would make its absence untestable, and its absence
+# IS the failure mode. The chosen behaviour is over-broad, and it is asserted in
+# both directions so it stays a decision rather than an accident.
+TENV=(-u CLAUDE_PROJECT_DIR)
+t "unset: repo local/"    ASK  "$(w "$PROJ/local/bench-notes.md" 'PR #83 is MERGEABLE, un-merged')"
+t "unset: /usr/local"     ASK  "$(w "/usr/local/share/doc/notes.md" 'PR #83 is MERGEABLE, un-merged')"
+t "unset: clean local/"   PASS "$(w "$PROJ/local/bench-notes.md" 'Bench board: 24 h soak, RSS flat.')"
+t "unset: memory still"   ASK  "$(w "$MEM" 'PR #83 is MERGEABLE, still un-merged.')"
+t "unset: unrelated doc"  NOOP "$(w "$PROJ/docs/cve-and-sbom.md" 'PR #83 is MERGEABLE, un-merged')"
+TENV=()
 t "memory, not .md"       NOOP "$(w "/home/fixture/.claude/projects/p/memory/notes.txt" 'PR #83 is MERGEABLE, un-merged')"
 t "projects, no memory/"  NOOP "$(w "/home/fixture/.claude/projects/p/plan.md" 'PR #83 is MERGEABLE, un-merged')"
 t "Bash tool"             NOOP "$(jq -nc '{tool_name:"Bash",tool_input:{command:"gh pr view 83"}}')"

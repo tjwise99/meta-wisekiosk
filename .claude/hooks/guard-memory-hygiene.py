@@ -46,14 +46,22 @@ def relative(path: str) -> str:
 # so it is matched on the path as given. Anchored to accept a relative spelling
 # too: the harness passes absolute paths, and a guard that goes silent on the
 # shape it did not expect fails open.
-MEMORY = re.compile(r"(?:^|/)\.claude/projects/.*/memory/.*\.md$", re.I)
+MEMORY = re.compile(r"(?:^|/)\.claude/projects/.*/memory/.*\.[mM][dD]$")
 
 # `local/` is the repository's own gitignored working-note tree, so it is matched
 # against the REPO-RELATIVE path and anchored at the root, exactly as .gitignore
 # spells it. An unanchored `/local/` would take in `/usr/local/share/doc/*.md`,
 # a vendored `node_modules/*/local/`, and a `docs/local/` a contributor adds for
 # localisation -- none of them agent notes.
-LOCAL = re.compile(r"^local/.*\.md$", re.I)
+LOCAL = re.compile(r"^local/.*\.[mM][dD]$")
+
+# Anchoring needs a project root, and an absolute path with none cannot be made
+# repo-relative. Falling back to LOCAL then matches nothing, and every `local/`
+# note leaves scope in silence -- half the guard gone with the other half still
+# working, which is the most convincing possible failure. This is the loose form
+# used instead: over-broad by design, because over-broad announces itself in an
+# `ask` a reader can refuse, and silence announces nothing.
+LOCAL_UNROOTED = re.compile(r"(?:^|/)local/.*\.[mM][dD]$")
 
 # Status narration names its ticket; a durable rule speaks of "a PR" or "such a
 # PR" and names none, which is the whole separation this hook rests on. A PR
@@ -119,6 +127,14 @@ QUOTED = re.compile(r"`[^`]*`|\"[^\"]*\"")
 
 FENCE = re.compile(r"^\s*(?:```|~~~)")
 
+# A clause is the unit of assertion; a line is not. "See #46 build stamp for the
+# vardeps trick; the rule is never to record whether a PR is MERGED here" names a
+# ticket in one clause and a status word in another, and binding them makes a
+# citation into a finding. Sentence punctuation and the semicolon only: a dash
+# separates a label from its ticket at least as often as it opens an aside, and
+# splitting there loses `#83 — MERGED`.
+CLAUSE = re.compile(r"(?<=[.!?;])\s+")
+
 MESSAGE = (
     "TICKET HYGIENE — {path} reads like PR/issue STATUS: {evidence}\n"
     "Status belongs on the GitHub ticket as a comment, where the next reader is already "
@@ -138,6 +154,13 @@ def text_of(tool_input: dict) -> str:
     if isinstance(edits, list):
         parts += [e.get("new_string") for e in edits if isinstance(e, dict)]
     return "\n".join(p for p in parts if isinstance(p, str) and p)
+
+
+def is_local(path: str) -> bool:
+    """Is this the repository's gitignored working-note tree?"""
+    if os.path.isabs(path) and not os.environ.get("CLAUDE_PROJECT_DIR"):
+        return bool(LOCAL_UNROOTED.search(path))
+    return bool(LOCAL.search(relative(path)))
 
 
 def bound(line: str, tell) -> bool:
@@ -177,12 +200,13 @@ def findings(text: str):
         stripped = line.strip()
         if not stripped:
             continue
-        probe = scannable(stripped)
-        if (STATUS_HEADER.search(probe)
-                or LABEL.search(probe)
-                or bound(probe, JARGON)
-                or (TICKET.search(probe) and CAPS_STATUS.search(probe))):
-            hits.append(stripped)
+        for clause in CLAUSE.split(scannable(stripped)):
+            if (STATUS_HEADER.search(clause)
+                    or LABEL.search(clause)
+                    or bound(clause, JARGON)
+                    or (TICKET.search(clause) and CAPS_STATUS.search(clause))):
+                hits.append(stripped)
+                break
     return hits
 
 
@@ -196,7 +220,7 @@ def main():
     path = tool_input.get("file_path")
     if not isinstance(path, str):
         return 0
-    if not (MEMORY.search(path) or LOCAL.search(relative(path))):
+    if not (MEMORY.search(path) or is_local(path)):
         return 0
     # In scope. Announce it under KIOSK_HOOK_TRACE so the self-test can tell a
     # clean scan from a path the hook never looked at -- silence means both, and
