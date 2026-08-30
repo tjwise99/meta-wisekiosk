@@ -120,12 +120,16 @@ CAPS_STATUS = re.compile(
 # stamped with the day it was true.
 STATUS_HEADER = re.compile(r"\bSTATUS\s+20\d\d\b")
 
-# Text being QUOTED is being mentioned, not asserted. A concrete owner rule is
-# written `never put "PR #83 is MERGEABLE" in a memory`, and that is the useful
-# form -- flagging it would fire the gate on the very lesson this hook teaches.
+# A quoted TERM is being mentioned, not asserted: a concrete owner rule is
+# written `never put "PR #83 is MERGEABLE" in a memory`, and flagging that would
+# fire the gate on the very lesson this hook teaches. A quoted SENTENCE is not a
+# mention -- quoting is the natural way to paste a handoff verbatim, and an
+# unbounded exemption lets the defect through in the format most likely to carry
+# it. Length is the only thing separating them, so it is bounded and both sides
+# are asserted. Ambiguity resolves toward scanning: skipping is the silent
+# direction, and a false positive is visible where a miss is not.
+QUOTE_MAX = 40
 QUOTED = re.compile(r"`[^`]*`|\"[^\"]*\"")
-
-FENCE = re.compile(r"^\s*(?:```|~~~)")
 
 # A clause is the unit of assertion; a line is not. "See #46 build stamp for the
 # vardeps trick; the rule is never to record whether a PR is MERGED here" names a
@@ -181,22 +185,27 @@ def bound(line: str, tell) -> bool:
 
 
 def scannable(line: str) -> str:
-    """The line with quoted spans blanked, length preserved so NEAR is unmoved."""
-    return QUOTED.sub(lambda m: " " * (m.end() - m.start()), line)
+    """The line with short quoted spans blanked, length preserved so NEAR is
+    unmoved. A span over QUOTE_MAX is left in place to be scanned."""
+    def blank(m):
+        n = m.end() - m.start()
+        return " " * n if n <= QUOTE_MAX else m.group(0)
+    return QUOTED.sub(blank, line)
 
 
 def findings(text: str):
     """Offending lines. A line bounds the search but does not decide it: LABEL
     is adjacency-bound by its own pattern, and the looser tells must clear
-    `bound`. A fenced block is captured output, not an assertion about a ticket.
+    `bound`.
+
+    Fenced blocks are scanned like anything else. Exempting them costs more
+    than it buys: a fence is where an agent pastes a roll-up, and a single
+    unclosed one would hide every line after it to end of file -- silently, in
+    the one format most likely to carry the thing this hook exists to catch. A
+    lesson quoting captured output pays an `ask` for that, which is visible.
     """
-    hits, fenced = [], False
+    hits = []
     for line in text.splitlines():
-        if FENCE.match(line):
-            fenced = not fenced
-            continue
-        if fenced:
-            continue
         stripped = line.strip()
         if not stripped:
             continue

@@ -110,9 +110,10 @@ status line copied into either is a second copy that a merge falsifies and nothi
 stale copy is the one the next reader acts on. Citing a ticket as history — "the reproducibility gate
 shipped in PR #51 build stamp" — is not status, and neither is a terminal fact like the date a pull
 request merged. [`.claude/hooks/guard-memory-hygiene.py`](.claude/hooks/guard-memory-hygiene.py) asks
-before such a write and never blocks; quoted examples and fenced captures are exempt, so a rule may
-name the spelling it forbids. It knows the vocabulary this store's handoffs used, not status in
-general — a phrasing outside that list passes, and the rule binds either way.
+before such a write and never blocks; a short quoted term is exempt, so a rule may name the spelling
+it forbids, but a quoted or fenced *sentence* is scanned like any other — those are how a handoff
+gets pasted verbatim. It knows the vocabulary this store's handoffs used, not status in general — a
+phrasing outside that list passes, and the rule binds either way.
 
 ## Getting a change merged
 

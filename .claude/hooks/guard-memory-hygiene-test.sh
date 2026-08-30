@@ -165,6 +165,30 @@ t "durable rule, one line" PASS "$(w "$MEM" 'Why: an open PR that closes nothing
 # And the other direction at the same length: a shouted label stays a label
 # however far it sits from its ticket, so distance alone must not excuse it.
 t "shouted, far from tag"  ASK "$(w "$MEM" 'Kernel and CVE tooling on PR #83 (branch cve-triage) pr-ready COMPLETE, CI all-green, MERGEABLE, un-merged.')"
+
+echo "--- must ASK: THE defect, in every format it gets pasted in ---"
+# The exemptions below are the only thing that could hide this string, and every
+# one of them is one-directional without these cases: removing a blanket
+# exemption always breaks a must-PASS case, so a suite holding only must-PASS
+# quoted and fenced cases proves the exemption is ACTIVE and never that it is
+# correctly SCOPED. Quoting and fencing are the two most natural ways to paste a
+# handoff verbatim, which makes them the formats that matter most.
+DEFECT='PR #83 is MERGEABLE, still un-merged (human-gated)'
+t "defect, bare"          ASK "$(w "$MEM" "$DEFECT")"
+t "defect, double-quoted" ASK "$(w "$MEM" "Handoff: \"$DEFECT\"")"
+# shellcheck disable=SC2016  # the backticks are the payload
+t "defect, backticked"    ASK "$(w "$MEM" "Handoff: \`$DEFECT\`")"
+# shellcheck disable=SC2016  # the fence backticks are the payload
+t "defect, fenced"        ASK "$(w "$MEM" "$(printf '## Handoff\n\n```\n%s\n```\n' "$DEFECT")")"
+# shellcheck disable=SC2016
+t "defect, fenced+lang"   ASK "$(w "$MEM" "$(printf '## Handoff\n\n```text\n%s\n```\n' "$DEFECT")")"
+# An UNCLOSED fence must not hide the rest of the file. This is the silent shape:
+# one stray line, and everything after it goes unread with no symptom.
+# shellcheck disable=SC2016
+t "defect, unclosed fence" ASK "$(w "$MEM" "$(printf '## Handoff\n\n```\nsome captured output\n\n%s\n' "$DEFECT")")"
+t "defect, whole line quoted" ASK "$(w "$MEM" "\"$DEFECT\"")"
+# shellcheck disable=SC2016  # the fence backticks are the payload
+t "roll-up in a fence"    ASK "$(w "$MEM" "$(printf '## Handoff\n\n```\nSTATUS 2026-08-30\nPR #83 MERGEABLE, un-merged\n```\n')")"
 # QUOTED. The useful spelling of this very rule names a ticket inside the
 # example -- "never write PR #83 is MERGEABLE into a memory" is the form worth
 # keeping, and the vague one is not. A gate that fires on the lesson it teaches
@@ -186,8 +210,12 @@ t "rule then precedent"    PASS "$(w "$MEM" 'Never present partial work as merge
 t "precedent then rule"    PASS "$(w "$MEM" 'Related: never call a non-closing PR merge-ready; the precedent is #47 template.')"
 # A fenced block is captured output. A lesson teaching "read state from gh"
 # necessarily shows what gh printed.
+# A fence is where a roll-up gets pasted, so fenced lines are scanned like any
+# other. A lesson quoting captured gh output pays an ask for that -- the
+# deliberate cost, taken because the alternative is silent: a single unclosed
+# fence would hide every line after it to end of file.
 # shellcheck disable=SC2016  # the fence backticks are the payload
-t "gh output in a fence"   PASS "$(w "$MEM" "$(printf 'Read state from gh, never from here:\n\n```\n#83  kernel triage  MERGED\n#84  per-CVE triage  OPEN\n```\n')")"
+t "gh output in a fence"   ASK "$(w "$MEM" "$(printf 'Read state from gh, never from here:\n\n```\n#83  kernel triage  MERGED\n#84  per-CVE triage  OPEN\n```\n')")"
 t "clean local capture"   PASS "$(w "$LOCALNOTE" 'Bench board: 24 h soak, RSS flat, display renders at parity with prod.')"
 
 echo "--- must NO-OP: every other path and tool ---"
