@@ -113,6 +113,10 @@ t "status inside a rule"  ASK "$(w "$MEM" "$(printf 'Owner rule: code is the liv
 echo "--- must ASK: gitignored local/ working notes ---"
 t "local note status"     ASK "$(w "$LOCALNOTE" 'Bench board reflashed. PR #83 still un-merged, awaiting owner merge.')"
 t "local nested note"     ASK "$(w "/home/fixture/meta-wisekiosk/local/runs/soak.md" 'PR #59 MERGE-READY & un-merged.')"
+# The harness passes absolute paths. A guard that goes silent on the one shape
+# it did not expect fails open, and silence is the failure mode with no symptom.
+t "relative memory path"  ASK "$(w ".claude/projects/p/memory/lesson.md" 'PR #83 is MERGEABLE, still un-merged.')"
+t "relative local note"   ASK "$(w "local/bench-notes.md" 'PR #83 still un-merged, awaiting owner merge.')"
 
 echo "--- must PASS: durable rules and lessons that merely CITE a ticket ---"
 # Real text from memories that survived the cleanup. Each quotes the status

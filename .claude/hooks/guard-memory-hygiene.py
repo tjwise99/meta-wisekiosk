@@ -19,9 +19,11 @@ import re
 import sys
 
 # Agent memory lives OUTSIDE the repository, at ~/.claude/projects/<slug>/memory/,
-# so the match is on the absolute path the harness passes and never on a
-# repo-relative one. `local/` is the gitignored working-note tree inside it.
-MEMORY = re.compile(r"/\.claude/projects/.*/memory/.*\.md$")
+# so the match is on the path as given and never on a repo-relative rewrite.
+# Anchored to accept a relative spelling too: the harness passes absolute paths,
+# and a guard that goes silent on the shape it did not expect fails open.
+# `local/` is the gitignored working-note tree inside the repository.
+MEMORY = re.compile(r"(?:^|/)\.claude/projects/.*/memory/.*\.md$")
 LOCAL = re.compile(r"(?:^|/)local/.*\.md$")
 
 # A ticket reference anywhere on the line. Status narration names its ticket;
