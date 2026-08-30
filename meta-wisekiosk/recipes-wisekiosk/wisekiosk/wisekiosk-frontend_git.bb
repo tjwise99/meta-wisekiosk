@@ -42,6 +42,26 @@ do_compile() {
 do_install() {
     install -d ${D}/srv/kiosk
     cp -R --no-dereference --preserve=mode,timestamps ${S}/frontend/dist/. ${D}/srv/kiosk/
+
+    # The configuration is site data and is NOT baked, the same rule the SSID,
+    # the URL and the nameserver already follow. /data is slot-shared, so a
+    # config placed there survives an A/B update that replaces the whole rootfs
+    # slot -- which is the requirement. The operator writes it through the
+    # existing /data/config provisioning path.
+    #
+    # A symlink is all that is needed because the backend serves this tree from
+    # disk per request through http.Dir, which follows one: the page fetches
+    # /config.json from the served root and a file appearing later is picked up
+    # with no restart. A dangling link is a 404, which is the "absent" state the
+    # page already renders.
+    #
+    # Installed here rather than as a ROOTFS_POSTPROCESS_COMMAND like
+    # kiosk-static-resolv. That class is a postprocess because /etc/resolv.conf
+    # is already shipped by another package and a second package installing that
+    # path is a do_rootfs conflict. Nothing ships /srv/kiosk/config.json, so
+    # there is no conflict to dodge -- and a postprocess symlink belongs to no
+    # package and so appears in no manifest.
+    ln -s /data/config/config.json ${D}/srv/kiosk/config.json
 }
 
 FILES:${PN} = "/srv/kiosk"
