@@ -6,6 +6,11 @@ layer's."
 
 require wisekiosk-src.inc
 
+# scarthgap unpacks file:// SRC_URI straight into WORKDIR; the UNPACKDIR/sources
+# layout is a later-release convention. go.bbclass's do_unpack redirects only
+# the git entry, so this lands beside the checkout rather than inside it.
+SRC_URI += "file://wisekiosk.service"
+
 GO_IMPORT = "github.com/tjwise99/WiseKiosk"
 
 LIC_FILES_CHKSUM = "file://src/${GO_IMPORT}/LICENSE;md5=4af5bdd6287d36bddd2161cdad4e1eb5"
@@ -51,11 +56,21 @@ CGO_ENABLED = "0"
 GO_DYNLINK:arm = ""
 GOBUILDFLAGS:remove = "-buildmode=pie"
 
+inherit systemd
+
+SYSTEMD_SERVICE:${PN} = "wisekiosk.service"
+SYSTEMD_AUTO_ENABLE = "enable"
+
 # `go install ./cmd` names the binary after its directory. The unit, the
 # container and the app's own docs all say wisekiosk.
 do_install:append() {
     mv ${D}${bindir}/cmd ${D}${bindir}/wisekiosk
+
+    install -d ${D}${systemd_system_unitdir}
+    install -m 0644 ${WORKDIR}/wisekiosk.service ${D}${systemd_system_unitdir}/wisekiosk.service
 }
+
+FILES:${PN} += "${systemd_system_unitdir}/wisekiosk.service"
 
 # The app reaches upstreams over TLS and the image ships no anchors otherwise.
 RDEPENDS:${PN} += "ca-certificates"

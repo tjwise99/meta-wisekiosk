@@ -1,0 +1,28 @@
+[Unit]
+Description=WiseKiosk backend: serves the frontend bundle and the API on :8080
+# network.target, NOT network-online.target. The server binds :8080 on 0.0.0.0,
+# which needs no address and no association -- gating it on the wlan0 gate
+# would hold the LOCAL page behind WiFi for seconds and buy nothing. The
+# browser in kiosk.service does its own waiting.
+After=network.target data.mount
+# Wants, not Requires: /data carries config.json and nothing else this needs.
+# A /data that failed to mount must leave the app serving, with the page
+# rendering its own "configuration absent" state, rather than take the display
+# down with it.
+Wants=data.mount
+
+[Service]
+Type=simple
+# uid/gid 10001, created by this package. :8080 is above 1024, so no capability
+# is needed to bind it.
+User=kiosk
+Group=kiosk
+# The port and both flags are the app's, not this layer's.
+ExecStart=/usr/bin/wisekiosk -static-root /srv/kiosk
+# The unit is wall-mounted: a crash that is not restarted is a black screen and
+# a physical trip. Matches kiosk.service.
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
