@@ -81,21 +81,9 @@ repos:
     commit: f980aefbc8b3eeafb8d144e7fdac3c3b701a4fea
     path: "sources/meta-virtualization"
 
-  # The Go toolchain the app's backend needs. poky scarthgap ships Go 1.22.12
-  # and backend/go.mod declares `go 1.26`, which 1.22 refuses without a network
-  # toolchain fetch. This mixin sets GOVERSION = "1.26%" and depends on oe-core
-  # alone, so the LTS base does not move and nothing outside the toolchain
-  # re-hashes.
-  #
-  # meta-lts-mixins is one repository with a branch per topic and NO branch
-  # carrying two of them, so a second topic is a second checkout of the same
-  # url: includes/platforms/raspberrypi.yaml already pins scarthgap/u-boot.
-  # The collections differ (lts-go-mixin against lts-u-boot-mixin), so the two
-  # coexist in bblayers.
-  #
-  # No `layers:` block, matching the u-boot entry: the repository root IS the
-  # layer, so kas contributes the checkout directory and tools/layer-currency.py
-  # attributes it by repo name.
+  # GOVERSION = "1.26%" for the backend; poky scarthgap ships Go 1.22.12.
+  # A second checkout of meta-lts-mixins, which carries one topic per branch --
+  # includes/platforms/raspberrypi.yaml pins scarthgap/u-boot off the same url.
   meta-lts-mixins-go:
     url: "https://git.yoctoproject.org/meta-lts-mixins"
     branch: scarthgap/go

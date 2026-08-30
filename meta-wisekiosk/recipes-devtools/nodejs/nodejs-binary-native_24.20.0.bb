@@ -8,13 +8,11 @@ HOMEPAGE = "https://nodejs.org/"
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=edc0683b77d2c503217642fa000b5b31"
 
-# No PROVIDES = "nodejs-native": meta-oe already provides it at 20.20.2, and a
-# second provider needs a PREFERRED_PROVIDER to resolve. wisekiosk-frontend
-# names this recipe in DEPENDS instead, so there is no contest to settle.
+# No PROVIDES = "nodejs-native": meta-oe already provides it, and a second
+# provider needs a PREFERRED_PROVIDER. Consumers name this recipe in DEPENDS.
 
-# Upstream names the arch x64/arm64 where Yocto says x86_64/aarch64. An
-# unpinned host falls through to its own name, which has no checksum below --
-# the fetcher then refuses by name rather than by mystery.
+# Upstream names the arch x64/arm64 where Yocto says x86_64/aarch64. An unlisted
+# host falls through to its own name, which has no checksum below.
 def node_build_arch(d):
     arch = d.getVar("BUILD_ARCH")
     return {"x86_64": "x64", "aarch64": "arm64"}.get(arch, arch)
@@ -26,9 +24,7 @@ SRC_URI = "https://nodejs.org/dist/v${PV}/node-v${PV}-linux-${NODE_BUILD_ARCH}.t
 SRC_URI[linux_x64.sha256sum] = "2f2c0da162318f0de47665410c7c8c2ed3d36c8f3105de4bbc61176c70a7cbf2"
 SRC_URI[linux_arm64.sha256sum] = "5f4ddab610c1ab2016b3c227cebdbf6d9495161487e4739c7b90090595f465f7"
 
-# 24 only. The app's engines field says 24 and its Dockerfile says 26; that
-# disagreement is the app repository's to reconcile, and this pin follows the
-# engines field. A check that offered 26 would be offering to make the choice.
+# Held to the major the app's engines field declares.
 UPSTREAM_CHECK_URI = "https://nodejs.org/dist/"
 UPSTREAM_CHECK_REGEX = "v(?P<pver>24(\.\d+)+)/"
 
@@ -42,10 +38,9 @@ do_compile() {
     :
 }
 
-# The tarball is already laid out as a prefix -- bin/node, lib/node_modules,
-# include/node -- and bin/npm and bin/npx are relative symlinks into
-# lib/node_modules. Copying the four directories wholesale is what keeps those
-# links resolving; a per-binary wrapper would break them.
+# The tarball is already laid out as a prefix, and bin/npm and bin/npx are
+# relative symlinks into lib/node_modules; copying wholesale keeps them
+# resolving.
 do_install() {
     install -d ${D}${prefix}
     cp --preserve=mode,timestamps -R ${S}/bin ${S}/include ${S}/lib ${S}/share ${D}${prefix}/

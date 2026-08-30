@@ -125,15 +125,9 @@ local_conf_header:
     # unchanged and every marker within ~1s of the baseline (mixed sign).
     IMAGE_INSTALL:append = " kiosk-provision"
 
-    # The app itself, both halves, built from one pinned commit
-    # (meta-wisekiosk/recipes-wisekiosk/wisekiosk/wisekiosk-src.inc). The
-    # backend serves the frontend's bundle out of /srv/kiosk on :8080, so the
-    # display no longer depends on a remote origin being up.
-    #
-    # It is baked into the rootfs slot rather than staged on /data: the slot is
-    # 2048 MB against a ~9 MB binary and a ~112 KB bundle, an A/B update
-    # replaces the app and its server together, and /data stays what it is for
-    # -- site configuration nobody bakes.
+    # Both halves of the app, from the commit pinned in
+    # meta-wisekiosk/recipes-wisekiosk/wisekiosk/wisekiosk-src.inc. The backend
+    # serves the frontend's bundle out of /srv/kiosk on :8080.
     IMAGE_INSTALL:append = " wisekiosk-backend wisekiosk-frontend"
 
     # serial-getty is a login prompt on a port with nothing attached, started at

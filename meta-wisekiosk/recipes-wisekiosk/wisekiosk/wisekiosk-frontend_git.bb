@@ -8,59 +8,30 @@ require wisekiosk-src.inc
 
 LIC_FILES_CHKSUM = "file://LICENSE;md5=4af5bdd6287d36bddd2161cdad4e1eb5"
 
-# `;dev=1` is mandatory, not a preference: all 260 packages in the shrinkwrap
-# are devDependencies -- vite, svelte, typescript and ajv included -- so the
-# fetcher resolves an EMPTY closure without it and the failure surfaces much
-# later as a missing tool. The URL path is literal, not searched through
-# FILESPATH, which is why the shrinkwrap sits at ${THISDIR}/${BPN}/ (poky's own
-# npm documentation uses this layout).
-#
-# destsuffix puts node_modules beside the app's package.json. The git fetch
-# lands at ${WORKDIR}/git and the frontend package root is git/frontend, so
-# node resolves imports by walking up from there as it would in a checkout.
+# `;dev=1`: every package in the shrinkwrap is a devDependency, vite included,
+# and the closure resolves empty without it. The npmsw path is literal, not
+# searched through FILESPATH. destsuffix puts node_modules beside the app's
+# package.json at git/frontend, where node resolves imports by walking up.
 SRC_URI += "npmsw://${THISDIR}/${BPN}/npm-shrinkwrap.json;dev=1;destsuffix=git/frontend"
 
-# Node is a build-host tool and never reaches the device; see the recipe.
-# NOT `inherit npm`: that class packages one npm module for the target and
-# wants npm to run an install. What is wanted here is the opposite -- npmsw has
-# already placed the closure, and the deliverable is the emitted bundle, not
-# the module.
+# Build-host only, and no `inherit npm`: npmsw places the closure and the
+# deliverable is the emitted bundle, not a target module.
 DEPENDS = "nodejs-binary-native"
 
 S = "${WORKDIR}/git"
 
-# npmsw does not run lifecycle scripts, and nothing here needs one. esbuild's
-# postinstall only swaps its JS shim for the platform binary as an
-# optimisation, and fsevents is macOS-only.
 do_compile() {
     cd ${S}/frontend
     node node_modules/vite/bin/vite.js build
 }
 
-# The bundle is data. /srv/kiosk matches the path the app's own container
-# serves from, so -static-root reads the same in both places.
 do_install() {
     install -d ${D}/srv/kiosk
     cp -R --no-dereference --preserve=mode,timestamps ${S}/frontend/dist/. ${D}/srv/kiosk/
 
-    # The configuration is site data and is NOT baked, the same rule the SSID,
-    # the URL and the nameserver already follow. /data is slot-shared, so a
-    # config placed there survives an A/B update that replaces the whole rootfs
-    # slot -- which is the requirement. The operator writes it through the
-    # existing /data/config provisioning path.
-    #
-    # A symlink is all that is needed because the backend serves this tree from
-    # disk per request through http.Dir, which follows one: the page fetches
-    # /config.json from the served root and a file appearing later is picked up
-    # with no restart. A dangling link is a 404, which is the "absent" state the
-    # page already renders.
-    #
-    # Installed here rather than as a ROOTFS_POSTPROCESS_COMMAND like
-    # kiosk-static-resolv. That class is a postprocess because /etc/resolv.conf
-    # is already shipped by another package and a second package installing that
-    # path is a do_rootfs conflict. Nothing ships /srv/kiosk/config.json, so
-    # there is no conflict to dodge -- and a postprocess symlink belongs to no
-    # package and so appears in no manifest.
+    # Site configuration, not baked. The backend serves this tree per request
+    # through http.Dir, which follows the link, so a file written to /data later
+    # needs no restart and a dangling link is a 404.
     ln -s /data/config/config.json ${D}/srv/kiosk/config.json
 }
 
