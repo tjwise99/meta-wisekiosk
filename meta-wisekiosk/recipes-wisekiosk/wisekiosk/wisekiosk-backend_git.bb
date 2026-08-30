@@ -59,3 +59,21 @@ do_install:append() {
 
 # The app reaches upstreams over TLS and the image ships no anchors otherwise.
 RDEPENDS:${PN} += "ca-certificates"
+
+# The account the service runs as. BOTH ids are pinned, and pinned NOW, before
+# any file on /data is owned by them.
+#
+# /data is slot-shared: an A/B update replaces the rootfs and leaves it
+# standing. So the numeric ids are what survive the update, not the names --
+# a renumber on a later build orphans every /data file the app wrote, on a
+# wall-mounted unit, with no remote undo. useradd assigns a gid on its own
+# where none is given, which is exactly that failure with nobody having chosen
+# it, so the group is created explicitly at the same number.
+#
+# 10001 and the name are the app's own, from its container image, not a choice
+# invented here.
+inherit useradd
+
+USERADD_PACKAGES = "${PN}"
+GROUPADD_PARAM:${PN} = "-g 10001 kiosk"
+USERADD_PARAM:${PN} = "-u 10001 -g kiosk -d /srv/kiosk -s /bin/false -r kiosk"
