@@ -6,10 +6,17 @@ Requires=data.mount
 
 [Service]
 Type=simple
-# Not /etc: the URL is site configuration and must not be in the image.
-# Mandatory, with no leading dash -- an unprovisioned device should fail
-# loudly here rather than launch a browser at an empty URL.
-EnvironmentFile=/data/config/kiosk.conf
+# The app is built into this image and served on the loopback by
+# wisekiosk.service, so the default target is local and always there. This
+# replaces an earlier rule that made the file mandatory so an unprovisioned
+# device failed loudly rather than launching at an empty URL; that reason was
+# the absence of anything local to point at, and it no longer holds.
+Environment=KIOSK_URL=http://localhost:8080
+# A site pointing the kiosk somewhere else still wins: systemd applies these in
+# file order, so this file overrides the default above. The leading dash is
+# what lets a device with no /data/config boot to the local app rather than
+# fail. The URL is site configuration either way and is still not baked.
+EnvironmentFile=-/data/config/kiosk.conf
 # -s 0 -dpms -nocursor live on the X server command line, not in a config file.
 # On the Raspbian kiosk these were supplied by lightdm; dropping the display
 # manager drops them with it, and the failure shows up days later as a screen
