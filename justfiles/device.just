@@ -31,6 +31,11 @@ reboot host:
 [group('device')]
 [script('bash')]
 status host:
+    # A connection-level failure -- host unreachable, or its key not in
+    # known_hosts -- must not read as a healthy device with empty sections. Probe
+    # once, hard and non-interactive (BatchMode refuses an untrusted key rather
+    # than prompting), before the tolerant per-command reads below.
+    ssh -o BatchMode=yes -o ConnectTimeout=10 root@{{host}} true || { echo "cannot reach root@{{host}}: unreachable, or host key not in known_hosts" >&2; exit 1; }
     echo "=== RAUC Status ==="
     ssh root@{{host}} "rauc status" || true
     echo ""

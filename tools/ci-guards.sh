@@ -755,7 +755,15 @@ elif out14=$("$PY" "$cvetest14" 2>&1); then
     ok "the CVE tools pass their self-test ($(printf '%s\n' "$out14" | tail -n1))"
 else
     bad "the CVE tools FAIL their own self-test:"
-    printf '%s\n' "$out14" | grep -E '^(FAIL|  |pass=)' | sed 's/^/        /'
+    # Keep the FAIL/SKIP cases and their indented want/got, and ALSO a crash's
+    # `Traceback` and its `SomeError:` line -- the old `^(FAIL|  |pass=)` filter
+    # dropped both, leaving frames with no diagnosis. The exception alternative is
+    # `[A-Za-z_]...:`, not `[A-Z]...:`: a project exception prints fully qualified
+    # (`cve_manifest.ManifestError: ...`), starting with the lowercase module. Un-
+    # bounded, so a run with many failures is not truncated the way a tail would be.
+    printf '%s\n' "$out14" \
+        | grep -E '^(FAIL|SKIP|  |pass=|Traceback|[A-Za-z_][A-Za-z0-9_.]*:)' \
+        | sed 's/^/        /'
 fi
 
 # --- 15. no recipe may invoke a bare `python3` ----------------------------
@@ -773,7 +781,15 @@ else
     bare15=""
     while IFS= read -r f; do
         [ -f "$f" ] || continue
-        hit15=$(grep -nE '^[[:space:]]+python3[[:space:]]' "$f")
+        # python3 at the start of a recipe line (after its leading indent) or
+        # right after a `|`, `(`/`$(`, `;` or `&`, a space allowed between. A piped
+        # or command-substituted bare python3 is caught; python3 named in `[doc()]`
+        # prose, an echoed hint, a comment or a remote `ssh host python3` is not,
+        # so no comment pre-filter is needed. Not caught, by deliberate scope:
+        # python3 handed to a wrapper (`xargs`/`env`/`timeout ... python3`) and a
+        # `#!/usr/bin/env python3` or `[script('python3')]` recipe body -- neither
+        # shape occurs here, and widening to them would risk false positives.
+        hit15=$(grep -nE '(^[[:space:]]*|[|;&(][[:space:]]*)python3([[:space:]]|$)' "$f")
         [ -n "$hit15" ] && bare15="$bare15$(printf '%s\n' "$hit15" | sed "s|^|$f:|")"$'\n'
     done < <(git ls-files -- Justfile 'justfiles/*.just')
     if [ -n "$bare15" ]; then

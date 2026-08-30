@@ -35,8 +35,8 @@ One owner per fact. Read the owner; do not restate it here or anywhere else.
 - **`just build`, never `kas-container` directly.** kas alone skips
   `tools/write-build-rev.sh`, so a tree that has built before builds against the *previous* commit
   and the reproducibility gate refuses the image at flash time.
-- **A full build is ~4.5 h**, and `DISTRO_FEATURES` / `MACHINE_FEATURES` / webkit `PACKAGECONFIG`
-  invalidate WebKit and cost that again. Decide before starting.
+- **A full build is ~4.5 h**, and `DISTRO_FEATURES` / `MACHINE_FEATURES` / webkit `PACKAGECONFIG` /
+  a poky or meta-openembedded pin bump invalidate WebKit and cost that again. Decide before starting.
 - **Never destructively test the prod board.** It is wall-mounted and carries the live soak run;
   bench is the OTA, reboot and rollback target. Roles and addresses are in
   `local/device-identity.md` — read them, do not remember them.

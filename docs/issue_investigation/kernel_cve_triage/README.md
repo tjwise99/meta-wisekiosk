@@ -16,7 +16,8 @@ does not. `rpi-6.12.y` is the only RPi branch still being merged into, and the a
 meta-raspberrypi layer already shipped a 6.12.93 recipe — no pin bump involved. Selecting it took
 unpatched findings from **3941 to 837 (−78.8%)** and the kernel's own from **3723 to 635 (−82.9%)**,
 cross-checked by two tools reading the manifests by different paths. It also **re-opened 135 kernel
-findings**, and the pin bumps that rode along cost a **4 h 52 m WebKit rebuild for zero closures**.
+findings**, and the pin bumps that rode along closed **16 findings — all poky's** — at the cost of a
+**4 h 52 m WebKit rebuild**.
 The kernel jump was validated on the bench board over an OTA: 6.12.93 boots, the SDIO WiFi driver
 behind the board's only lifeline survives, and the display renders live.
 
@@ -416,12 +417,15 @@ either genuinely present in the 6.12 series and absent from 6.6, or CNA re-judge
 still −3104 by a wide margin, but "3239 closed" is not the number — the number is 3239 closed and 135
 opened, and quoting the first without the second overstates the move.
 
-*The meta-openembedded pin bump cost a 4 h 52 m WebKit rebuild and closed nothing.* This is a
-**fourth WebKit-cost trigger**, alongside the three the README already names, and it is now recorded
-there. Ruling out the alternative explanation mattered, because five recipes were cleaned mid-phase
-and a clean is the obvious suspect: the mechanism says no — `bitbake -c clean` removes a workdir and
-stamps but does not change task signatures, so dependents keying off an unchanged output hash cannot
-be invalidated by it — and the evidence says no, because the task graph was **7723 tasks in all three
+*The poky-and-meta-openembedded pin bump cost a 4 h 52 m WebKit rebuild, and closed 16 findings —
+all poky's.* The bump is a **fourth WebKit-cost trigger**, alongside the three the README already
+names, and it is now recorded there. The two pins were bumped in one commit, so the rebuild cannot be
+charged to one alone; what the task graph settles below is only that a pin bump — not the mid-phase
+clean, and not the kernel move — is what forced it. Ruling out the alternative explanation mattered,
+because five recipes were cleaned mid-phase and a clean is the obvious suspect: the mechanism says no
+— `bitbake -c clean` removes a workdir and stamps but does not change task signatures, so dependents
+keying off an unchanged output hash cannot be invalidated by it — and the evidence says no, because
+the task graph was **7723 tasks in all three
 build attempts**, two of which predate any clean. Cleaning five recipes added zero tasks, which is
 only possible if webkit was already scheduled for rebuild before anything was cleaned. Note that the
 kernel move itself is *not* the trigger: the kernel is provably outside `webkitgtk3`'s dependency
