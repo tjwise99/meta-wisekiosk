@@ -1,0 +1,231 @@
+tools/write-build-rev.sh
+build rev unchanged: c9905c4df3f109681f953d386d7c610e4abb1676
+kas-container shell kiosk-zero-w.yaml -c "bitbake update-bundle"
+2026-08-29 17:36:26 - INFO     - kas 5.4 started on Debian GNU/Linux trixie
+2026-08-29 17:36:26 - INFO     - Using /repo as root for repository meta-wisekiosk
+2026-08-29 17:36:26 - INFO     - Repository meta-rauc already contains d63878f20eba7a85ecf53566e7a3377e78bb46ac as commit
+2026-08-29 17:36:26 - INFO     - Repository meta-autonomos already contains 1fd4eb55c2ef0902176986bb0dea90e7c34d02bf as commit
+2026-08-29 17:36:26 - INFO     - Repository poky already contains 69ae79bf5a01a24491648e2fdea6faf51aeb3bf2 as commit
+2026-08-29 17:36:26 - INFO     - Repository meta-openembedded already contains bec755063a8b5da65df626f5749496aadaa4f4bb as commit
+2026-08-29 17:36:26 - INFO     - Repository meta-arm already contains 045eb74bd9abe7d9ccf365a2417e440ce83bcbb0 as commit
+2026-08-29 17:36:26 - INFO     - Repository meta-raspberrypi already contains 6ca1f75017cc5d5acdb8bb05634c4bc01fa049fd as commit
+2026-08-29 17:36:26 - INFO     - Repository meta-rauc-community already contains 222c61275054974cdbd09bd5faa2b7a37ddbd840 as commit
+2026-08-29 17:36:26 - INFO     - Repository meta-virtualization already contains f980aefbc8b3eeafb8d144e7fdac3c3b701a4fea as commit
+2026-08-29 17:36:26 - INFO     - Repository meta-lts-mixins already contains a44882db02a0ed0f149371831bfbe067665eb42b as commit
+2026-08-29 17:36:26 - INFO     - Repository meta-rauc checked out to d63878f20eba7a85ecf53566e7a3377e78bb46ac
+2026-08-29 17:36:26 - INFO     - Repository meta-autonomos checked out to 1fd4eb55c2ef0902176986bb0dea90e7c34d02bf
+2026-08-29 17:36:26 - INFO     - Repository poky checked out to 69ae79bf5a01a24491648e2fdea6faf51aeb3bf2
+2026-08-29 17:36:26 - INFO     - Repository meta-openembedded checked out to bec755063a8b5da65df626f5749496aadaa4f4bb
+2026-08-29 17:36:26 - INFO     - Repository meta-arm checked out to 045eb74bd9abe7d9ccf365a2417e440ce83bcbb0
+2026-08-29 17:36:26 - INFO     - Repository meta-virtualization checked out to f980aefbc8b3eeafb8d144e7fdac3c3b701a4fea
+2026-08-29 17:36:26 - INFO     - Repository meta-raspberrypi checked out to 6ca1f75017cc5d5acdb8bb05634c4bc01fa049fd
+2026-08-29 17:36:26 - INFO     - Repository meta-lts-mixins checked out to a44882db02a0ed0f149371831bfbe067665eb42b
+2026-08-29 17:36:26 - INFO     - Repository meta-rauc-community checked out to 222c61275054974cdbd09bd5faa2b7a37ddbd840
+2026-08-29 17:36:26 - INFO     - Patch applied. (patch path: /repo/patches/meta-autonomos/0001-distro-make-graphics-strip-conditional.patch, repo: meta-autonomos, patch entry: 01-graphics)
+2026-08-29 17:36:27 - INFO     - Patch applied. (patch path: /repo/patches/meta-autonomos/0002-wpa-supplicant-stop-baking-credentials.patch, repo: meta-autonomos, patch entry: 02-wpa)
+2026-08-29 17:36:27 - INFO     - To start the default build, run: bitbake -c build core-image-base
+WARNING: You have included the meta-virtualization layer, but 'virtualization' has not been enabled in your DISTRO_FEATURES. Some bbappend files may not take effect. See the meta-virtualization README for details on enabling virtualization support.
+WARNING: Host distribution "debian-13" has not been validated with this version of the build system; you may possibly experience unexpected failures. It is recommended that you use a tested distribution.
+Loading cache...done.
+Loaded 5003 entries from dependency cache.
+Parsing recipes...done.
+Parsing of 3035 .bb files complete (3032 cached, 3 parsed). 5003 targets, 521 skipped, 0 masked, 0 errors.
+NOTE: Resolving any missing task queue dependencies
+
+Build Configuration:
+BB_VERSION           = "2.8.1"
+BUILD_SYS            = "x86_64-linux"
+NATIVELSBSTRING      = "universal"
+TARGET_SYS           = "arm-poky-linux-gnueabi"
+MACHINE              = "raspberrypi0-wifi"
+DISTRO               = "autonomos"
+DISTRO_VERSION       = "0.1"
+TUNE_FEATURES        = "arm thumb vfp arm1176jzfs callconvention-hard"
+TARGET_FPU           = "hard"
+meta-arm             
+meta-arm-toolchain   = "scarthgap:045eb74bd9abe7d9ccf365a2417e440ce83bcbb0"
+meta-autonomos-core  
+meta-autonomos-raspberrypi = "patched-1fd4eb55c2ef0902176986bb0dea90e7c34d02bf:2398fc3463d8b34508564dc1865fd1824e0cba63"
+meta-lts-mixins      = "scarthgap/u-boot:a44882db02a0ed0f149371831bfbe067665eb42b"
+meta-filesystems     
+meta-networking      
+meta-oe              
+meta-python          = "scarthgap:bec755063a8b5da65df626f5749496aadaa4f4bb"
+meta-raspberrypi     = "scarthgap:6ca1f75017cc5d5acdb8bb05634c4bc01fa049fd"
+meta-rauc            = "scarthgap:d63878f20eba7a85ecf53566e7a3377e78bb46ac"
+meta-rauc-raspberrypi = "scarthgap:222c61275054974cdbd09bd5faa2b7a37ddbd840"
+meta-virtualization  = "scarthgap:f980aefbc8b3eeafb8d144e7fdac3c3b701a4fea"
+meta-wisekiosk       = "80-cve-triage:c9905c4df3f109681f953d386d7c610e4abb1676"
+meta                 
+meta-poky            
+meta-yocto-bsp       = "scarthgap:69ae79bf5a01a24491648e2fdea6faf51aeb3bf2"
+
+Initialising tasks...Sstate summary: Wanted 3 Local 3 Mirrors 0 Missed 0 Current 3593 (100% match, 100% complete)
+done.
+NOTE: Executing Tasks
+NOTE: Tasks Summary: Attempted 7286 tasks of which 7286 didn't need to be rerun and all succeeded.
+
+Summary: There were 2 WARNING messages.
+ok    working tree is clean
+ok    HEAD (c9905c4df3f109681f953d386d7c610e4abb1676) is published on origin
+ok    image names HEAD (c9905c4df3f109681f953d386d7c610e4abb1676)
+
+reproducibility gate passed
+Warning: Permanently added '<BENCH_ADDRESS>' (ED25519) to the list of known hosts.
+Warning: Permanently added '<BENCH_ADDRESS>' (ED25519) to the list of known hosts.
+rootfs image  : 2147483648
+slot A / B    : 2147483648 / 2147483648
+Warning: Permanently added '<BENCH_ADDRESS>' (ED25519) to the list of known hosts.
+Warning: Permanently added '<BENCH_ADDRESS>' (ED25519) to the list of known hosts.
+/data free    : 384248KB, need 125662KB
+preflight OK
+ok    working tree is clean
+ok    HEAD (c9905c4df3f109681f953d386d7c610e4abb1676) is published on origin
+
+reproducibility gate passed
+sending build/tmp-raspberrypi0-wifi/deploy/images/raspberrypi0-wifi/update-bundle-raspberrypi0-wifi.raucb (120289989 B, md5 9c04674478db579f535fe6d5d533f98e) -> root@<BENCH_ADDRESS>:/data/update.raucb
+Warning: Permanently added '<BENCH_ADDRESS>' (ED25519) to the list of known hosts.
+Warning: Permanently added '<BENCH_ADDRESS>' (ED25519) to the list of known hosts.
+Warning: Permanently added '<BENCH_ADDRESS>' (ED25519) to the list of known hosts.
+Warning: Permanently added '<BENCH_ADDRESS>' (ED25519) to the list of known hosts.
+transferred in 45s (2610 KB/s)
+  local  9c04674478db579f535fe6d5d533f98e
+  remote 9c04674478db579f535fe6d5d533f98e
+  MATCH
+ok    working tree is clean
+ok    HEAD (c9905c4df3f109681f953d386d7c610e4abb1676) is published on origin
+
+reproducibility gate passed
+== before
+Warning: Permanently added '<BENCH_ADDRESS>' (ED25519) to the list of known hosts.
+BOOT_ORDER=A B
+BOOT_A_LEFT=3
+BOOT_B_LEFT=3
+Booted from: rootfs.0 (A)
+Activated: rootfs.0 (A)
+      boot status: [32mgood[0m
+      boot status: [32mgood[0m
+Warning: Permanently added '<BENCH_ADDRESS>' (ED25519) to the list of known hosts.
+== clock: device epoch 1788039480, host 1788039480, skew 0s
+== verifying bundle signature against the device keyring
+Warning: Permanently added '<BENCH_ADDRESS>' (ED25519) to the list of known hosts.
+rauc-Message: 17:38:01.320: Using central status file /data/rauc/rauc.status
+rauc-Message: 17:38:01.350: Using system config file /etc/rauc/system.conf
+rauc-Message: 17:38:01.351: Reading bundle: /data/update.raucb
+rauc-Message: 17:38:01.394: Verifying bundle signature... 
+rauc-Message: 17:38:01.420: Verified inline signature by 'CN = WiseKiosk Signing Key 2026, O = WiseKiosk, C = US'
+Compatible:     'autonomos-raspberrypi0-wifi'
+Version:        '0.1'
+Description:    'AutonomOS Update Bundle'
+Build:          '20260828233717'
+Hooks:          ''
+Bundle Format:  verity
+  Verity Salt:  '6b93ace09e4417da725554f5a1dcff559349d933dda5044929e6813ec15464ed'
+  Verity Hash:  '96d4fc5846d1c863f3e3fa76ed75f7c2471de85b6a3a7d4e6fc710694b1957e1'
+  Verity Size:  946176
+Manifest Hash:  '1ad98f6b717ba99b7a9cdcfb38ce5f0094af1411eceed454d4233a974927b86c'
+
+
+1 Image:
+  [1m[rootfs][0m
+    Filename:  core-image-base-raspberrypi0-wifi.rootfs.ext4
+    Type:      ext4 (detected)
+    Checksum:  6541427a0632783d94120c8350f377193f4b6d26df74d04a185738dd0adbf2e8
+    Size:      2.1?GB (2147483648 bytes)
+    Hooks:     post-install
+
+Certificate Chain:
+ 0 Subject: CN = WiseKiosk Signing Key 2026, O = WiseKiosk, C = US
+   Issuer: CN = WiseKiosk Signing Key 2026, O = WiseKiosk, C = US
+   SPKI sha256: <SPKI-FINGERPRINT>
+   Not Before: Aug 15 02:56:16 2026 GMT
+   Not After:  Aug 12 02:56:16 2036 GMT
+
+== installing
+Warning: Permanently added '<BENCH_ADDRESS>' (ED25519) to the list of known hosts.
+installing
+  0% Installing
+  0% Determining slot states
+ 10% Determining slot states done.
+ 10% Checking bundle
+ 10% Verifying signature
+ 20% Verifying signature done.
+ 20% Checking bundle done.
+ 20% Checking manifest contents
+ 30% Checking manifest contents done.
+ 30% Determining target install group
+ 40% Determining target install group done.
+ 40% Updating slots
+ 40% Checking slot rootfs.1 (B)
+ 46% Checking slot rootfs.1 (B) done.
+ 46% Copying image to rootfs.1
+ 47% Copying image to rootfs.1
+ 48% Copying image to rootfs.1
+ 49% Copying image to rootfs.1
+ 50% Copying image to rootfs.1
+ 51% Copying image to rootfs.1
+ 52% Copying image to rootfs.1
+ 53% Copying image to rootfs.1
+ 54% Copying image to rootfs.1
+ 55% Copying image to rootfs.1
+ 56% Copying image to rootfs.1
+ 57% Copying image to rootfs.1
+ 58% Copying image to rootfs.1
+ 59% Copying image to rootfs.1
+ 60% Copying image to rootfs.1
+ 61% Copying image to rootfs.1
+ 62% Copying image to rootfs.1
+ 63% Copying image to rootfs.1
+ 64% Copying image to rootfs.1
+ 65% Copying image to rootfs.1
+ 66% Copying image to rootfs.1
+ 67% Copying image to rootfs.1
+ 68% Copying image to rootfs.1
+ 69% Copying image to rootfs.1
+ 70% Copying image to rootfs.1
+ 71% Copying image to rootfs.1
+ 72% Copying image to rootfs.1
+ 73% Copying image to rootfs.1
+ 74% Copying image to rootfs.1
+ 75% Copying image to rootfs.1
+ 76% Copying image to rootfs.1
+ 77% Copying image to rootfs.1
+ 78% Copying image to rootfs.1
+ 79% Copying image to rootfs.1
+ 80% Copying image to rootfs.1
+ 81% Copying image to rootfs.1
+ 82% Copying image to rootfs.1
+ 83% Copying image to rootfs.1
+ 84% Copying image to rootfs.1
+ 85% Copying image to rootfs.1
+ 86% Copying image to rootfs.1
+ 87% Copying image to rootfs.1
+ 88% Copying image to rootfs.1
+ 89% Copying image to rootfs.1
+ 90% Copying image to rootfs.1
+ 91% Copying image to rootfs.1
+ 92% Copying image to rootfs.1
+ 93% Copying image to rootfs.1
+ 94% Copying image to rootfs.1
+ 95% Copying image to rootfs.1
+ 96% Copying image to rootfs.1
+ 97% Copying image to rootfs.1
+ 98% Copying image to rootfs.1
+ 99% Copying image to rootfs.1
+ 99% Copying image to rootfs.1 done.
+ 99% Updating slots done.
+100% Installing done.
+idle
+Installing `/data/update.raucb` succeeded
+== after
+Warning: Permanently added '<BENCH_ADDRESS>' (ED25519) to the list of known hosts.
+BOOT_ORDER=B A
+BOOT_A_LEFT=3
+BOOT_B_LEFT=3
+Booted from: rootfs.0 (A)
+Activated: rootfs.1 (B)
+      boot status: [32mgood[0m
+      boot status: [32mgood[0m
+Now: just kiosk-reboot   (fallback slot stays bootable if it fails)
+Delivered and installed. Verify, then: just kiosk-reboot root@<BENCH_ADDRESS>
+OTA_EXIT=0

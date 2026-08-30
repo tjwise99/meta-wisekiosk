@@ -11,6 +11,13 @@
 
 set dotenv-load := true
 
+# The interpreter every python recipe runs. A repo .venv holds PyYAML; nothing
+# puts it on PATH, because neither `just` nor a git hook sources a startup file,
+# so a bare `python3` resolves to a host one without it and the YAML guard
+# fails on a tree that parses fine. Preferred, not required -- CI has no .venv
+# and installs PyYAML into its own python3, which is the fallback.
+py := if path_exists(justfile_directory() / ".venv/bin/python3") == "true" { justfile_directory() / ".venv/bin/python3" } else { "python3" }
+
 # Default machine target
 machine := env('MACHINE', 'raspberrypi0-wifi')
 
@@ -97,7 +104,7 @@ spotless: clean
 # two independent findings are worth more than the first one twice.
 [group('guards')]
 [script('bash')]
-[doc("Run repository guards: secrets, template, shell syntax, YAML, gitleaks, IPs, service reachability, recovery wiring, trailing-; hooks, guard wiring, guard self-test, review-checklist taxonomy, device identity")]
+[doc("Run repository guards: secrets, template, shell syntax, YAML, gitleaks, IPs, service reachability, recovery wiring, trailing-; hooks, guard wiring, guard self-test, review-checklist taxonomy, CVE tools self-test, python interpreter, device identity")]
 guards:
     rc=0
     tools/ci-guards.sh || rc=1
@@ -122,8 +129,8 @@ install-hooks:
 [doc("Run every documentation check")]
 verify:
     rc=0
-    python3 tools/doc-links.py || rc=1
-    python3 tools/doc-image.py check || rc=1
+    {{py}} tools/doc-links.py || rc=1
+    {{py}} tools/doc-image.py check || rc=1
     if [ $rc -ne 0 ]; then echo; echo "verify FAILED"; fi
     exit $rc
 
@@ -132,7 +139,7 @@ verify:
 [group('check')]
 [doc("Check that every tracked Markdown cross-reference resolves")]
 links:
-    python3 tools/doc-links.py
+    {{py}} tools/doc-links.py
 
 # What the prose says the image ships, against what it ships. Needs a populated
 # build/ rootfs and is therefore local-only -- CI never builds, so wiring it
@@ -140,41 +147,56 @@ links:
 [group('check')]
 [doc("Check docs against what the built image ships (skips if unbuilt)")]
 image:
-    python3 tools/doc-image.py check
+    {{py}} tools/doc-image.py check
 
 # === Image audit ===
 
 [group('audit')]
-[doc("Report the CVE findings from the last audit build (skips if unbuilt)")]
-cve:
-    python3 tools/cve-report.py check
+[doc("Report the CVE findings from the last audit build (skips if unbuilt); --layer/--exclude/--min-cvss narrow the detail")]
+cve *args:
+    {{py}} tools/cve-report.py check {{args}}
 
 [group('audit')]
 [doc("Report the SBOM the last build emitted (skips if unbuilt)")]
 sbom:
-    python3 tools/sbom-report.py check
+    {{py}} tools/sbom-report.py check
 
 [group('audit')]
 [doc("Second-source findings the CVE manifest does not carry (skips if unbuilt)")]
 cve-scan:
-    python3 tools/cve-scan.py check
+    {{py}} tools/cve-scan.py check
 
 [group('audit')]
 [doc("Report what changed in the CVE picture since the previous audit build (skips if <2)")]
 cve-delta:
-    python3 tools/cve-delta.py check
+    {{py}} tools/cve-delta.py check
+
+[group('audit')]
+[doc("Re-judge the kernel's CVE findings against the sources this config compiles (skips if unbuilt)")]
+kernel-cve *args:
+    {{py}} tools/kernel-cve.py check {{args}}
 
 [group('audit')]
 [doc("Report which pinned upstream repos have fallen behind their branch head (needs network)")]
 currency:
-    python3 tools/layer-currency.py check
+    {{py}} tools/layer-currency.py check
+
+[group('audit')]
+[doc("Report where a PREFERRED_VERSION selects an older recipe than the pinned layer already ships (offline)")]
+preferred-version:
+    {{py}} tools/preferred-version.py check
+
+[group('audit')]
+[doc("Report which unpatched CVEs bumping one pin would plausibly close (offline; --fetch to update sources/)")]
+gap repo *args:
+    {{py}} tools/layer-currency.py gap {{repo}} {{args}}
 
 [group('audit')]
 [doc("Build with cve-check inherited: CVE manifest beside the image, snapshot in ~/.cache/wisekiosk")]
 cve-build:
     tools/write-build-rev.sh
     kas-container build {{config}}:includes/cve-audit.yaml
-    python3 tools/cve-delta.py snapshot
+    {{py}} tools/cve-delta.py snapshot
 
 # Write per-site config to a device's /data. The image carries none of it.
 [group('provision')]

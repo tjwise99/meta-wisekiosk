@@ -86,10 +86,16 @@ behind those changes are indexed in **[docs/README.md](docs/README.md)**.
 
 `kas-container` runs the build inside a container, so a working **Docker** is a
 prerequisite. The flash and OTA paths additionally need `git`, `debugfs` (`e2fsprogs`) and `openssl`,
-and the repository guards (`just guards` and the pre-commit hook) and `just currency` need **PyYAML**
-for `python3` to read the kas YAML — all of them refuse rather than skip when one is missing. On an
-externally-managed (PEP 668) `python3`, install PyYAML with a virtualenv, the distro's
-`python3-yaml`, or `python3 -m pip install --break-system-packages pyyaml`.
+and the repository guards (`just guards` and the pre-commit hook) and the layer-currency recipes
+(`just currency`, `just gap`) need **PyYAML** to read the kas YAML — all of them refuse rather than
+skip when one is missing. On an externally-managed (PEP 668) `python3`, install PyYAML with a
+virtualenv, the distro's `python3-yaml`, or `python3 -m pip install --break-system-packages pyyaml`.
+
+A **`.venv/` at the repository root is used automatically** where it exists, by the Justfile and by
+`tools/ci-guards.sh` alike — neither `just` nor a git hook sources a shell startup file, so a venv
+is never on `PATH` and a bare `python3` would take a host interpreter that may have no PyYAML. No
+activation is needed, and nothing requires the venv: without one both fall back to `python3`, which
+is what CI uses.
 
 ```sh
 curl -L -o ~/bin/kas-container https://raw.githubusercontent.com/siemens/kas/5.4/kas-container
@@ -110,10 +116,14 @@ every repo declared across the kas include chain — `includes/base.yaml`, `incl
 `includes/platforms/raspberrypi.yaml` — into `sources/`: nine repositories, several GB and a long
 while before any compiling starts.
 
-A full build including WebKit takes **~4.5 h** on 8 cores / 11 GB. Anything that changes
-`DISTRO_FEATURES`, `MACHINE_FEATURES` or webkit's `PACKAGECONFIG` **invalidates WebKit and costs that
-again** — make those decisions before starting, not after. `config.txt`-only knobs (`GPU_MEM`, HDMI,
-overscan, UART) are free to change.
+A full build including WebKit takes **~4.5 h** on 8 cores / 11 GB. Four things invalidate WebKit and
+cost that again: a change to `DISTRO_FEATURES`, to `MACHINE_FEATURES`, to webkit's `PACKAGECONFIG`,
+or **a bump of the poky or meta-openembedded pin** — budget the rebuild for either, and the one time
+it was measured (both pins moved in one commit) it cost 4 h 52 m of `webkitgtk3` alone
+([kernel_cve_triage](docs/issue_investigation/kernel_cve_triage/README.md)), a rebuild that bought 16
+CVE closures. Make those decisions before starting, not after. `config.txt`-only knobs (`GPU_MEM`,
+HDMI, overscan, UART) are free to change, and so is the kernel's `PREFERRED_VERSION` — the kernel is
+outside webkit's dependency closure.
 
 ### Flashing a card
 

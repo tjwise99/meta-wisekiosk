@@ -46,6 +46,11 @@ local_conf_header:
   panic-reboot: |
     CMDLINE:append = " panic=10"
 
+  # rpi-6.6.y is frozen at 6.6.78 (last commit 2025-03-26); rpi-6.12.y is the only
+  # RPi branch still merging linux-stable. A hard set: upstream's default is ??=.
+  kernel: |
+    PREFERRED_VERSION_linux-raspberrypi = "6.12.%"
+
   # The live kiosk runs the legacy fbdev path, not vc4 KMS -- gldriver_test.sh
   # installs 99-fbturbo.conf there because v3d is not "okay" on this board. KMS
   # would also ignore the firmware HDMI settings above, replacing a display path

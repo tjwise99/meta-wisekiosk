@@ -13,6 +13,16 @@
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
+# The interpreter the guards run. The Bash tool and the git hooks source no
+# startup file, so a repo .venv is never on PATH and a bare `python3` resolves
+# to a host one that has no PyYAML -- which failed guard 4 on a tree whose
+# checkout could parse YAML perfectly well. Preferred, not required: CI has no
+# .venv and installs PyYAML into its own python3, and the fallback is that.
+PY=python3
+if [ -x ".venv/bin/python3" ]; then
+    PY="$PWD/.venv/bin/python3"
+fi
+
 fail=0
 bad() { printf 'FAIL  %s\n' "$*"; fail=1; }
 ok()  { printf 'ok    %s\n' "$*"; }
@@ -125,15 +135,15 @@ done < <(git ls-files -- '*.sh' "${scan3[@]}")
 # pointing at the README prerequisite. The message names the missing tool, so
 # it reads as "cannot check", not the older false positive of "every kas file
 # is invalid YAML".
-if ! command -v python3 > /dev/null; then
-    bad "guard 4 cannot check YAML: python3 not available"
-elif ! python3 -c 'import yaml' 2>/dev/null; then
-    bad "guard 4 cannot check YAML: python3 has no yaml module -- install PyYAML; see the README prerequisites for a PEP-668-safe route. CI installs it automatically."
+if ! command -v "$PY" > /dev/null; then
+    bad "guard 4 cannot check YAML: $PY not available"
+elif ! "$PY" -c 'import yaml' 2>/dev/null; then
+    bad "guard 4 cannot check YAML: $PY has no yaml module -- install PyYAML; see the README prerequisites for a PEP-668-safe route. A repo .venv/bin/python3 is preferred where it exists, and CI installs it automatically."
 else
     badyaml=0
     while IFS= read -r f; do
         [ -f "$f" ] || continue
-        if ! err=$(python3 -c 'import sys,yaml; yaml.safe_load(open(sys.argv[1]))' "$f" 2>&1); then
+        if ! err=$("$PY" -c 'import sys,yaml; yaml.safe_load(open(sys.argv[1]))' "$f" 2>&1); then
             bad "YAML does not parse: $f"
             printf '%s\n' "$err" | sed 's/^/        /'
             badyaml=1
@@ -680,10 +690,10 @@ rd13=".claude/hooks/review-diff.py"
 cb13="CONTRIBUTING.md"
 if [ ! -f "$rd13" ] || [ ! -f "$cb13" ]; then
     bad "guard 13: $rd13 or $cb13 missing -- the review checklist taxonomy cannot be checked"
-elif ! command -v python3 > /dev/null 2>&1; then
-    bad "guard 13: python3 missing -- the review checklist taxonomy cannot be checked"
+elif ! command -v "$PY" > /dev/null 2>&1; then
+    bad "guard 13: $PY missing -- the review checklist taxonomy cannot be checked"
 else
-    out13=$(python3 - "$rd13" "$cb13" <<'PY'
+    out13=$("$PY" - "$rd13" "$cb13" <<'PY'
 import re
 import sys
 
@@ -726,6 +736,67 @@ PY
         printf '%s\n' "$out13" | sed 's/^/        /'
     else
         ok "the review checklist taxonomy agrees in CONTRIBUTING.md and review-diff.py"
+    fi
+fi
+
+# --- 14. the CVE tools must still pass their own self-test ----------------
+# tools/cve-report.py, cve-delta.py, cve-scan.py and layer-currency.py read a
+# manifest whose CVE SUMMARY is free NVD prose, and the field regex cannot tell
+# that prose from a record key. The tools report and never gate, so a parse that
+# quietly goes wrong prints a number nobody can tell from a right one. The
+# self-test drives seeded fixtures carrying the defect, which is the only thing
+# separating "the tools passed" from "the tools looked at nothing".
+cvetest14="tools/cve-tools-test.py"
+if [ ! -f "$cvetest14" ]; then
+    bad "guard 14: $cvetest14 missing -- the CVE tools are no longer self-tested"
+elif ! command -v "$PY" > /dev/null 2>&1; then
+    bad "guard 14: $PY missing -- the CVE tools cannot be self-tested"
+elif out14=$("$PY" "$cvetest14" 2>&1); then
+    ok "the CVE tools pass their self-test ($(printf '%s\n' "$out14" | tail -n1))"
+else
+    bad "the CVE tools FAIL their own self-test:"
+    # Keep the FAIL/SKIP cases and their indented want/got, and ALSO a crash's
+    # `Traceback` and its `SomeError:` line -- the old `^(FAIL|  |pass=)` filter
+    # dropped both, leaving frames with no diagnosis. The exception alternative is
+    # `[A-Za-z_]...:`, not `[A-Z]...:`: a project exception prints fully qualified
+    # (`cve_manifest.ManifestError: ...`), starting with the lowercase module. Un-
+    # bounded, so a run with many failures is not truncated the way a tail would be.
+    printf '%s\n' "$out14" \
+        | grep -E '^(FAIL|SKIP|  |pass=|Traceback|[A-Za-z_][A-Za-z0-9_.]*:)' \
+        | sed 's/^/        /'
+fi
+
+# --- 15. no recipe may invoke a bare `python3` ----------------------------
+# just sources no startup file, so a repo .venv is never on PATH and a bare
+# `python3` takes a host interpreter that may have no PyYAML -- which failed the
+# YAML guard on a tree that parses fine, repeatedly. The Justfile resolves the
+# venv into `py` and every python recipe spends it; this keeps a new recipe from
+# reintroducing the bare call, which would fail for one person and not another
+# with nothing in the diff to say why.
+if [ ! -f Justfile ]; then
+    bad "guard 15: Justfile missing -- the python interpreter is unpinned"
+elif ! grep -qE '^py[[:space:]]*:=' Justfile; then
+    bad "guard 15: Justfile sets no \`py\` variable -- python recipes would take whatever python3 is on PATH"
+else
+    bare15=""
+    while IFS= read -r f; do
+        [ -f "$f" ] || continue
+        # python3 at the start of a recipe line (after its leading indent) or
+        # right after a `|`, `(`/`$(`, `;` or `&`, a space allowed between. A piped
+        # or command-substituted bare python3 is caught; python3 named in `[doc()]`
+        # prose, an echoed hint, a comment or a remote `ssh host python3` is not,
+        # so no comment pre-filter is needed. Not caught, by deliberate scope:
+        # python3 handed to a wrapper (`xargs`/`env`/`timeout ... python3`) and a
+        # `#!/usr/bin/env python3` or `[script('python3')]` recipe body -- neither
+        # shape occurs here, and widening to them would risk false positives.
+        hit15=$(grep -nE '(^[[:space:]]*|[|;&(][[:space:]]*)python3([[:space:]]|$)' "$f")
+        [ -n "$hit15" ] && bare15="$bare15$(printf '%s\n' "$hit15" | sed "s|^|$f:|")"$'\n'
+    done < <(git ls-files -- Justfile 'justfiles/*.just')
+    if [ -n "$bare15" ]; then
+        bad "guard 15: a recipe invokes a bare python3 instead of {{py}} -- it will miss the repo .venv:"
+        printf '%s\n' "$bare15" | sed 's/^/        /'
+    else
+        ok "every python recipe runs the resolved interpreter, not a bare python3"
     fi
 fi
 

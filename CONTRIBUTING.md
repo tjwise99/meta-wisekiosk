@@ -20,8 +20,8 @@ built before you build against the *previous* run's commit — an image the repr
 refuses at flash. See [`README.md`](README.md) §"Quick start".
 
 **A full build is ~4.5 h.** Anything touching `DISTRO_FEATURES`, `MACHINE_FEATURES` or webkit's
-`PACKAGECONFIG` invalidates WebKit and costs that again, so it is a decision made before starting,
-not a tweak. `config.txt`-only knobs are free.
+`PACKAGECONFIG` — or a bump of the poky or meta-openembedded pin — invalidates WebKit and costs that
+again, so it is a decision made before starting, not a tweak. `config.txt`-only knobs are free.
 
 **Two boards, two roles.** `prod` is wall-mounted and carries the live soak run; `bench` is the
 board to OTA, reboot and abuse. Nothing destructive goes near prod.
@@ -34,9 +34,10 @@ board to OTA, reboot and abuse. Nothing destructive goes near prod.
 just                # the recipe roster, each beside what it does
 just verify         # every documentation check: cross-references + docs-vs-image
 just links          # cross-references only (this is the one CI requires)
-just guards         # repository invariants: secrets, identity, syntax, wiring
+just guards         # repository invariants: secrets, identity, syntax, wiring;
+                    # runs the device guard's and the CVE tools' self-tests too
 just install-hooks  # once per clone: point core.hooksPath at .githooks
-bash .claude/hooks/guard-test.sh   # the device guard's own self-test
+bash .claude/hooks/guard-test.sh   # the device guard's self-test on its own
 ```
 
 CI runs [`tools/ci-guards.sh`](tools/ci-guards.sh),
@@ -110,8 +111,10 @@ CI, not only a local run, and walk the checklist below against the diff.
 **A gate is not verified until you have watched it fail.** Seed the defect *and* the
 spelled-differently-but-valid variant, confirm the seed landed, and re-run the finding's own
 reproduction against the fix. A check that looks identical passing and failing has measured nothing —
-which is why `.claude/hooks/guard.sh` ships with `guard-test.sh` beside it and why every guard in
-[`tools/ci-guards.sh`](tools/ci-guards.sh) existence-checks the paths it scans before scanning them.
+which is why `.claude/hooks/guard.sh` ships with `guard-test.sh` beside it, why the CVE and currency
+tools ship with [`tools/cve-tools-test.py`](tools/cve-tools-test.py) beside them, and why every guard
+in [`tools/ci-guards.sh`](tools/ci-guards.sh) existence-checks the paths it scans before scanning
+them.
 
 ## Review checklist
 
@@ -138,8 +141,8 @@ silently to whatever occupies it after a renumber.
 **Build config & pins**
 
 4. **WebKit cost.** Does this touch `DISTRO_FEATURES`, `MACHINE_FEATURES` or webkit's
-   `PACKAGECONFIG`? That invalidates WebKit and costs a ~4.5 h rebuild, so it is a decision to take
-   before starting, not one to discover afterwards.
+   `PACKAGECONFIG`, or bump the poky or meta-openembedded pin? That invalidates WebKit and costs a
+   ~4.5 h rebuild, so it is a decision to take before starting, not one to discover afterwards.
 5. **kas block collision.** Is every `local_conf_header` block name unique across the include chain?
    kas merges by block name and the top-level file wins, so a duplicate is discarded with no warning,
    no error, and variables that never reach bitbake.

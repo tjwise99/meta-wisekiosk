@@ -1,0 +1,50 @@
+=== RAUC Status ===
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+Someone could be eavesdropping on you right now (man-in-the-middle attack)!
+It is also possible that a host key has just been changed.
+The fingerprint for the ED25519 key sent by the remote host is
+<BENCH-HOSTKEY-FINGERPRINT>.
+Please contact your system administrator.
+Add correct host key in /home/tjwise/.ssh/known_hosts to get rid of this message.
+Offending ECDSA key in /home/tjwise/.ssh/known_hosts:9
+  remove with:
+  ssh-keygen -f '/home/tjwise/.ssh/known_hosts' -R '<BENCH_ADDRESS>'
+Host key for <BENCH_ADDRESS> has changed and you have requested strict checking.
+Host key verification failed.
+
+=== Disk Usage ===
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+Someone could be eavesdropping on you right now (man-in-the-middle attack)!
+It is also possible that a host key has just been changed.
+The fingerprint for the ED25519 key sent by the remote host is
+<BENCH-HOSTKEY-FINGERPRINT>.
+Please contact your system administrator.
+Add correct host key in /home/tjwise/.ssh/known_hosts to get rid of this message.
+Offending ECDSA key in /home/tjwise/.ssh/known_hosts:9
+  remove with:
+  ssh-keygen -f '/home/tjwise/.ssh/known_hosts' -R '<BENCH_ADDRESS>'
+Host key for <BENCH_ADDRESS> has changed and you have requested strict checking.
+Host key verification failed.
+
+=== Uptime ===
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+Someone could be eavesdropping on you right now (man-in-the-middle attack)!
+It is also possible that a host key has just been changed.
+The fingerprint for the ED25519 key sent by the remote host is
+<BENCH-HOSTKEY-FINGERPRINT>.
+Please contact your system administrator.
+Add correct host key in /home/tjwise/.ssh/known_hosts to get rid of this message.
+Offending ECDSA key in /home/tjwise/.ssh/known_hosts:9
+  remove with:
+  ssh-keygen -f '/home/tjwise/.ssh/known_hosts' -R '<BENCH_ADDRESS>'
+Host key for <BENCH_ADDRESS> has changed and you have requested strict checking.
+Host key verification failed.

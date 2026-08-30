@@ -72,6 +72,17 @@ PATTERNS = [
         'a MAC identifies one board and its vendor OUI; keep it in local/',
     ),
     (
+        'IPv6 link-local',
+        # fe80::/10 with a modified-EUI-64 interface id embeds the interface MAC:
+        # the OUI, then the literal ff:fe, then the NIC bytes. Requiring that
+        # ff:fe marker is what makes this the MAC-leaking form specifically -- a
+        # manually assigned fe80::1 embeds no board and does not match, the way
+        # the MAC pattern excludes the broadcast and null constants. A boot_id or
+        # UUID writes fe80 with a hyphen, not a colon, so it does not match here.
+        re.compile(r'(?<![0-9A-Fa-f:])fe80:[0-9A-Fa-f:]*ff:fe[0-9A-Fa-f:]+(?![0-9A-Fa-f:])', re.I),
+        'a link-local IPv6 embeds the interface MAC; keep it in local/',
+    ),
+    (
         'private IPv4',
         re.compile(r'(?<![0-9.])(?:192\.168\.\d{1,3}\.\d{1,3}'
                    r'|10\.\d{1,3}\.\d{1,3}\.\d{1,3}'
@@ -100,9 +111,15 @@ PATTERNS = [
         # words machine-id / KIOSK_MACHINE_ID. Without this the value was
         # reachable only through the KNOWN half -- which needs gitignored
         # local/device-identity.md and therefore never runs in CI, and a real
-        # machine-id in a journal path published on that route.
-        re.compile(r'(?:/var/log/journal/|[Mm]achine[-_ ]?[Ii][Dd][^\n]{0,60}?)'
-                   r'(?<![0-9A-Za-z])[0-9a-f]{32}(?![0-9A-Za-z])'),
+        # machine-id in a journal path published on that route. The anchor word
+        # is matched case-insensitively, so an unquoted `KIOSK_MACHINE_ID=<hex>`
+        # counts; the hex run is {16,32}, not {32}, so a truncated machine-id (a
+        # half-id short label or an `sd_id128 --app-specific` derivation) still
+        # leaks the unit, while the 16-char floor stays clear of the 8- and
+        # 12-char git-sha abbreviations that sit beside the word "machine-id" in
+        # the docs.
+        re.compile(r'(?:/var/log/journal/|(?i:machine[-_ ]?id)[^\n]{0,60}?)'
+                   r'(?<![0-9A-Za-z])[0-9a-f]{16,32}(?![0-9A-Za-z])'),
         'a machine-id identifies one installed unit; keep it in local/ and cite it as <KIOSK_MACHINE_ID>',
     ),
 ]

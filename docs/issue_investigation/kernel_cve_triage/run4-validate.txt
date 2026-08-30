@@ -1,0 +1,117 @@
+Warning: Permanently added '<BENCH_ADDRESS>' (ED25519) to the list of known hosts.
+===== KERNEL
+Linux <BENCH_HOSTNAME> 6.12.93 #1 Fri Jun 12 11:45:31 UTC 2026 armv6l GNU/Linux
+===== BUILDINFO (meta-wisekiosk)
+meta-wisekiosk    = 80-cve-triage:c9905c4df3f109681f953d386d7c610e4abb1676
+===== RAUC
+=== System Info ===
+Compatible:  autonomos-raspberrypi0-wifi
+Variant:     
+Booted from: rootfs.1 (B)
+
+=== Bootloader ===
+Activated: rootfs.1 (B)
+
+=== Slot States ===
+[1mx[0m [32m[32m[1m[rootfs.1][0m (/dev/mmcblk0p3, ext4, [1mbooted[0m)
+      bootname: [34mB[0m
+      mounted: /
+      boot status: [32mgood[0m
+
+o [1m[rootfs.0][0m (/dev/mmcblk0p2, ext4, inactive[0m)
+      bootname: [34mA[0m
+      boot status: [32mgood[0m
+===== FW ENV
+BOOT_ORDER=B A
+BOOT_A_LEFT=3
+BOOT_B_LEFT=3
+===== MACHINE-ID MATCHES PRE-OTA?
+<KIOSK_MACHINE_ID>
+===== WLAN0 ADDR
+2: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel qlen 1000
+    link/ether <BENCH-MAC> brd ff:ff:ff:ff:ff:ff
+    inet <BENCH_ADDRESS>/24 brd <BENCH-BROADCAST> scope global dynamic wlan0
+       valid_lft 86345sec preferred_lft 86345sec
+    inet6 <BENCH-LINKLOCAL>/64 scope link 
+       valid_lft forever preferred_lft forever
+===== WLAN0 LINK
+Connected to <AP-BSSID> (on wlan0)
+	SSID: <WIFI_SSID>
+	freq: 2417.0
+	RX: 151016 bytes (254 packets)
+	TX: 35238 bytes (207 packets)
+	signal: -55 dBm
+	rx bitrate: 72.2 MBit/s
+	tx bitrate: 72.2 MBit/s
+	bss flags: short-slot-time
+	dtim period: 2
+	beacon int: 200
+===== DEFAULT ROUTE
+default via <ROUTER_ADDRESS> dev wlan0  src <BENCH_ADDRESS>  metric 1024 
+<BENCH-SUBNET>/24 dev wlan0 scope link  src <BENCH_ADDRESS>  metric 1024 
+<ROUTER_ADDRESS> dev wlan0 scope link  src <BENCH_ADDRESS>  metric 1024 
+===== DHCP LEASE
+   FD Store: 0 (limit: 512)
+        CPU: 658ms
+     CGroup: /system.slice/systemd-networkd.service
+             └─192 /usr/lib/systemd/systemd-networkd
+
+Aug 29 17:41:41 <BENCH_HOSTNAME> systemd-networkd[192]: lo: Link UP
+Aug 29 17:41:41 <BENCH_HOSTNAME> systemd-networkd[192]: lo: Gained carrier
+Aug 29 17:41:41 <BENCH_HOSTNAME> systemd-networkd[192]: Enumeration completed
+Aug 29 17:41:42 <BENCH_HOSTNAME> systemd[1]: Started Network Configuration.
+Aug 29 17:41:43 <BENCH_HOSTNAME> systemd-networkd[192]: wlan0: Configuring with /etc/systemd/network/20-wifi.network.
+Aug 29 17:41:43 <BENCH_HOSTNAME> systemd-networkd[192]: wlan0: Link UP
+Aug 29 17:41:45 <BENCH_HOSTNAME> systemd-networkd[192]: wlan0: Connected WiFi access point: <WIFI_SSID> (<AP-BSSID>)
+Aug 29 17:41:45 <BENCH_HOSTNAME> systemd-networkd[192]: wlan0: Gained carrier
+Aug 29 17:41:46 <BENCH_HOSTNAME> systemd-networkd[192]: wlan0: DHCPv4 address <BENCH_ADDRESS>/24, gateway <ROUTER_ADDRESS> acquired from <ROUTER_ADDRESS>
+Aug 29 17:41:47 <BENCH_HOSTNAME> systemd-networkd[192]: wlan0: Gained IPv6LL
+===== BRCMFMAC MODULE
+brcmfmac_wcc           12288  0
+brcmfmac              331776  1 brcmfmac_wcc
+brcmutil               16384  1 brcmfmac
+cfg80211              901120  1 brcmfmac
+===== BRCMFMAC FW VERSION
+[   22.573941] brcmfmac: F1 signature read @0x18000000=0x1541a9a6
+[   22.587550] brcmfmac: brcmf_fw_alloc_request: using brcm/brcmfmac43430-sdio for chip BCM43430/1
+[   22.605005] usbcore: registered new interface driver brcmfmac
+[   23.022280] brcmfmac: brcmf_c_process_txcap_blob: no txcap_blob available (err=-2)
+[   23.034378] brcmfmac: brcmf_c_preinit_dcmds: Firmware: BCM43430/1 wl0: Jul 19 2021 03:24:18 version 7.45.98 (TOB) (56df937 CY) FWID 01-8e14b897
+[   23.603932] brcmfmac: brcmf_cfg80211_set_power_mgmt: power save enabled
+===== BOOT-COMPLETE TARGET
+active
+● boot-complete.target - Boot Completion Check
+     Loaded: loaded (/usr/lib/systemd/system/boot-complete.target; static)
+     Active: active since Sat 2026-08-29 17:41:47 EDT; 1min 27s ago
+       Docs: man:systemd.special(7)
+
+Aug 29 17:41:47 <BENCH_HOSTNAME> systemd[1]: Reached target Boot Completion Check.
+===== RAUC MARK-GOOD
+● rauc-mark-good.service - RAUC Good-marking Service
+     Loaded: loaded (/usr/lib/systemd/system/rauc-mark-good.service; enabled; preset: enabled)
+     Active: active (exited) since Sat 2026-08-29 17:41:50 EDT; 1min 25s ago
+    Process: 277 ExecStart=/usr/bin/rauc status mark-good (code=exited, status=0/SUCCESS)
+   Main PID: 277 (code=exited, status=0/SUCCESS)
+        CPU: 242ms
+
+Aug 29 17:41:47 <BENCH_HOSTNAME> systemd[1]: Starting RAUC Good-marking Service...
+Aug 29 17:41:50 <BENCH_HOSTNAME> rauc[277]: rauc status: marked slot(s) rootfs.1 as good
+Aug 29 17:41:50 <BENCH_HOSTNAME> systemd[1]: Finished RAUC Good-marking Service.
+===== NETCHECK
+● kiosk-netcheck.service - Withhold RAUC good-marking until the LAN is reachable
+     Loaded: loaded (/usr/lib/systemd/system/kiosk-netcheck.service; enabled; preset: enabled)
+     Active: active (exited) since Sat 2026-08-29 17:41:47 EDT; 1min 28s ago
+    Process: 216 ExecStart=/usr/bin/kiosk-netcheck (code=exited, status=0/SUCCESS)
+   Main PID: 216 (code=exited, status=0/SUCCESS)
+        CPU: 256ms
+
+Aug 29 17:41:42 <BENCH_HOSTNAME> systemd[1]: Starting Withhold RAUC good-marking until the LAN is reachable...
+Aug 29 17:41:42 <BENCH_HOSTNAME> kiosk-netcheck[225]: ip: can't find device 'wlan0'
+Aug 29 17:41:47 <BENCH_HOSTNAME> kiosk-netcheck[216]: kiosk-netcheck: LAN reachable via <ROUTER_ADDRESS> at 27s uptime
+Aug 29 17:41:47 <BENCH_HOSTNAME> systemd[1]: Finished Withhold RAUC good-marking until the LAN is reachable.
+===== FAILED UNITS
+===== KIOSK
+active
+===== UPTIME/LOAD
+ 17:43:15 up 1 min,  load average: 2.48, 0.94, 0.34
+256

@@ -21,7 +21,7 @@ One owner per fact. Read the owner; do not restate it here or anywhere else.
 | Which commit a *running* image was built from | `/etc/buildinfo` on the device |
 | Replacing the RAUC signing key, and the order it must happen in | [`docs/rauc-key-rotation.md`](docs/rauc-key-rotation.md) |
 | Scanning the image for CVEs, reading the SBOM, and what `CVE_STATUS` means | [`docs/cve-and-sbom.md`](docs/cve-and-sbom.md) |
-| Whether the pinned upstream repos have fallen behind their branch heads | [`docs/layer-currency.md`](docs/layer-currency.md) |
+| Whether the pins, or the recipes inside them, have fallen behind, and what a bump would close | [`docs/layer-currency.md`](docs/layer-currency.md) |
 | What was tried, what it cost, what was rejected | [`docs/issue_investigation/`](docs/issue_investigation/TEMPLATE.md) |
 | The shape every investigation takes, and R1-R3 | [`docs/issue_investigation/TEMPLATE.md`](docs/issue_investigation/TEMPLATE.md) |
 | Site configuration — SSID, PSK hash, URL, hostname, machine-id | out-of-tree `~/.config/wisekiosk/secrets.yaml` |
@@ -35,8 +35,8 @@ One owner per fact. Read the owner; do not restate it here or anywhere else.
 - **`just build`, never `kas-container` directly.** kas alone skips
   `tools/write-build-rev.sh`, so a tree that has built before builds against the *previous* commit
   and the reproducibility gate refuses the image at flash time.
-- **A full build is ~4.5 h**, and `DISTRO_FEATURES` / `MACHINE_FEATURES` / webkit `PACKAGECONFIG`
-  invalidate WebKit and cost that again. Decide before starting.
+- **A full build is ~4.5 h**, and `DISTRO_FEATURES` / `MACHINE_FEATURES` / webkit `PACKAGECONFIG` /
+  a poky or meta-openembedded pin bump invalidate WebKit and cost that again. Decide before starting.
 - **Never destructively test the prod board.** It is wall-mounted and carries the live soak run;
   bench is the OTA, reboot and rollback target. Roles and addresses are in
   `local/device-identity.md` — read them, do not remember them.

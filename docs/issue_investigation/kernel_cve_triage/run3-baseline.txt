@@ -1,0 +1,134 @@
+Warning: Permanently added '<BENCH_ADDRESS>' (ED25519) to the list of known hosts.
+=== identity ===
+<BENCH_HOSTNAME>
+<KIOSK_MACHINE_ID-PREFIX>
+=== date/uptime ===
+Fri Aug 28 23:33:52 UTC 2026
+ 19:33:52 up 2 days, 16:44,  load average: 0.28, 0.51, 0.53
+233049.40 189298.88
+=== kernel ===
+Linux <BENCH_HOSTNAME> 6.6.63 #1 Fri Dec  6 10:10:05 UTC 2024 armv6l GNU/Linux
+=== buildinfo ===
+-----------------------
+Build Configuration:  |
+-----------------------
+DISTRO = autonomos
+DISTRO_VERSION = 0.1
+-----------------------
+Layer Revisions:      |
+-----------------------
+meta-arm          = scarthgap:045eb74bd9abe7d9ccf365a2417e440ce83bcbb0
+meta-arm-toolchain = scarthgap:045eb74bd9abe7d9ccf365a2417e440ce83bcbb0
+meta-autonomos-core = patched-1fd4eb55c2ef0902176986bb0dea90e7c34d02bf:2398fc3463d8b34508564dc1865fd1824e0cba63
+meta-autonomos-raspberrypi = patched-1fd4eb55c2ef0902176986bb0dea90e7c34d02bf:2398fc3463d8b34508564dc1865fd1824e0cba63
+meta-lts-mixins   = scarthgap/u-boot:a44882db02a0ed0f149371831bfbe067665eb42b
+meta-filesystems  = scarthgap:ef3df29f2cfca6a9513b51ebcdccf82b6c8a836f
+meta-networking   = scarthgap:ef3df29f2cfca6a9513b51ebcdccf82b6c8a836f
+meta-oe           = scarthgap:ef3df29f2cfca6a9513b51ebcdccf82b6c8a836f
+meta-python       = scarthgap:ef3df29f2cfca6a9513b51ebcdccf82b6c8a836f
+meta-raspberrypi  = scarthgap:6ca1f75017cc5d5acdb8bb05634c4bc01fa049fd
+meta-rauc         = scarthgap:d63878f20eba7a85ecf53566e7a3377e78bb46ac
+meta-rauc-raspberrypi = scarthgap:222c61275054974cdbd09bd5faa2b7a37ddbd840
+meta-virtualization = scarthgap:0d9fb7fef86c5cbc177045c7b86bc71948f8657d
+meta-wisekiosk    = HEAD:a9eb3a914793816881e7350ae21d3a2f49f1fbbc
+meta              = scarthgap:077627338ac18aeca34bfe0c52777fab38e2e0c0
+meta-poky         = scarthgap:077627338ac18aeca34bfe0c52777fab38e2e0c0
+meta-yocto-bsp    = scarthgap:077627338ac18aeca34bfe0c52777fab38e2e0c0
+=== os-release ===
+ID=autonomos
+NAME="AutonomOS"
+VERSION="0.1 (Rubik)"
+VERSION_ID=0.1
+VERSION_CODENAME="Rubik"
+PRETTY_NAME="AutonomOS 0.1 (Rubik)"
+CPE_NAME="cpe:/o:openembedded:autonomos:0.1"
+=== rauc status ===
+=== System Info ===
+Compatible:  autonomos-raspberrypi0-wifi
+Variant:     
+Booted from: rootfs.0 (A)
+
+=== Bootloader ===
+Activated: rootfs.0 (A)
+
+=== Slot States ===
+o [1m[rootfs.1][0m (/dev/mmcblk0p3, ext4, inactive[0m)
+      bootname: [34mB[0m
+      boot status: [32mgood[0m
+
+[1mx[0m [32m[32m[1m[rootfs.0][0m (/dev/mmcblk0p2, ext4, [1mbooted[0m)
+      bootname: [34mA[0m
+      mounted: /
+      boot status: [32mgood[0m
+=== rauc status detailed ===
+head: invalid option -- '6'
+BusyBox v1.36.1 () multi-call binary.
+
+Usage: head [OPTIONS] [FILE]...
+=== fw_printenv ===
+BOOT_ORDER=A B
+BOOT_A_LEFT=3
+BOOT_B_LEFT=3
+=== boot_id ===
+729c444d-eca8-4a3f-8f83-efa4ec839298
+=== df ===
+Filesystem                Size      Used Available Use% Mounted on
+/dev/root                 1.8G    251.4M      1.4G  15% /
+devtmpfs                181.5M         0    181.5M   0% /dev
+tmpfs                   213.7M         0    213.7M   0% /dev/shm
+tmpfs                    85.5M    528.0K     85.0M   1% /run
+tmpfs                   213.7M      4.0K    213.7M   0% /tmp
+tmpfs                   213.7M     24.0K    213.7M   0% /var/volatile
+/dev/mmcblk0p1          259.8M     30.2M    229.7M  12% /boot
+/dev/mmcblk0p4          479.2M     68.1M    375.3M  15% /data
+/dev/mmcblk0p4          479.2M     68.1M    375.3M  15% /data
+=== ip link ===
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel qlen 1000
+    link/ether <BENCH-MAC> brd ff:ff:ff:ff:ff:ff
+=== ip addr wlan0 ===
+2: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel qlen 1000
+    link/ether <BENCH-MAC> brd ff:ff:ff:ff:ff:ff
+    inet <BENCH_ADDRESS>/24 brd <BENCH-BROADCAST> scope global dynamic wlan0
+       valid_lft 69377sec preferred_lft 69377sec
+    inet6 <BENCH-LINKLOCAL>/64 scope link 
+       valid_lft forever preferred_lft forever
+=== wifi assoc ===
+Connected to <AP-BSSID> (on wlan0)
+	SSID: <WIFI_SSID>
+	freq: 2417.0
+	RX: 52677070 bytes (328065 packets)
+	TX: 18082769 bytes (270179 packets)
+	signal: -60 dBm
+	rx bitrate: 65.0 MBit/s
+	tx bitrate: 72.2 MBit/s
+	bss flags: short-slot-time
+	dtim period: 2
+	beacon int: 200
+=== brcmfmac ===
+brcmfmac_wcc           12288  0
+brcmfmac              331776  1 brcmfmac_wcc
+brcmutil               16384  1 brcmfmac
+cfg80211              860160  1 brcmfmac
+[   20.551888] brcmfmac: F1 signature read @0x18000000=0x1541a9a6
+[   20.574934] brcmfmac: brcmf_fw_alloc_request: using brcm/brcmfmac43430-sdio for chip BCM43430/1
+[   20.611899] usbcore: registered new interface driver brcmfmac
+[   20.946773] brcmfmac: brcmf_c_process_txcap_blob: no txcap_blob available (err=-2)
+[   20.954602] brcmfmac: brcmf_c_preinit_dcmds: Firmware: BCM43430/1 wl0: Jul 19 2021 03:24:18 version 7.45.98 (TOB) (56df937 CY) FWID 01-8e14b897
+[   21.328840] brcmfmac: brcmf_cfg80211_set_power_mgmt: power save enabled
+=== services ===
+active
+active
+active
+active
+=== failed units ===
+=== loadavg ===
+0.50 0.56 0.55 3/131 13359
+=== meminfo ===
+head: invalid option -- '5'
+BusyBox v1.36.1 () multi-call binary.
+
+Usage: head [OPTIONS] [FILE]...
+=== entropy ===
+256

@@ -23,3 +23,7 @@ meta-wisekiosk/conf/build-rev.inc
 # state, and settings.local.json in particular carries local filesystem paths.
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# CPython's own build artifact. tools/cve-tools-test.py imports the CVE tools by
+# path, and .claude/hooks/ is on a hook's import path; neither is source.
+__pycache__/
