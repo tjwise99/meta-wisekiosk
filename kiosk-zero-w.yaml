@@ -125,6 +125,11 @@ local_conf_header:
     # unchanged and every marker within ~1s of the baseline (mixed sign).
     IMAGE_INSTALL:append = " kiosk-provision"
 
+    # Both halves of the app, from the commit pinned in
+    # meta-wisekiosk/recipes-wisekiosk/wisekiosk/wisekiosk-src.inc. The backend
+    # serves the frontend's bundle out of /srv/kiosk on :8080.
+    IMAGE_INSTALL:append = " wisekiosk-backend wisekiosk-frontend"
+
     # serial-getty is a login prompt on a port with nothing attached, started at
     # 25.4s -- before the wlan0 gate.
     #

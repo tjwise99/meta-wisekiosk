@@ -17,6 +17,7 @@
 | [`issue_investigation/webkit_dependency_trims/`](issue_investigation/webkit_dependency_trims/README.md) | Can the accessibility stack be taken out of the image, from the build side or at runtime? |
 | [`issue_investigation/clock_timesync/`](issue_investigation/clock_timesync/README.md) | Is boot-time DNS why the kiosk clock cannot be trusted — and what actually fixes it? |
 | [`issue_investigation/kernel_cve_triage/`](issue_investigation/kernel_cve_triage/README.md) | Are the stale layer pins this image's real CVE exposure, or is it the kernel? |
+| [`issue_investigation/app_from_source/`](issue_investigation/app_from_source/README.md) | Can this layer build the WiseKiosk application from source, and does it run on the board? |
 
 Each investigation is a directory whose `README.md` is the record of record, with any raw captures
 as siblings beside it. [`issue_investigation/TEMPLATE.md`](issue_investigation/TEMPLATE.md) is the

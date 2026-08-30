@@ -1,0 +1,20 @@
+[Unit]
+Description=WiseKiosk backend: serves the frontend bundle and the API on :8080
+# network.target, not network-online.target: the server binds 0.0.0.0 and needs
+# no address.
+After=network.target data.mount
+# Wants, not Requires: an unmounted /data leaves the server serving, config.json
+# 404s and the page renders its own absent state.
+Wants=data.mount
+
+[Service]
+Type=simple
+# uid/gid 10001, created by this package.
+User=kiosk
+Group=kiosk
+ExecStart=/usr/bin/wisekiosk -static-root /srv/kiosk
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

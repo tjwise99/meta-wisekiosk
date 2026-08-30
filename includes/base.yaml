@@ -80,3 +80,12 @@ repos:
     url: "https://git.yoctoproject.org/meta-virtualization"
     commit: f980aefbc8b3eeafb8d144e7fdac3c3b701a4fea
     path: "sources/meta-virtualization"
+
+  # GOVERSION = "1.26%" for the backend; poky scarthgap ships Go 1.22.12.
+  # A second checkout of meta-lts-mixins, which carries one topic per branch --
+  # includes/platforms/raspberrypi.yaml pins scarthgap/u-boot off the same url.
+  meta-lts-mixins-go:
+    url: "https://git.yoctoproject.org/meta-lts-mixins"
+    branch: scarthgap/go
+    commit: df1df57da4ee43ecf23413796531b8942d949963
+    path: "sources/meta-lts-mixins-go"
