@@ -255,7 +255,11 @@ def main():
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except Exception:
+    except Exception as exc:
         # Fail-open on ANY malformed payload, not only one that fails to parse:
-        # a hook that dies mid-decision is a hook nobody keeps installed.
+        # a hook that dies mid-decision is a hook nobody keeps installed. A bug
+        # in the detector reaches here too and would disable the guard in
+        # silence, so the reason is observable under the same trace flag.
+        if os.environ.get("KIOSK_HOOK_TRACE"):
+            sys.stderr.write(f"memory-hygiene: FAILED OPEN: {exc!r}\n")
         sys.exit(0)

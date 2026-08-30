@@ -218,6 +218,22 @@ t "precedent then rule"    PASS "$(w "$MEM" 'Related: never call a non-closing P
 t "gh output in a fence"   ASK "$(w "$MEM" "$(printf 'Read state from gh, never from here:\n\n```\n#83  kernel triage  MERGED\n#84  per-CVE triage  OPEN\n```\n')")"
 t "clean local capture"   PASS "$(w "$LOCALNOTE" 'Bench board: 24 h soak, RSS flat, display renders at parity with prod.')"
 
+echo "--- ACCEPTED false positives: known, deliberate, do not 'fix' ---"
+# These ask, and that is the decided outcome, not an oversight. Each binds a
+# status word to a ticket inside ONE clause, which is the shape the guard is
+# built to catch; separating them from narration needs the difference between
+# reporting a past framing and asserting a current state, and that is semantic,
+# not surface. Every regex tried on them keyed on incidentals and mis-fired in
+# both directions.
+#
+# They are HERE rather than only in a commit message so that narrowing the
+# patterns to silence them turns the suite red and confronts the next editor
+# with the argument, instead of showing green and reading as an improvement.
+# The cost is one prompt on a rare phrasing, on a gate that only ever asks.
+t "ACCEPTED: past framing" ASK "$(w "$MEM" 'Two prior violations, same rule: PR #40, closed no issue, and PR #42, presented as mergeable.')"
+t "ACCEPTED: illustration" ASK "$(w "$MEM" 'Example: #84 is blocked_by #72, and the edge is native rather than a label.')"
+t "ACCEPTED: rule w/ tag"  ASK "$(w "$MEM" 'A PR is either complete or it stays a branch -- #47 settled that, and mergeable is not a self-assessment.')"
+
 echo "--- must NO-OP: every other path and tool ---"
 t "repo doc, same text"   NOOP "$(w "$REPODOC" 'PR #83 is MERGEABLE, still un-merged (human-gated)')"
 t "repo CLAUDE.md"        NOOP "$(w "/home/fixture/meta-wisekiosk/CLAUDE.md" 'PR #83 is MERGEABLE, un-merged')"
