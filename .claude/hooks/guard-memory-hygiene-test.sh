@@ -187,6 +187,16 @@ t "defect, fenced+lang"   ASK "$(w "$MEM" "$(printf '## Handoff\n\n```text\n%s\n
 # shellcheck disable=SC2016
 t "defect, unclosed fence" ASK "$(w "$MEM" "$(printf '## Handoff\n\n```\nsome captured output\n\n%s\n' "$DEFECT")")"
 t "defect, whole line quoted" ASK "$(w "$MEM" "\"$DEFECT\"")"
+# TERSE quoted status. A length bound on the exemption fails exactly here: the
+# content is short, so it looked like a quoted term, and terse is the most
+# natural way to write status. Rule-language is what makes a quote a mention;
+# without it the quotes are scanned like any other text.
+t "terse quoted status"    ASK "$(w "$MEM" 'Handoff: "#83 un-merged"')"
+# shellcheck disable=SC2016  # the backticks are the payload
+t "terse backticked"      ASK "$(w "$MEM" 'Handoff: `#83 un-merged`')"
+t "terse quoted, shouted" ASK "$(w "$MEM" 'Note: "PR #83 MERGEABLE"')"
+t "terse quoted, bullet"  ASK "$(w "$MEM" '- "#83 un-merged"')"
+t "two terse quotes"      ASK "$(w "$MEM" 'Status "#83 open" and "#84 open".')"
 # shellcheck disable=SC2016  # the fence backticks are the payload
 t "roll-up in a fence"    ASK "$(w "$MEM" "$(printf '## Handoff\n\n```\nSTATUS 2026-08-30\nPR #83 MERGEABLE, un-merged\n```\n')")"
 # QUOTED. The useful spelling of this very rule names a ticket inside the

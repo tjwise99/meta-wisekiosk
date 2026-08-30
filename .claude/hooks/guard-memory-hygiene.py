@@ -120,15 +120,18 @@ CAPS_STATUS = re.compile(
 # stamped with the day it was true.
 STATUS_HEADER = re.compile(r"\bSTATUS\s+20\d\d\b")
 
-# A quoted TERM is being mentioned, not asserted: a concrete owner rule is
-# written `never put "PR #83 is MERGEABLE" in a memory`, and flagging that would
-# fire the gate on the very lesson this hook teaches. A quoted SENTENCE is not a
-# mention -- quoting is the natural way to paste a handoff verbatim, and an
-# unbounded exemption lets the defect through in the format most likely to carry
-# it. Length is the only thing separating them, so it is bounded and both sides
-# are asserted. Ambiguity resolves toward scanning: skipping is the silent
-# direction, and a false positive is visible where a miss is not.
-QUOTE_MAX = 40
+# A quoted spelling is exempt ONLY on a line that is stating a rule: a concrete
+# owner rule is written `never put "PR #83 is MERGEABLE" in a memory`, and
+# flagging that would fire the gate on the very lesson this hook teaches.
+# Quoting is also the natural way to paste a handoff verbatim -- `Handoff:
+# "#83 un-merged"` is status, and exempting it resolves ambiguity toward
+# skipping, which is the silent direction. Rule-language is what separates the
+# two; span length only proxies for it, and proxies fail short.
+RULE = re.compile(
+    r"\bnever\b|\bdo not\b|\bdon'?t\b|\bmust not\b|\bshould not\b"
+    r"|\bavoid\b|\brule\b|\blesson\b|\binstead of\b",
+    re.I,
+)
 QUOTED = re.compile(r"`[^`]*`|\"[^\"]*\"")
 
 # A clause is the unit of assertion; a line is not. "See #46 build stamp for the
@@ -185,12 +188,11 @@ def bound(line: str, tell) -> bool:
 
 
 def scannable(line: str) -> str:
-    """The line with short quoted spans blanked, length preserved so NEAR is
-    unmoved. A span over QUOTE_MAX is left in place to be scanned."""
-    def blank(m):
-        n = m.end() - m.start()
-        return " " * n if n <= QUOTE_MAX else m.group(0)
-    return QUOTED.sub(blank, line)
+    """The line with quoted spans blanked where the line states a rule, length
+    preserved so NEAR is unmoved. Everywhere else the quotes are scanned."""
+    if not RULE.search(line):
+        return line
+    return QUOTED.sub(lambda m: " " * (m.end() - m.start()), line)
 
 
 def findings(text: str):
