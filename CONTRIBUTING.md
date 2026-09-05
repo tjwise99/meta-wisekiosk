@@ -35,9 +35,10 @@ just                # the recipe roster, each beside what it does
 just verify         # every documentation check: cross-references + docs-vs-image
 just links          # cross-references only (this is the one CI requires)
 just guards         # repository invariants: secrets, identity, syntax, wiring;
-                    # runs the device guard's and the CVE tools' self-tests too
+                    # runs the device, CVE and memory-hygiene self-tests too
 just install-hooks  # once per clone: point core.hooksPath at .githooks
-bash .claude/hooks/guard-test.sh   # the device guard's self-test on its own
+bash .claude/hooks/guard-test.sh                  # the device guard, on its own
+bash .claude/hooks/guard-memory-hygiene-test.sh   # the memory-hygiene guard
 ```
 
 CI runs [`tools/ci-guards.sh`](tools/ci-guards.sh),
@@ -103,6 +104,17 @@ merge-ready.
 Issues block each other through GitHub's native dependency edges, never through a label. Write both
 the number and the name of anything renumberable, in the title and in the body.
 
+**Where a ticket stands is the tracker's fact.** A handoff goes on the issue or the pull request as a
+comment; agent memory and gitignored `local/` notes hold owner rules and durable lessons only. A
+status line copied into either is a second copy that a merge falsifies and nothing corrects, and the
+stale copy is the one the next reader acts on. Citing a ticket as history — "the reproducibility gate
+shipped in PR #51 build stamp" — is not status, and neither is a terminal fact like the date a pull
+request merged. [`.claude/hooks/guard-memory-hygiene.py`](.claude/hooks/guard-memory-hygiene.py) asks
+before such a write and never blocks; a short quoted term is exempt, so a rule may name the spelling
+it forbids, but a quoted or fenced *sentence* is scanned like any other — those are how a handoff
+gets pasted verbatim. It knows the vocabulary this store's handoffs used, not status in general — a
+phrasing outside that list passes, and the rule binds either way.
+
 ## Getting a change merged
 
 Size a change by what can be **read in one sitting**. Keep the diff to intended files. Verify through
@@ -111,10 +123,10 @@ CI, not only a local run, and walk the checklist below against the diff.
 **A gate is not verified until you have watched it fail.** Seed the defect *and* the
 spelled-differently-but-valid variant, confirm the seed landed, and re-run the finding's own
 reproduction against the fix. A check that looks identical passing and failing has measured nothing —
-which is why `.claude/hooks/guard.sh` ships with `guard-test.sh` beside it, why the CVE and currency
-tools ship with [`tools/cve-tools-test.py`](tools/cve-tools-test.py) beside them, and why every guard
-in [`tools/ci-guards.sh`](tools/ci-guards.sh) existence-checks the paths it scans before scanning
-them.
+which is why `.claude/hooks/guard.sh` and `guard-memory-hygiene.py` each ship with a `-test.sh` beside
+them, why the CVE and currency tools ship with [`tools/cve-tools-test.py`](tools/cve-tools-test.py)
+beside them, and why every guard in [`tools/ci-guards.sh`](tools/ci-guards.sh) existence-checks the
+paths it scans before scanning them.
 
 ## Review checklist
 

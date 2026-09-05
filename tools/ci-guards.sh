@@ -800,6 +800,23 @@ else
     fi
 fi
 
+# --- 16. the memory-hygiene guard must still pass its own self-test -------
+# .claude/hooks/guard-memory-hygiene.py asks before session-transient PR/issue
+# status is written into agent memory or a gitignored local/ note. It is the one
+# guard whose two directions are equally load-bearing: too narrow and status
+# drifts back in, too broad and it fires on the durable rules that necessarily
+# quote the same vocabulary -- and a gate the owner learns to click through is
+# no gate. Both directions are asserted there, per detector in isolation.
+memtest16=".claude/hooks/guard-memory-hygiene-test.sh"
+if [ ! -f "$memtest16" ]; then
+    bad "guard 16: $memtest16 missing -- the memory-hygiene guard is no longer self-tested"
+elif out16=$(bash "$memtest16" 2>&1); then
+    ok "the memory-hygiene guard passes its self-test ($(printf '%s\n' "$out16" | tail -n1))"
+else
+    bad "the memory-hygiene guard FAILS its own self-test:"
+    printf '%s\n' "$out16" | grep -E '^(FAIL|        |pass=)' | sed 's/^/        /'
+fi
+
 if [ "$fail" -ne 0 ]; then
     printf '\nguards FAILED\n'
     exit 1

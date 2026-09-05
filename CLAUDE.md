@@ -27,6 +27,7 @@ One owner per fact. Read the owner; do not restate it here or anywhere else.
 | Site configuration — SSID, PSK hash, URL, hostname, machine-id | out-of-tree `~/.config/wisekiosk/secrets.yaml` |
 | Which board is prod, which is bench, and their real addresses | gitignored `local/device-identity.md` |
 | The RAUC key the fleet trusts | gitignored `local/keys/` |
+| Where a pull request or an issue stands today | the GitHub tracker, as a comment on the ticket |
 | The gates, the conventions, and the review checklist | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Every document and the question it answers | [`docs/README.md`](docs/README.md) |
 
