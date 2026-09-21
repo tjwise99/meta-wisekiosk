@@ -51,14 +51,18 @@ local_conf_header:
   kernel: |
     PREFERRED_VERSION_linux-raspberrypi = "6.12.%"
 
-  # The live kiosk runs the legacy fbdev path, not vc4 KMS -- gldriver_test.sh
-  # installs 99-fbturbo.conf there because v3d is not "okay" on this board. KMS
-  # would also ignore the firmware HDMI settings above, replacing a display path
-  # that demonstrably works with one that is untested. Nothing here needs GL:
-  # the launcher sets GDK_GL=disable, as the Raspbian kiosk does.
+  # vc4graphics is in MACHINE_FEATURES (rpi-base.inc gates it on
+  # DISABLE_VC4GRAPHICS, which this file does not set), so the image takes the
+  # vc4 KMS path: mesa for virtual/egl, xf86-video-modesetting instead of
+  # xf86-video-fbdev, and xserver-xorg-extension-glx in the X server. That is
+  # the precondition for WebKit compositing on the GPU rather than repainting
+  # every frame on the single armv6 core -- a precondition, not the result:
+  # mesa can still fall back to its software rasteriser, which
+  # tools/kiosk-gpu-check.sh exists to catch. Whether the GPU path is actually
+  # reached is measured, not assumed -- see
+  # docs/issue_investigation/gpu_compositing/README.md. The `graphics` block
+  # carries the overlay, the mode and the mesa pin that go with it.
   display: |
-    DISABLE_VC4GRAPHICS = "1"
-
     # console=tty1 ONLY. The kiosk panel is the console (owner, 2026-08-12) --
     # this unit IS a display, so kernel output always has a screen, and there is
     # no serial adapter and will not be one. The 4.0s mmc_rescan panic was read
@@ -74,6 +78,44 @@ local_conf_header:
     # measured, and changing the firmware setting in config.txt is a different,
     # untested change.
     CMDLINE_SERIAL = "console=tty1"
+
+  # HALF OF THIS BLOCK CANNOT TRAVEL BY OTA. VC4DTBO reaches a board only as the
+  # `dtoverlay=` line rpi-config_git.bb writes into config.txt, and CMDLINE only
+  # through cmdline.txt; both files are on the shared FAT partition, and
+  # RAUC_BUNDLE_SLOTS = "rootfs" means RAUC never writes them. The two
+  # PREFERRED_VERSION lines DO ride the bundle. So an OTA alone lands a
+  # mesa/modesetting userland on fbdev boot files -- the delivery that covers
+  # both halves is in docs/issue_investigation/gpu_compositing/README.md under
+  # "Delivery and board".
+  #
+  # Full KMS, not fkms. vc4-kms-v3d is already rpi-config_git.bb's `?=` default
+  # and raspberrypi0-wifi.conf overrides nothing, so this hard set changes no
+  # behaviour today. It is protection against a machine-config change: sibling
+  # machine configs (raspberrypi3, raspberrypi-armv8) do override to
+  # vc4-fkms-v3d, and fkms would not give the dma-buf renderer what it needs.
+  # Deleting this line does not flip the board to fkms; it removes the guarantee.
+  #
+  # video= is the KMS replacement for the firmware HDMI keys, which the KMS
+  # driver ignores -- see
+  # meta-wisekiosk/recipes-bsp/bootfiles/rpi-config_%.bbappend. The trailing D
+  # forces the connector enabled and digital
+  # (Documentation/fb/modedb.rst), which is hdmi_force_hotplug's job: the panel
+  # behind the glass is switched on after the Pi, so a connector left to
+  # detection comes up blank.
+  #
+  # mesa is pinned to poky's 24.0.7. meta-raspberrypi ships mesa 25.1.6, which
+  # inherits the rust class -- a rust toolchain build on armv6 nothing else in
+  # this image needs -- and ships no mesa-gl at that version, so the two halves
+  # of one source tree would build at different versions. meta-raspberrypi's
+  # PACKAGECONFIG bbappends are `_%` and still apply at 24.0.7, so the vc4/v3d
+  # gallium drivers and dri3 come with the older recipe. `just
+  # preferred-version` reports this pin as behind by design; this comment is
+  # the reason it is not a bump to take. See docs/layer-currency.md.
+  graphics: |
+    VC4DTBO = "vc4-kms-v3d"
+    CMDLINE:append = " video=HDMI-A-1:1920x1080@60D"
+    PREFERRED_VERSION_mesa = "24.0.7"
+    PREFERRED_VERSION_mesa-gl = "24.0.7"
 
   kiosk: |
     AUTONOMOS_FEATURES = "graphics"

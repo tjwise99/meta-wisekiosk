@@ -5,7 +5,6 @@
 # kiosk -- systemd Restart=always does that job now.
 export SURF_OVERRIDE_REDIRECT=1
 export SURF_MILESTONES=1
-export GDK_GL=disable
 
 # Remote Web Inspector. OFF by default for two reasons: it must not perturb a
 # complete-display measurement, and it should not listen unless asked. Turn it

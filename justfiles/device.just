@@ -85,6 +85,16 @@ tcp-state kiosk-addr port="8080":
 screenshot host out="":
     tools/kiosk-screenshot.sh root@{{host}} {{out}}
 
+[group('device')]
+[doc("Check WebKit holds a vc4/v3d render node, and report CMA headroom")]
+gpu-check host:
+    tools/kiosk-gpu-check.sh root@{{host}}
+
+[group('device')]
+[doc("Capture webkit://gpu for a human to read the Renderer row. MUTATES: rewrites /data/config/kiosk.conf and restarts the kiosk twice; a device dying mid-run strands the panel on webkit://gpu until the backup beside it is moved back by hand")]
+gpu-capture host out="":
+    tools/kiosk-gpu-check.sh root@{{host}} --capture {{out}}
+
 # n is a SAMPLE COUNT, not hours: the sampler writes one line every 5 minutes,
 # so 12 is the last hour and 288 the last day. Omitting it reads the whole log.
 [group('device')]

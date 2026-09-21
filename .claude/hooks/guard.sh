@@ -246,8 +246,19 @@ Bash)
     # tree-state half, not the which-board half, so this is the one that knows.
     #
     # Read-only recipes (status, screenshot, soak-summary, kiosk-backup,
-    # rauc-status, tcp-state, kiosk-preflight) are NOT here: blocking those
-    # would block the only way to observe the board this rule protects.
+    # rauc-status, tcp-state, kiosk-preflight, gpu-check) are NOT here: blocking
+    # those would block the only way to observe the board this rule protects.
+    #
+    # gpu-capture IS here, and its sibling gpu-check is not, because the two
+    # differ in exactly the way this rule cares about: gpu-check reads /proc,
+    # gpu-capture rewrites /data/config/kiosk.conf and restarts the kiosk twice.
+    # Neither the power verbs nor the systemctl alternation below would catch
+    # it -- its restart is inside a heredoc, and `restart` is not a power verb.
+    #
+    # BOTH spellings, recipe and direct script, the way tools/provision.sh and
+    # tools/rauc-rotate already appear beside their recipes. The direct form is
+    # the one kiosk-gpu-check.sh's own header prints as its usage line, so it is
+    # the likelier of the two to be copied.
     #
     # Limit, stated rather than hidden: the target must be visible IN THIS
     # COMMAND. A `KIOSK_HOST` exported in an earlier tool call is invisible to a
@@ -278,17 +289,19 @@ Bash)
         ssh_verb "$v" && prod_reboot=1
     done
     if [ "$targets_prod" -eq 1 ] && { [ "$prod_reboot" -eq 1 ] || printf '%s' "$code" | grep -qE \
-        "just[[:space:]]+(kiosk-ota|kiosk-install|kiosk-send-direct|kiosk-rollback|kiosk-reboot|reboot|rauc-install|provision-device|bootprofile|flash)([[:space:]]|$)|rauc[[:space:]]+install|systemctl[[:space:]]+(reboot|poweroff|halt|kexec|shutdown)|${CMDPOS}(reboot|shutdown|halt|poweroff)([[:space:]]|$)|tools/provision\.sh[[:space:]]+device|tools/rauc-rotate"; }; then
+        "just[[:space:]]+(kiosk-ota|kiosk-install|kiosk-send-direct|kiosk-rollback|kiosk-reboot|reboot|rauc-install|provision-device|bootprofile|gpu-capture|flash)([[:space:]]|$)|rauc[[:space:]]+install|systemctl[[:space:]]+(reboot|poweroff|halt|kexec|shutdown)|${CMDPOS}(reboot|shutdown|halt|poweroff)([[:space:]]|$)|tools/provision\.sh[[:space:]]+device|tools/rauc-rotate|tools/kiosk-gpu-check\.sh[^|]*--capture"; }; then
         cat >&2 <<'MSG'
 BLOCKED: that is a destructive operation aimed at the PROD board.
 
 Prod is wall-mounted and is carrying the live soak run. An OTA, install,
-rollback, reboot, reprovision or profile there ends a run that cannot be
-replayed, and a slot that comes up wrong costs a physical trip to the wall.
+rollback, reboot, reprovision, profile or gpu-capture there ends a run that
+cannot be replayed, and a slot that comes up wrong costs a physical trip to
+the wall.
 
 Retarget the BENCH board -- `local/device-identity.md` has the role map, and
 `just find <cidr>` reports which address a swapped board took. Observation of
-prod (status, screenshot, soak-summary, kiosk-backup, rauc-status) is allowed
+prod (status, screenshot, soak-summary, kiosk-backup, rauc-status, gpu-check)
+is allowed
 and is not what this blocked.
 MSG
         exit 2
