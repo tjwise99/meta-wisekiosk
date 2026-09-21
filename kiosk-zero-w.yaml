@@ -116,6 +116,11 @@ local_conf_header:
     CMDLINE:append = " video=HDMI-A-1:1920x1080@60D"
     PREFERRED_VERSION_mesa = "24.0.7"
     PREFERRED_VERSION_mesa-gl = "24.0.7"
+    # WebKit dlopens libGLESv2.so.2 for accelerated compositing. A runtime dlopen
+    # is invisible to build-time RDEPENDS, so mesa's GLESv2 package ships only if
+    # named here -- without it the web process segfaults the instant compositing
+    # is attempted.
+    IMAGE_INSTALL:append = " libgles2-mesa"
 
   kiosk: |
     AUTONOMOS_FEATURES = "graphics"
