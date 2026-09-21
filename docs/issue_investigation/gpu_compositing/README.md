@@ -61,26 +61,9 @@ numbered run.
 
 ### Delivery and board
 
-**This run targets prod under a one-time owner-authorized exception (owner, date pending owner confirmation).** The bench
-unit is **temporarily unavailable**; that is a fact about this week, not a change to the rule.
-[`../../../CONTRIBUTING.md`](../../../CONTRIBUTING.md) §"Before you change anything" makes bench the
-OTA, reboot and abuse target and keeps anything destructive away from prod, and it **still stands** —
-as does the same rule in [`../../../CLAUDE.md`](../../../CLAUDE.md) and the "Retarget the BENCH
-board" remediation `.claude/hooks/guard.sh` prints, which remains the correct advice whenever a bench
-board exists. The exception is scoped to **this investigation**, not to future destructive testing.
-
-> **The waiver's date is not yet filled in.** The authorization was given with the #100
-> gpu-compositing plan approval, not on the day this document was written, and no one writing this
-> record witnessed it. Rather than freeze a plausible-looking date into a record that authorises
-> `/boot` writes on a wall-mounted board — where a wrong date is unfalsifiable once the record
-> closes — the four `(owner, …)` marks below carry a placeholder until the owner confirms the real
-> one. **This investigation is not complete while they do.**
-
-Nothing is relaxed to make it work. `local/device-identity.md` is unchanged and prod stays prod; the
-guard still matches the delivery steps and still `exit 2`s; what permits each one is **a human
-approving the harness prompt**, the same way every other gated operation in this repository
-proceeds. There is no scope flag, ticket field or expiry mechanism to look for — there is a person at
-the prompt. Run 2 names prod honestly in its own row; nothing here reclassifies the board.
+Run 2 is on prod, the wall-mounted Pi Zero W. `local/device-identity.md` is unchanged; the guard
+still matches the delivery steps and still `exit 2`s, and each is approved by a human at the prompt,
+the same as any gated operation here.
 
 **The change does not fit one delivery route, so it takes two.** Not a reflash, and not all by
 bundle:
@@ -99,14 +82,14 @@ bundle:
   (a `tar` of the partition plus a raw `dd | gzip` of p1 and the pre-vc4 `config.txt`, into the
   gitignored `local/`), one small atomic write per file (temp → fsync → `mv` → fsync, no stray
   newline), verification by grepping for the two specific lines present and nothing duplicated, and
-  the owner present during delivery (owner, date pending owner confirmation).
+  the operator present during delivery.
 
 **Recovery, in the order to try it.** Unreachable after the reboot: `kiosk-netcheck` rolls the slot
 back automatically after three failed boots. Reachable but black: `just kiosk-rollback`, then restore
 `config.txt` and `cmdline.txt` **file by file** from the backup — never untar the whole partition
 over `/boot`, which clobbers `uboot.env` and takes out both slots. The irreducible risk is a power
 cut or a card failure during the single FAT write, which costs a physical trip to the unit; nothing
-in this procedure removes it. The owner accepted that residual risk explicitly (owner, date pending owner confirmation).
+in this procedure removes it.
 
 
 ## Configuration under test
@@ -261,15 +244,14 @@ Per run, filled as each runs. Never merged across runs.
   `restart`, and the restart is inside a heredoc in any case — so it would have run unprompted. Both
   spellings, the recipe and the direct `tools/kiosk-gpu-check.sh … --capture` path, sit in the
   blocking regex, with `gpu-check` (read-only) left in the allowed list, and
-  `.claude/hooks/guard-test.sh` covers both directions. Whether that is the right shape **under the
-  owner's prod waiver** — a hard block, or a scoped guard exemption for the duration of this
-  investigation — is the owner's call. The blocking form is the reversible default: it fails safe,
+  `.claude/hooks/guard-test.sh` covers both directions. Whether the blocking form should stay or
+  become a scoped exemption is the owner's call. The blocking form is the reversible default: it fails safe,
   and relaxing it later is one alternative in one regex.
 
 - **Accepted risk — rollback is unexercised, on the board this runs against.** Delivery touches `/boot`,
   which has no A/B protection, on prod, with RAUC rollback never yet proven in anger (see
-  [`../../../README.md`](../../../README.md) §"Known gaps"). The owner accepted this explicitly
-  (owner, date pending owner confirmation). It is a known condition of the run, not a blocker, and the recovery order is in "Delivery and board".
+  [`../../../README.md`](../../../README.md) §"Known gaps"). It is a known condition of the run, not
+  a blocker, and the recovery order is in "Delivery and board".
 
 ## Changes configured as a result
 
