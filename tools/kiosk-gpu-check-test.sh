@@ -34,8 +34,10 @@
 set -uo pipefail
 
 HERE=$(dirname "$0")
-# shellcheck source-path=SCRIPTDIR
-# shellcheck source=tools/kiosk-gpu-check.sh
+# Not followed on purpose. Pointing shellcheck at the tool makes it read the
+# library guard's `exit 0` as terminating this file, and every case below then
+# reports as unreachable.
+# shellcheck disable=SC1091
 KIOSK_GPU_CHECK_LIB=1 . "$HERE/kiosk-gpu-check.sh"
 
 pass=0
