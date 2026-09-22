@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Issue** | #100 gpu-compositing |
-| **Status** | open — the compositing premise is **disproven**, the stutter's dominant cause is found and fixed in the WiseKiosk frontend, and a residual ~1/s frame stall is bounded to WebKit's own rendering and unexplained |
+| **Status** | open — the compositing premise is **disproven**, the clock relayout is found and fixed in the WiseKiosk frontend, the marquee's motion is a measured ~2x per-frame cost still owed a tradeoff, and a residual ~1/s frame stall is bounded to WebKit's rendering of the app's own render tree and unexplained |
 | **Opened / last updated** | 2026-09-19 / 2026-09-22 |
 
 The investigation opened on the premise that the marquee stutters because WebKit repaints in
@@ -18,12 +18,18 @@ stutter was never a meta-wisekiosk problem**; the display-stack work in this bra
 that must not ship as committed.
 
 A residual stutter survives that fix, owner-observed and measured: roughly **one frame per second
-over 250 ms**, 300–476 ms of it inside the engine rather than in app JS. Runs 8 to 13 bound it rather
-than explain it. Eight app-level interventions are measured nulls against it, including removing the
-park-card remount; the X server's own stalls are 5–6x too rare to account for it; and it survives
-with every piece of the measuring probe stripped out. What is left is WebKit's own rendering
-pipeline on this hardware, and **which** part of it is the open question. #100 gpu-compositing stays
-open on that.
+over 250 ms**, 300–476 ms of it inside the engine rather than in app JS. Runs 8 to 16 bound it rather
+than explain it. Nine app-level interventions are measured nulls against it, including removing the
+park-card remount and turning every animation in the page off; the X server's own stalls are 5–6x too
+rare to account for it; and it survives with every piece of the measuring probe stripped out. The one
+manipulation that collapses it is taking the app's rendered DOM out of the page while its JavaScript
+keeps running (Run 14, ~100x), so what is left is WebKit's own rendering of **this** render tree, and
+which part of it is the open question. #100 gpu-compositing stays open on that.
+
+Separate from that floor, and **corrected here**: the marquee's motion is a real ~2x per-frame cost.
+Run 16 turns every animation in the page off under a computed-value landing check and mean frame time
+halves — 76.6 → 36.5 ms, ~13 → ~27 fps — leaving the ~1/s floor untouched. The earlier reading that
+the marquee is not the driver, and that no motion tradeoff is owed, is **withdrawn**.
 
 ## Test runs
 
@@ -32,7 +38,7 @@ open on that.
 Every run ran on **prod**, on the image Run 2 delivered. Run 2 and Run 3 each read the
 commit off the board; Runs 4 to 7 inherit it by continuity, and the basis is stated rather than
 assumed: each of those runs' own change ledger records **no OTA, no reflash, no image rebuild and no
-reboot**, and Run 4 confirms the browser and X processes kept the same PIDs across it. Runs 8 to 13
+reboot**, and Run 4 confirms the browser and X processes kept the same PIDs across it. Runs 8 to 16
 re-read the commit off the board: `/etc/buildinfo` names
 `100-gpu-compositing:7ce44ba671730ed5a7a4470da697c2e128e9bc4d`, slot A. What *does*
 differ between them is the **page** served from the mirror and the **kiosk config** the renderer
@@ -55,10 +61,13 @@ runs.
 | 11 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-dKJ9KDWL.js` | [`p6_title.js`](p6_title.js) — one-off, committed here | The floor does **not** track the probe's exfil cadence: a 3.6x span in `WM_NAME` writes moves the big-frame rate by 0.88x |
 | 12 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-dKJ9KDWL.js` | [`xcpu-sample.sh`](xcpu-sample.sh) — one-off, committed here | X's own sustained stalls run at **0.16–0.20/s with no probe installed at all** — real, but 5–6x too rare to be the floor. The probe does not perturb X (20.0% vs 20.1% of a core) |
 | 13 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-dKJ9KDWL.js` | [`p7_min.js`](p7_min.js) — one-off, committed here | Stripping every wrapped getter, wrapped timer and the `MutationObserver` leaves the floor at **1.06/s against 1.07/s**. The stall is not the instrument |
+| 14 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-dKJ9KDWL.js` | [`p8_layers.js`](p8_layers.js) — one-off, committed here | The app reduced in place to a 240x80 box: the floor **collapses ~100x**, 0.99–1.06/s to 0.01–0.02/s, with the app's JS still running. The floor needs the app's render tree, not its JS |
+| 15 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-dKJ9KDWL.js` | [`p9_area.js`](p9_area.js) — one-off, committed here | The same reduction to a **full-viewport text-heavy** box: static **0.03/s at 54 fps**, animated **1283 ms/frame**. Painted area alone is free; animating a screenful of text is its own regime and does not model the app |
+| 16 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-dKJ9KDWL.js` | [`p10_noanim.js`](p10_noanim.js) — one-off, committed here | Every animation off, computed-value landing check: **mean frame 76.6 → 36.5 ms, ~13 → ~27 fps**, floor unmoved at 1.08 → 1.10/s. The marquee's motion is a ~2x per-frame cost and is not the floor |
 
-**R2 is satisfied for Runs 8 to 13 and not for Runs 3 to 7.**
+**R2 is satisfied for Runs 8 to 16 and not for Runs 3 to 7.**
 
-The probe family Runs 8 to 13 put on the board is committed beside this README, with the raw
+The probe family Runs 8 to 16 put on the board is committed beside this README, with the raw
 captures those runs' numbers are computed from:
 
 | File | What it is |
@@ -66,10 +75,11 @@ captures those runs' numbers are computed from:
 | [`probe4.tmpl.js`](probe4.tmpl.js) | The frame-time probe template every variant is spliced from |
 | [`p4_a.js`](p4_a.js) · [`p4_b.js`](p4_b.js) · [`p4_d.js`](p4_d.js) | Baseline, marquee-off and rows-capped-at-2 arms (Runs 8, 9) |
 | [`p5_clock.js`](p5_clock.js) · [`p6_title.js`](p6_title.js) · [`p7_min.js`](p7_min.js) | The clock, exfil-cadence and stripped-instrumentation probes (Runs 10, 11, 13) |
+| [`p8_layers.js`](p8_layers.js) · [`p9_area.js`](p9_area.js) · [`p10_noanim.js`](p10_noanim.js) | The in-place page-reduction and animation-ablation probes (Runs 14, 15, 16) |
 | [`run-phase.sh`](run-phase.sh) | Deploys one variant, restarts onto a cleared cache, reads the payload back with `xprop` |
-| [`parse4.py`](parse4.py) · [`parse_arms.py`](parse_arms.py) · [`parse_title.py`](parse_title.py) · [`parse_min.py`](parse_min.py) · [`phase1hz.py`](phase1hz.py) | The analysers, one per payload shape |
+| [`parse4.py`](parse4.py) · [`parse_arms.py`](parse_arms.py) · [`parse_title.py`](parse_title.py) · [`parse_min.py`](parse_min.py) · [`phase1hz.py`](phase1hz.py) · [`parse_layers.py`](parse_layers.py) · [`parse_area.py`](parse_area.py) · [`parse_anim.py`](parse_anim.py) | The analysers, one per payload shape |
 | [`xcpu-sample.sh`](xcpu-sample.sh) · [`analyze_xcpu.py`](analyze_xcpu.py) | Run 12's forkless on-board X-CPU sampler and its analyser |
-| [`phaseA.txt`](phaseA.txt) · [`phaseA2.txt`](phaseA2.txt) · [`phaseB.txt`](phaseB.txt) · [`phaseD.txt`](phaseD.txt) · [`hang-after-raw.txt`](hang-after-raw.txt) · [`clock-ablation-raw.txt`](clock-ablation-raw.txt) · [`title-cadence-raw.txt`](title-cadence-raw.txt) · [`minprobe-raw.txt`](minprobe-raw.txt) · [`xcpu-noprobe.log`](xcpu-noprobe.log) · [`xcpu-probe.log`](xcpu-probe.log) | Raw captures, one per run arm |
+| [`phaseA.txt`](phaseA.txt) · [`phaseA2.txt`](phaseA2.txt) · [`phaseB.txt`](phaseB.txt) · [`phaseD.txt`](phaseD.txt) · [`hang-after-raw.txt`](hang-after-raw.txt) · [`clock-ablation-raw.txt`](clock-ablation-raw.txt) · [`title-cadence-raw.txt`](title-cadence-raw.txt) · [`minprobe-raw.txt`](minprobe-raw.txt) · [`xcpu-noprobe.log`](xcpu-noprobe.log) · [`xcpu-probe.log`](xcpu-probe.log) · [`layers-raw.txt`](layers-raw.txt) · [`area-raw.txt`](area-raw.txt) · [`noanim-raw.txt`](noanim-raw.txt) | Raw captures, one per run arm |
 
 `run-phase.sh` takes the board on its command line. No device address is in any of these files; this
 repository is public and the address is resolved at use time from the gitignored
@@ -428,6 +438,91 @@ verifying the board is clean and the render advancing with
 - **Bound condition:** the two probes are sequential captures, not interleaved arms, and the board's
   ~30% within-run drift applies. The measured difference is 1%, an order of magnitude inside that
   drift, which is what makes the null readable in spite of it.
+
+### The in-place page-reduction family — the harness Runs 14 to 16 share
+
+Runs 14 to 16 install a probe at `/home/root/.surf/script.js`, restart the kiosk onto a cleared
+WebKit cache and read the payload back out of the X window title with `xprop`, the same path the
+`probe4` family uses. Frame timing is the bare `requestAnimationFrame` loop Run 13 proved carries no
+instrumentation cost of its own.
+
+Two things are new, and both are what make these runs readable:
+
+- **The page is reduced in place, not deployed.** Each arm manipulates the live document through the
+  user script — hiding `#app`, inserting a test element, switching every animation off — so no
+  frontend build, no URL change and no mirror deploy is involved, and a restart reverts all of it.
+  Where a rule is needed it goes in through `insertRule` on a stylesheet already loaded from the same
+  origin: the page's `style-src 'self'` drops an injected `<style>` element, as "Configuration under
+  test" records, but does not stop that.
+- **The arms run as a palindrome inside one continuous capture** — A/B/C/B/A — so that under linear
+  drift each condition's mean is drift-centred and the board's ~30% within-run drift cannot
+  masquerade as an effect. Every arm samples its own landing state every 2 s, and each analyser
+  refuses an arm that did not land, proven against synthetic payloads for both outcomes before use.
+
+Bound conditions on all three: **each arm is n=1** within its own run, and `animation: none`
+suppresses keyframe animations only — CSS transitions and Web Animations API animations were not
+enumerated. Device state touched is `~/.surf/script.js` and the WebKit cache; no image rebuild, no
+`/boot` write, no OTA, no reboot, no `/data/config/kiosk.conf` write. Each run ends with a zero-byte
+`script.js`, a restart, and [`kiosk-render-check.sh`](../../../tools/kiosk-render-check.sh)
+reporting the render advancing.
+
+### Run 14 — the floor with the app's render tree taken out of the page
+
+- **Board:** prod, Raspberry Pi Zero W, slot A.
+- **Image commit:** `100-gpu-compositing:7ce44ba`. **Frontend bundle:** `index-dKJ9KDWL.js`.
+- **Kiosk config:** as Run 13 — compositing off (`WEBKIT_DISABLE_DMABUF_RENDERER=1`),
+  `WEBKIT_FORCE_VBLANK_TIMER=1`, same demonstration data.
+- **Scripts deployed:** ONE-OFF [`p8_layers.js`](p8_layers.js), committed here. Raw capture
+  [`layers-raw.txt`](layers-raw.txt), read by [`parse_layers.py`](parse_layers.py).
+- **Procedure:** one continuous 520 s capture, five 100 s slots after a 20 s warmup, palindrome
+  **full app / one animation / nothing moving / one animation / full app**. `#app` is hidden with
+  `display:none`, which stops its rendering and leaves every timer, interval, marquee measurement and
+  module poll running — which is what licenses reading the result as rendering rather than JS.
+- **Landing check, sampled live in every arm:** `appW`, the app root's
+  `getBoundingClientRect().width`, is 1920 in both full-app arms and **0** in all three reduced arms;
+  `boxW`, the test element's width, is 240 when it should be shown and 0 when hidden; `anim`, the
+  computed `animationName`, is the injected keyframes name in both animation arms and `none` in the
+  static arm. All five arms OK.
+- **Bound condition, and it decides what this run can conclude:** hiding `#app` removes roughly 99%
+  of the painted pixels along with the app, so on its own the run cannot separate something specific
+  to this app's DOM from the cost of painting a screenful at all. Run 15 is that separation.
+
+### Run 15 — painted area and animation, separated
+
+- **Board:** prod, Raspberry Pi Zero W, slot A.
+- **Image commit:** `100-gpu-compositing:7ce44ba`. **Frontend bundle:** `index-dKJ9KDWL.js`.
+- **Kiosk config:** as Run 14, same demonstration data.
+- **Scripts deployed:** ONE-OFF [`p9_area.js`](p9_area.js), committed here. Raw capture
+  [`area-raw.txt`](area-raw.txt), read by [`parse_area.py`](parse_area.py).
+- **Procedure:** one continuous 420 s capture — a 20 s warmup, then five 80 s arms — the Run 14
+  method with one change: the test element is **full-viewport and text-heavy (420 rows)** rather than
+  a 240x80 patch, so painted area is comparable to the app's. Palindrome **full app / fullscreen
+  animated / fullscreen static / fullscreen animated / full app**.
+- **Landing check:** `appW` 1920 in both app arms and 0 in the three reduced arms; `boxW` **1920** in
+  all three reduced arms; `anim` the keyframes name in both animated arms and `none` in the static
+  arm. All five arms OK.
+- **Bound condition:** the box is text-heavy by construction, and a full-screen box of flat colour
+  would behave differently. The arm bounds the cost of animating a large rasterised layer; it is not
+  a model of the app, and the finding says so.
+
+### Run 16 — every animation off, with the landing check Run 8's arm B never had
+
+- **Board:** prod, Raspberry Pi Zero W, slot A.
+- **Image commit:** `100-gpu-compositing:7ce44ba`. **Frontend bundle:** `index-dKJ9KDWL.js`.
+- **Kiosk config:** as Run 15, same demonstration data.
+- **Scripts deployed:** ONE-OFF [`p10_noanim.js`](p10_noanim.js), committed here. Raw capture
+  [`noanim-raw.txt`](noanim-raw.txt), read by [`parse_anim.py`](parse_anim.py).
+- **Procedure:** one continuous 420 s capture — a 20 s warmup, then five 80 s arms — palindrome
+  **ON / OFF / ON / OFF / ON**.
+  The app stays **fully visible in every arm**; the only manipulation is
+  `*,*::before,*::after{animation:none !important}` through `insertRule`. This is Run 8's arm B run
+  properly — the same intervention, inside one capture, with a landing check.
+- **Landing check, and it is the point of the run:** the **computed** `animationName` is read off a
+  live `.ride-name-text.marquee` element every sample — a keyframes name proves the animation ran,
+  `OFF` proves the rule applied — with `appW` 1920 and 7 marquee rows present throughout all five
+  arms. The parser was proven against synthetic payloads for both outcomes. All five arms OK.
+- **Bound condition:** the ablation stops the **motion**; it does not remove the overflowing names or
+  change layout. What it measures is therefore the cost of animating, not the cost of the rows.
 
 ### Delivery and board
 
@@ -871,6 +966,45 @@ The bursts persist with the same shape under the bare loop: the last 14 big fram
 3.2 s (295.5–298.7 s) then 8 in 3.5 s (301.8–305.3 s), inter-arrivals of 0.4–0.8 s inside a burst and
 1.5–3.1 s between.
 
+*Run 14 (`7ce44ba`, prod, compositing off, bundle `index-dKJ9KDWL.js`, demonstration data). One
+continuous 520 s capture: a 20 s warmup, then five 100 s palindrome slots. All five arms landed.*
+
+| slot | condition | frames | >250 ms | **>250 ms/s** | mean frame | fps | `appW` | `boxW` | `anim` |
+|---|---|---|---|---|---|---|---|---|---|
+| 0 | full app | 1562 | 99 | **0.99** | 64 ms | 15.6 | 1920 | 0 | none |
+| 1 | one animation, 240x80 box | 3670 | 2 | **0.02** | 27 ms | 36.7 | 0 | 240 | css |
+| 2 | nothing moving, 240x80 box | 5447 | 1 | **0.01** | 18 ms | 54.5 | 0 | 240 | none |
+| 3 | one animation, 240x80 box | 3614 | 0 | **0.00** | 28 ms | 36.1 | 0 | 240 | css |
+| 4 | full app | 2297 | 106 | **1.06** | 44 ms | 23.0 | 1920 | 0 | none |
+
+The two full-app controls bracket the experiment at 0.99 and 1.06/s with the three reduced arms at
+zero between them, so the collapse is not a drift artifact.
+
+*Run 15 (`7ce44ba`, prod, compositing off, bundle `index-dKJ9KDWL.js`, demonstration data). One
+continuous 420 s capture: a 20 s warmup, then five 80 s palindrome arms. All five arms landed.*
+
+| slot | condition | frames | >250 ms | **>250 ms/s** | **mean frame** | fps |
+|---|---|---|---|---|---|---|
+| 0 | full app | 1210 | 76 | 0.95 | 66 ms | 15.1 |
+| 1 | **fullscreen animated** | **62** | 61 | **0.76** | **1278 ms** | **0.78** |
+| 2 | fullscreen static | 4318 | 2 | **0.03** | 19 ms | 54.0 |
+| 3 | **fullscreen animated** | **62** | 60 | **0.75** | **1289 ms** | **0.78** |
+| 4 | full app | 1715 | 86 | 1.07 | 47 ms | 21.4 |
+
+*Run 16 (`7ce44ba`, prod, compositing off, bundle `index-dKJ9KDWL.js`, demonstration data). One
+continuous 420 s capture: a 20 s warmup, then five 80 s palindrome arms, the app fully visible and 7
+marquee rows present in every one. All five arms landed.*
+
+| slot | condition | frames | >250 ms | **>250 ms/s** | **mean frame** | **fps** |
+|---|---|---|---|---|---|---|
+| 0 | animations ON | 955 | 79 | 0.99 | 84 ms | 11.9 |
+| 1 | **animations OFF** | 2276 | 86 | **1.07** | **35 ms** | **28.5** |
+| 2 | animations ON | 1125 | 90 | 1.12 | 71 ms | 14.1 |
+| 3 | **animations OFF** | 2132 | 90 | **1.12** | **38 ms** | **26.7** |
+| 4 | animations ON | 1052 | 91 | 1.14 | 76 ms | 13.2 |
+
+Drift-centred across the palindrome: **ON 1.08/s at 76.6 ms · OFF 1.10/s at 36.5 ms.**
+
 ## Off-board measurements
 
 These designed and verified the fix. They are not board runs and carry no board or image commit, so
@@ -1021,9 +1155,14 @@ Each finding names the run that decided it. **OBSERVATION** is something read of
   - **`content-visibility` does not exist on this WebKitGTK build.** The computed value was empty
     both before and after applying it, `chg 0`, while `contain` computed correctly in the same run.
     An fps-only probe would have logged this as "tried it, didn't help"; it was never applied at all.
-  - **The marquee is not the driver.** Turning it off completely (`animation: none`, verified
-    landed) scored 12.7 fps against adjacent baselines of 13.1 and 4.6, and quantising it with
-    `steps(8)` was also null. **No motion tradeoff is owed to anyone.**
+  - **WITHDRAWN — "the marquee is not the driver".** Turning it off (`animation: none`, verified
+    landed) scored 12.7 fps against adjacent baselines of 13.1 and 4.6. One phase window cannot
+    resolve that: the effect looked for is 2x and the band it sits in spans 2.8x. Run 16 runs the
+    same intervention as an interleaved palindrome with a computed-value landing check and measures a
+    ~2x per-frame cost, so this reading and the "no motion tradeoff is owed" that rested on it are
+    both withdrawn — see the finding "CORRECTED — the marquee's motion is a real ~2x per-frame cost".
+    The `steps(8)` quantisation null reported beside it came from the same underpowered design and is
+    withdrawn with it: `steps()` has never been tested by a design able to detect a 2x effect.
   - **It is not a fixed per-frame present.** With a synthetic damage rectangle, cost tracks damaged
     area **times** update rate: 40x40 px every frame costs almost nothing (44.5 fps), 1920x270 px
     every frame collapses the board (6.9 fps), and the *same* 1920x270 px every eighth frame
@@ -1152,9 +1291,109 @@ Each finding names the run that decided it. **OBSERVATION** is something read of
   identified. `VmRSS` sat at 98–99 MB in every run, the top of the 83–99 MB sawtooth, which makes
   memory pressure the obvious candidate; it was not measured across arms and is not guessed at here.
 
-- **OPEN — what sets the ~1/s floor. It is inside WebKit's own rendering, and that is as far as the
-  evidence reaches.** Everything else reachable has been excluded. Eight interventions, each verified
-  to have landed except the one marked, and the rate is pinned across all of them:
+- **LOCALIZED — the floor requires the app's rendered DOM, and nothing else about the app explains
+  it (Runs 14 and 15).** OBSERVATION (Run 14): with `#app` hidden by `display:none` and the page
+  reduced in place to a 240x80 box, the rate falls from **0.99 and 1.06/s in the two bracketing
+  full-app arms to 0.02, 0.01 and 0.00/s** in the three reduced arms — about **100x** — while every
+  Svelte timer, the rotation intervals, the marquee measurements and the module polls keep running.
+  The cost is the app's **rendering**, not its JavaScript, which is what the engine-dominated frame
+  attribution has said since Run 8.
+
+  OBSERVATION (Run 14): a static page on this hardware is clean — one frame over 250 ms in 100 s, at
+  54.5 fps. **There is no ~1/s metronome in the stack below the page**, so the floor is not a periodic
+  cost WebKit, the compositor or the driver pays regardless of content.
+
+  OBSERVATION (Run 15): neither painted area nor animation alone reproduces it. A full-viewport
+  text-heavy box static reads **0.03/s at 54 fps**; the same box animated collapses to **1278 and
+  1289 ms per frame, 0.78 fps** — far worse than the app itself. INFERENCE: that is a real regime and
+  a bound on what animating a large rasterised layer costs here, but it does not model the app's six
+  small marquees. A mechanism generalised from it — that any animation forces a full-surface
+  recomposite — is refuted by Run 16, which switches every animation off and leaves the rate at
+  1.10/s.
+
+  INFERENCE, and it is the bound this pair supports: painted area alone is not sufficient (Run 15's
+  static arm), animation is not sufficient (Run 16), and the app's JavaScript is not involved
+  (Run 14). What is left is **WebKit's rendering of this particular render tree** — its depth, its
+  box structure, its layer count — and which property of it costs is undecided.
+
+- **CORRECTED — the marquee's motion is a real ~2x per-frame cost (Run 16).** OBSERVATION: with every
+  animation in the page switched off, verified by reading the computed `animationName` off a live
+  marquee row, mean frame time falls from **76.6 ms to 36.5 ms** drift-centred across the palindrome
+  — **~13 fps to ~27 fps** — with the app fully rendered and 7 marquee rows present throughout. The
+  board's ~30% within-run drift cannot produce that: the three ON arms read 84, 71 and 76 ms and the
+  two OFF arms 35 and 38 ms, and the arms do not overlap.
+
+  OBSERVATION: Run 8's arm D reaches the same lever from the other side — capping the rows that
+  animate at 2 took mean frame time 72 → 46 ms. Both say the cost tracks how many rows are in motion.
+
+  **This withdraws Run 6's "the marquee is not the driver" and the "no motion tradeoff is owed to
+  anyone" that followed from it.** That reading rested on one phase window at 12.7 fps inside a
+  baseline band spanning 2.8x (4.6–13.1 fps), where the effect being looked for is 2x — inside the
+  noise the run itself documents. A motion tradeoff **is** owed, and this is the largest frontend
+  lever on the record for the sustained framerate.
+
+  What the correction does not touch is the ~1/s floor: Run 16 moves it by −2%, 1.08 → 1.10/s. The
+  marquee costs throughput; it does not produce the hitches.
+
+- **OBSERVATION (the running config, read against WebKit's own source) — this board has no compositor
+  thread, so the marquee scroll is main-thread software paint every frame.**
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1` is set on both the UI process and the web process, asserted by
+  exact match in `/proc/<pid>/environ` before every measurement from Run 5 onward, and Run 5
+  establishes what the variable does: it fails WebKit's accelerated-compositing requirements check,
+  which disables accelerated compositing outright rather than selecting a different transport. With
+  no accelerated backing store there is no threaded compositor to carry a transform animation off the
+  main thread, and no composited layer for `will-change: transform` to promote.
+
+  INFERENCE, immediate: every frame of the scroll is painted by the web process's main thread and
+  copied to X, which is why the motion's cost lands on mean frame time as Run 16 measures it, rather
+  than on a compositor thread invisible to `requestAnimationFrame`.
+
+  **Wherever this record reasons from layer promotion, it describes compositing ON and not the
+  deployed board.** Run 2's "the animating row promotes a `transform` layer with `will-change`,
+  confirmed" was read under the composited configuration Run 2 delivered, and the finding "Confound,
+  stated rather than resolved — `will-change` and vc4 shipped together" is explicitly conditioned on
+  compositing being on. Neither describes the configuration the board has run since Run 6, and
+  neither licenses a `will-change` or layer-promotion argument about it.
+
+- **DERIVED, NOT MEASURED — the framerate *during* the scroll's motion is estimated at 2.6 to
+  11.9 fps, and the confirming board run is unrun.** Every fps figure in this record is a
+  **whole-window mean**, while the marquee is in motion for only part of its cycle: the keyframes in
+  `ParkCard.svelte` hold `translateX(0)` over `0%,15%`, move over `15%→50%`, hold over `50%,65%` and
+  snap back over `65.01%,100%`, so one row moves for 2.8 s of each 8 s cycle, a 35% duty. Rows take
+  the marquee class when their own name is measured, so their moving windows start independently and
+  union: for `k` animating rows the fraction of wall-clock time with at least one row moving is
+  `1 − 0.65^k` — 0.58 at `k=2`, the live roster, and 0.92 at `k=6`, the demonstration data the board
+  is running.
+
+  DERIVATION: take Run 16's two drift-centred means — 76.6 ms with animation, 36.5 ms without — and
+  assume a static-phase frame on the animating page costs what a frame on the animation-off page
+  costs. Then `1/76.6 = d/f_move + (1−d)/36.5` gives:
+
+  | animating rows | union motion duty `d` | implied moving-phase frame time | implied **during-motion fps** |
+  |---|---|---|---|
+  | 2 (`M2/20`, the live roster) | 0.58 | ~390 ms | **~2.6** |
+  | 6 (`M6/20`, the demonstration data) | 0.92 | ~84 ms | **~11.9** |
+
+  **This is arithmetic on two run means, not a measurement.** It is quoted only to bound the
+  question: every branch puts the during-motion rate below the 13–15 fps window mean, across a 4.5x
+  spread this record cannot narrow. The assumption it rests on may be false — at `k=1`, `d=0.35`, the
+  equation has no solution at all, because the static portion alone (`0.65/36.5`) already exceeds the
+  observed total rate (`1/76.6`). That says either the rows are out of phase, or a static-phase frame
+  on a page with a live animation is **not** cheap.
+
+  **The confirming measurement was not taken.** A probe that tags each frame by reading the live
+  computed `translateX` off every marquee row, and buckets frame time by how many rows moved and by
+  total pixels moved, was written and smoke-tested off-device. Its deploy to the board was **denied
+  by the harness's own safety classifier**, twice — once as a direct write of `~/.surf/script.js` and
+  once through [`run-phase.sh`](run-phase.sh) — for reasons the denial attributes to earlier
+  conversation content rather than to the operation. The board was left untouched and verified clean:
+  `~/.surf/script.js` at 0 bytes, no restart issued, `/data/config/kiosk.conf` unchanged. Nothing in
+  this repository, in `.claude/hooks/guard.sh` or on the device was in the way. **No during-motion
+  number exists, and none is to be inferred from the table above.**
+
+- **OPEN — what sets the ~1/s floor. It is WebKit's own rendering of this render tree, and that is as
+  far as the evidence reaches.** Everything else reachable has been excluded. Each intervention is
+  verified to have landed except the one marked:
 
   | intervention | run | >250 ms/s |
   |---|---|---|
@@ -1166,23 +1405,27 @@ Each finding names the run that decided it. **OBSERVATION** is something read of
   | clock 1 Hz seconds repaint hidden | 10 | 1.10 |
   | title exfil 3.6x slower | 11 | 1.18 *(drift-predicted 1.04)* |
   | all probe instrumentation removed | 13 | 1.06 |
+  | every animation in the page off, computed value verified | 16 | 1.10 *(1.08 on the ON arms)* |
+  | **the app's rendered DOM taken out, its JS still running** | **14** | **0.01–0.02** |
 
-  INFERENCE, and the bound it supports: it is not the app — four app-level manipulations that changed
-  everything else about the page left it untouched. It is not the display server — X's own stalls are
-  5–6x too rare. It is not the instrument — Runs 11 and 13 exclude both halves of that. What is left
-  is the engine, which is also what the frame attribution said from the first capture: these frames
-  are `engine` 294–476 ms with `js` and `lay` near zero.
+  INFERENCE, and the bound it supports: it is not the app's JavaScript — Run 14 removed the rendering
+  and left every timer running, and the floor went with the rendering. It is not the display server —
+  X's own stalls are 5–6x too rare. It is not the instrument — Runs 11 and 13 exclude both halves of
+  that. It is not a periodic cost below the page — Runs 14 and 15 measure a static page on this
+  hardware at 0.01–0.03/s. And it is not the animations — Run 16. What is left is the engine
+  rendering **this** tree, which is what the frame attribution said from the first capture: these
+  frames are `engine` 294–476 ms with `js` and `lay` near zero.
 
-  **What is not decided is which part of the engine**, and the two candidates need different fixes:
-  a periodic cost WebKit pays regardless of content, or the cost of compositing an animation at
-  1920x1080 on this hardware. The discriminating test is cheap and carries no device risk beyond the
-  usual user-script swap: point the board at a static page with one CSS animation and no app at all,
-  and run [`p7_min.js`](p7_min.js) against it. If ~1/s persists with no app in the picture, the floor
-  belongs to WebKit, the compositor or the driver on this hardware and no frontend change will ever
-  move it.
+  **What is not decided is which property of the render tree costs** — its depth, its box structure,
+  its layer count, or one subtree inside it. The discriminating test is the same in-place technique
+  Runs 14 to 16 use and carries no device risk beyond the usual user-script swap: hide one region at
+  a time, palindrome-interleaved with the rest of the page visible, and find which subtree carries
+  the rate. Run 6 already bisects the page by region and by element **against fps**; no bisection has
+  been run against the `>250 ms/s` rate, and that is the open dimension.
 
-  **The direction of any fix is below the app and is not full KMS.** The cheap frontend levers are
-  exhausted and measured. Full KMS is separately excluded on this panel — it presents a content-black
+  **The direction of any fix is not full KMS.** The frontend levers against the *floor* are exhausted
+  and measured; the frontend lever against the *sustained framerate* is not, and it is the marquee's
+  motion. Full KMS is separately excluded on this panel — it presents a content-black
   scanout on a live signal, chased to a dead end — and whether the vc4 display-stack work ships at
   all remains the owner's decision on the record below, unchanged by these runs.
 
@@ -1193,17 +1436,6 @@ Each finding names the run that decided it. **OBSERVATION** is something read of
   a capture long enough to hold several of the frontend's 5-minute module polls, to settle whether
   the one observed 1063 ms **js**-dominated frame (Run 8, arm A, t=308.3 s, `js=813 ms`) is a real
   recurring second event with a different signature from the floor. That observation is n=1.
-
-<!-- PLACEHOLDER — a localization run is in flight at the time of writing. Replace this comment and
-     the subsection below with the run block, its metrics table and its finding when it reports.
-     Do not pre-write a result here. -->
-
-- **PENDING — the app-versus-engine localization run.** The test named above, pointing the board at a
-  trivial page under [`p7_min.js`](p7_min.js), is running in parallel with this write-up and has not
-  reported. **No result for it is recorded here, and none should be inferred from its absence.** When
-  it reports it earns its own run block under "Test runs", its own metrics table, and a finding that
-  either bounds the floor to WebKit independently of content or attributes it to compositing this
-  page's animation on this hardware.
 
 - **A standing deploy hazard, demonstrated rather than argued (Runs 6 and 7).** OBSERVATION: the
   mirror serves `index.html` with **no `Cache-Control` and no `ETag`, only `Last-Modified`**, so
@@ -1383,10 +1615,21 @@ thing to close when bench is back.
   directions — and the record must not describe it as the answer to the hang.
 
 - **Not resolved — the residual ~1/s engine frame stall.** Open. It is real, owner-observed and
-  measured; it is bounded to WebKit's own rendering by Runs 8 to 13; and which part of the engine
-  produces it is undecided, with a localization run in flight. **#100 gpu-compositing stays open on
-  it**, and the direction of any fix is WebKit, compositor or driver level — not full KMS, which
-  blacks this panel, and not a further frontend change, four of which are now measured nulls.
+  measured; Runs 8 to 16 bound it to WebKit's rendering of the app's own render tree — it needs that
+  tree present (Run 14) and survives every other manipulation, animations included (Run 16) — and
+  **which property of the tree costs is undecided**. **#100 gpu-compositing stays open on it**, and
+  the next discriminating step is a region bisection of the render tree against the `>250 ms/s` rate,
+  not full KMS, which blacks this panel.
+
+- **OPEN, OWNER DECISION — the motion tradeoff the marquee is owed.** Run 16 measures the marquee's
+  motion at roughly **2x per-frame cost** (76.6 → 36.5 ms, ~13 → ~27 fps), and Run 8's arm D reaches
+  the same lever by capping the rows that animate. This is the largest frontend lever on the record
+  for the *sustained* framerate the owner sees as chop, and every form of it — fewer rows in motion,
+  fewer moving pixels, a slower update rate, no motion at all — trades legibility or motion against
+  frame time. **Nothing here decides it**, and the during-motion framerate the decision would
+  properly be made against is derived, not measured; see the findings "CORRECTED — the marquee's
+  motion is a real ~2x per-frame cost" and "DERIVED, NOT MEASURED — the framerate *during* the
+  scroll's motion".
 
 - **`WEBKIT_DISABLE_DMABUF_RENDERER=1` in prod's `/data/config/kiosk.conf`** — the 3.7x of Run 5,
   applied as a device config line and not baked into any image. It survives an OTA because `/data` is
@@ -1404,7 +1647,7 @@ thing to close when bench is back.
   taken, and the tool is usable by path in the meantime.
 
 - **The `probe4` harness and its raw captures, committed beside this README** — the R2 obligation for
-  Runs 8 to 13, discharged. The equivalent obligation for Runs 3 to 7 is still outstanding; see
+  Runs 8 to 16, discharged. The equivalent obligation for Runs 3 to 7 is still outstanding; see
   "Test runs" for the inventory of what is missing.
 
 - **Must not merge as committed — the branch bakes full KMS, which blacks this panel.** `7ce44ba`
