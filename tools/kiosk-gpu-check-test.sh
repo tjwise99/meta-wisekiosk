@@ -34,6 +34,8 @@
 set -uo pipefail
 
 HERE=$(dirname "$0")
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=tools/kiosk-gpu-check.sh
 KIOSK_GPU_CHECK_LIB=1 . "$HERE/kiosk-gpu-check.sh"
 
 pass=0

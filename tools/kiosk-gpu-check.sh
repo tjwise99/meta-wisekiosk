@@ -167,6 +167,7 @@ gpu_verdict() {
 # argument handling or device access. `return` succeeds only when sourced, so an
 # ordinary run falls through to exit.
 if [ "${KIOSK_GPU_CHECK_LIB:-0}" = "1" ]; then
+    # shellcheck disable=SC2317  # the `||` arm runs when this file is executed, not sourced
     return 0 2>/dev/null || exit 0
 fi
 
@@ -211,6 +212,7 @@ if [ "$MODE" = "--capture" ]; then
     # run where no backup existed prints the same "restored" line as one that
     # really moved the file back -- the reassuring message would be the only
     # evidence, and it would be identical either way.
+    # shellcheck disable=SC2317  # reached through the trap below, which shellcheck does not follow
     restore() {
         local out rc
         out=$("$HERE/kiosk-ssh.sh" "$HOST" 'sh -s' <<'RESTORE'
@@ -221,7 +223,7 @@ echo "restored"
 RESTORE
         )
         rc=$?
-        if [ $rc -eq 0 ]; then
+        if [ "$rc" -eq 0 ]; then
             case "$out" in
                 *restored*)          echo "kiosk.conf restored from its backup; kiosk restarted" ;;
                 *nothing-to-restore*) echo "no backup on the device -- kiosk.conf was never swapped" ;;

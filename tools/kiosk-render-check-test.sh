@@ -44,6 +44,8 @@
 set -uo pipefail
 
 HERE=$(dirname "$0")
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=tools/kiosk-render-check.sh
 KIOSK_RENDER_CHECK_LIB=1 . "$HERE/kiosk-render-check.sh"
 
 pass=0
@@ -252,10 +254,16 @@ sentinel_pair() {
         echo "FAIL  sentinel $name out of sync: emitter=$e verdict=$r" >&2
     fi
 }
+# The single quotes are the point: these are literal fragments of the emitter's
+# own source, matched with grep -F. Expanding them here would search for this
+# suite's variables instead of the tool's.
+# shellcheck disable=SC2016
 sentinel_pair "frame-line"  'echo "frame $n rc='  '\^frame '
 sentinel_pair "import-cap"  'cap import=0'        'cap import=0'
 sentinel_pair "blank-line"  'blank min='          '\^blank '
+# shellcheck disable=SC2016
 sentinel_pair "md5-field"   'md5=$m'              'md5='
+# shellcheck disable=SC2016
 sentinel_pair "bytes-field" 'bytes=$b'            'bytes='
 
 # The capture path is trap (b). `import -window root` is the only surface the

@@ -194,6 +194,7 @@ render_verdict() {
 # argument handling or device access. `return` succeeds only when sourced, so an
 # ordinary run falls through to exit.
 if [ "${KIOSK_RENDER_CHECK_LIB:-0}" = "1" ]; then
+    # shellcheck disable=SC2317  # the `||` arm runs when this file is executed, not sourced
     return 0 2>/dev/null || exit 0
 fi
 
