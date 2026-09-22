@@ -212,13 +212,28 @@ def contribution(by_layer, layers):
             f"{unpatched} unpatched"), unpatched
 
 
+# git exports these to a hook and to anything a hook runs. They name the
+# repository the hook fired in and they OUTRANK `git -C <path>`, so a command
+# meant for a layer checkout silently reads this tree instead.
+GIT_SCOPE = ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE",
+             "GIT_OBJECT_DIRECTORY", "GIT_COMMON_DIR", "GIT_CONFIG",
+             "GIT_PREFIX")
+
+
+def git_env(**overrides):
+    """The ambient environment with git's per-invocation scope removed."""
+    env = {k: v for k, v in os.environ.items() if k not in GIT_SCOPE}
+    env.update(overrides)
+    return env
+
+
 def git(path: Path, *args, timeout=30):
     """One git command in a checkout, or None where it failed."""
     try:
         run = subprocess.run(["git", "-C", str(path), *args],
                              capture_output=True, text=True, timeout=timeout,
-                             env={**os.environ, "GIT_TERMINAL_PROMPT": "0",
-                                  "GIT_ASKPASS": ""})
+                             env=git_env(GIT_TERMINAL_PROMPT="0",
+                                         GIT_ASKPASS=""))
     except (subprocess.TimeoutExpired, OSError):
         return None
     return run.stdout.strip() if run.returncode == 0 else None
@@ -258,8 +273,8 @@ def ls_remote(url: str, branch: str):
         run = subprocess.run(["git", "ls-remote", url, ref],
                              capture_output=True, text=True,
                              timeout=LS_REMOTE_TIMEOUT,
-                             env={**os.environ, "GIT_TERMINAL_PROMPT": "0",
-                                  "GIT_ASKPASS": ""})
+                             env=git_env(GIT_TERMINAL_PROMPT="0",
+                                         GIT_ASKPASS=""))
     except subprocess.TimeoutExpired:
         return None, (f"`git ls-remote {url} {ref}` did not answer within "
                       f"{LS_REMOTE_TIMEOUT}s")
