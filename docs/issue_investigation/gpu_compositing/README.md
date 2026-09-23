@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | **Issue** | #100 gpu-compositing |
-| **Status** | **open, and not ready to close.** The compositing premise is **disproven**; the clock relayout is found and fixed in the WiseKiosk frontend; the marquee's motion cost is settled by re-mechanising it from `transform` to `scrollLeft` (Run 25). The residual stall is root-caused as a **JavaScriptCore garbage-collection pause** (Runs 35 and 36) — the identification this record previously carried, an intermittent full-viewport software repaint, is **withdrawn and kept visible below**. The lever that follows from the corrected mechanism — **reducing the WiseKiosk frontend's per-second allocation churn** — is un-run, and #100 gpu-compositing stays open on it. The **fix** is not in this repository: it spans a WiseKiosk frontend change the owner holds and a durable image change not yet taken |
-| **Opened / last updated** | 2026-09-19 / 2026-09-22 |
+| **Status** | **open, and closing on a located cause rather than on a fix.** The compositing premise is **disproven**; the clock relayout is found and fixed in the WiseKiosk frontend; the marquee's motion cost is settled by re-mechanising it from `transform` to `scrollLeft` (Run 25). The residual stall is root-caused as a **JavaScriptCore garbage-collection pause** (Runs 35 and 36) — the identification this record previously carried, an intermittent full-viewport software repaint, is **withdrawn and kept visible below**. The lever that followed from that mechanism — **reducing the WiseKiosk frontend's per-second allocation churn** — is **run and withdrawn**, and Run 48 then found the lever that does work. **The residual has two halves and they belong to different owners.** The **per-event ~450 ms pause cannot be chunked on this board**: armv6 compiles concurrent marking out, so a full collection is one unbroken stop-the-world block — which bounds how the cost is paid, not how large it is. But the **frequency is not a floor at all — it is frontend-driven.** Run 48 varies the application's own `rotation_interval_seconds` across three same-bundle arms, each interval landing-verified in band, and under one uniform membership rule **all three carry a beat at 5 x the rotation tick**: 30.0 s at 6 s, 40.0 s at 8 s, 60.0 s at 12 s. (The 6 s arm is the low-quality point — 58% of its grid slots carry no arrival and its landing check caps out — consistent with the law rather than carrying it.) **Why the count is five is BOUNDED and not established**: the "five ticks of promotion cross the old-generation threshold" model is the one Run 42 falsified, and Run 48 sharpens that exclusion rather than rescuing it. What accumulates over five ticks is unidentified, alongside what the ~450 ms is spent on. **That locates the residual as WiseKiosk's — not the image's and not the hardware's.** It also reconciles the nulls: Runs 37, 43 and 46 removed *individual* allocations and moved nothing because the promotion is spread across the whole per-tick update, while the *number of ticks* per collection stays fixed. **SUPERSEDED and kept visible below**: this record read the residual until 2026-09-23 as "a floor no lever this investigation could reach moves", and before that as "promotion-triggered" — Run 48 refutes the first, Runs 42, 45 and 47 the second. **Production stays at the schema default 8 s** (owner, 2026-09-23): Run 48 is a diagnostic that locates the cause, not a cadence change. What the ~450 ms is *spent on* remains unidentified. What **was** fixed is the marquee **stutter** and the clock relayout. The **fix** is not in this repository: it spans a WiseKiosk frontend change the owner holds and a durable image change not yet taken |
+| **Opened / last updated** | 2026-09-19 / 2026-09-23 |
 
 The investigation opened on the premise that the marquee stutters because WebKit repaints in
 software, and that enabling GPU compositing would fix it. Run 2 achieved compositing and the stutter
@@ -24,7 +24,10 @@ park-card remount and turning every animation in the page off; the X server's ow
 rare to account for it; and it survives with every piece of the measuring probe stripped out. The one
 manipulation that collapses it is taking the app's rendered DOM out of the page while its JavaScript
 keeps running (Run 14, ~100x), so what is left is WebKit's own rendering of **this** render tree, and
-which part of it is the open question. #100 gpu-compositing stays open on that.
+which part of it is the open question. #100 gpu-compositing stays open on that. **SUPERSEDED by
+"Runs 37-48 — the GC lever, and where it is driven from"**: the residual is a collector pause rather than a
+rendering one, and what #100 gpu-compositing stays open on is stated there, not here. The sentence is
+kept because it is the question the runs below were asked.
 
 Separate from that floor, and **corrected here**: the marquee's motion is a real ~2x per-frame cost.
 Run 16 turns every animation in the page off under a computed-value landing check and mean frame time
@@ -79,6 +82,26 @@ churn**, and that lever is un-run. The durable image change that would reproduce
 configuration is staged and reviewed but undelivered, and remains an owner decision — see "Durable
 image delivery — pending owner decision".
 
+**The lever this record was left open on is now closed, and closed against itself.** "Reduce the
+frontend's per-second allocation churn" was the right *mechanism* and the wrong *lever*, and Runs 37
+to 47 separate the two. Allocation does drive the collection — Run 36 stands, on injected pressure
+far above anything the page does. But removing the page's *own* allocation reaches nothing: not the
+marquee's per-frame transients (Run 37), not the clock and `matchMedia` reductions of Fix 1
+(Run 43), not the reactive render itself (Run 46). Freezing the rotation tick takes the stall to zero
+(Run 39) and is not shippable, because a rotation that does not rotate is not the product. Everything
+short of that leaves the ~40 s beat where it was, to within the 0.1 s the probe resolves — and so
+does every engine lever the runs could reach, the heap and growth budget (Run 42), the full-GC timer
+(Run 45) and WebKit's memory-pressure handler (Run 47). **Run 48 is where it turns.** Varying the
+application's own `rotation_interval_seconds` across three same-bundle arms moves the beat with it —
+**5 x the rotation tick** — 30.0 s at 6 s, 40.0 s at 8 s, 60.0 s at 12 s under one uniform
+membership rule — so the frequency was never a floor: it is the frontend's rotation cadence. That
+reconciles every null above, because no single contributor to the per-tick update is removable enough
+to matter while the tick *count* per collection stays fixed. **Why the count is five is not
+established** — the promotion-threshold reading is the one Run 42 falsified — and **the per-event
+~450 ms pause cannot be chunked** on armv6, with what it is spent on still unidentified. The sentence above it, that the lever is un-run, is superseded and kept
+visible; the runs, the reasoning and what remains open are in "Runs 37-48 — the GC lever, and where it is
+driven from".
+
 ## Test runs
 
 <!-- One row per (board x image build x test). A `### Run N` block below expands each. -->
@@ -114,6 +137,28 @@ is stated rather than guessed.
 launcher as a hand-edit, with `vc4-fkms-v3d` in `/boot/config.txt` and no `video=` in
 `/boot/cmdline.txt` throughout. The mode is returned to 1280x720 after Run 35, which is why Run 36
 reads at 720p. Runs 33 and 34 each add one environment variable and say which.
+
+**Runs 37 to 48 keep the same discipline, and one part of it is weaker than for Runs 17 to 36,
+stated rather than smoothed over.** Every one ran on **prod**. **No capture in this range carries the
+image commit** and no run in it re-read `/etc/buildinfo`, so `100-gpu-compositing:7ce44ba` is carried
+by continuity from Run 36 — the runs are consecutive on one board with no OTA, reflash or rebuild
+between them, but the basis is a deploy record rather than a board read, and it is the weakest R1
+basis in this document. **The frontend bundle is named for every run in the range, and where the name
+comes from differs.** Runs 38, 43, 44 and 46 have it in their capture's own header —
+`index-Mt2gvuKb.js`, `index-BhI9T8Rb.js`, `index-Mt2gvuKb.js` and `index-DJUeJLKg.js` — while Runs
+37, 39, 40, 41, 42 and 45 take it from the deploy record, which is this record's claim and not the
+board's: Run 37 on the instrumented `index-CDzciXkW.js`, Run 39 on `index-CqqUlNUO.js`, Run 40 on
+`index-BM3R3o7e.js`, Runs 41 and 42 on the shipped `index-Mt2gvuKb.js`, Run 45 on
+`index-Csf9V8Vf.js`. **Run 47's bundle is not recorded at all** — no hash was read off the board or
+carried in its output — which is the same gap Run 25 carries and is stated rather than guessed; its
+two arms ran back-to-back on one board, one build and one bundle, so the comparison inside the run is
+unaffected by it. **Display mode is not recorded in any capture in this range** and is carried by
+continuity at 1280x720 from Run 36. Runs 42, 45 and 47 each add environment variables and say which,
+and Run 44 sets two `/data/config/kiosk.conf` lines for its window and restores them after. **Run 48
+is the one run in this range whose manipulation is neither an environment variable nor a bundle**: it
+varies the application's own `rotation_interval_seconds` across three arms on **one** bundle,
+`index-DJUeJLKg.js`, named in each capture's own header, and each arm's interval is read back in band
+from the capture's `R[]` series.
 
 | Run | Board (role) | Image commit | Harness / scripts | Result (1 line) |
 |---|---|---|---|---|
@@ -154,8 +199,22 @@ reads at 720p. Runs 33 and 34 each add one environment variable and say which.
 | 34 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-Mt2gvuKb.js` · 720p + 4 painting threads | [`p7_min.js`](p7_min.js) → [`painting-threads-294s-raw.txt`](painting-threads-294s-raw.txt) | `NICOSIA_PAINTING_THREADS=4` without compositing is a null: **41.3 fps, 0.041/s** against the shipped 0.045/s. Painting threads do not engage on the non-composited path |
 | 35 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-Mt2gvuKb.js` · **640x480** | [`p7_min.js`](p7_min.js) → [`res640x480-194s-raw.txt`](res640x480-194s-raw.txt), read by [`parse_min.py`](parse_min.py) | **The falsifier.** A 3.0x pixel cut below 720p leaves the stall where it was: **0.036/s** against 0.045/s, the same ~40 s arrival cadence, steady stalls past t=40 s 324–378 ms against 468–537 ms — **1.4x for 3x fewer pixels**. The residual is **not pixel-area-bound**, and the full-viewport-repaint identification does not survive it |
 | 36 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-Mt2gvuKb.js` · 720p | [`p24_alloc.js`](p24_alloc.js) → [`alloc-pressure-raw.txt`](alloc-pressure-raw.txt) | **The confirmer.** JS allocation pressure interleaved against a baseline arm in one capture: the ALLOC arm misses **216 of 219 frames** at a **1147 ms mean / 2020 ms max**, the BASELINE arm **14 of 6730** at 24 ms — a **474x** change in miss fraction, with each arm's allocation counter read back (219 and 0). The stall is a **JavaScriptCore GC pause** |
+| 37 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (by continuity) · instrumented bundle `index-CDzciXkW.js` · 720p | [`p25_mqtoggle.js`](p25_mqtoggle.js) → [`mq-toggle-496s-raw.txt`](mq-toggle-496s-raw.txt), read by [`parse_mqtoggle.py`](parse_mqtoggle.py) | **The first withdrawal.** The marquee's per-frame transient allocation toggled inside one capture under byte-identical motion, landing counters read back (12963 of 12965 and 2 of 6696): ALLOC **5 of 12965 = 0.039%**, CLEAN **7 of 6696 = 0.105%**. Removing the churn does not lower the stall. **The mechanism offered for that — it dies in the nursery and is never promoted — is INFERENCE and BOUNDED (Runs 42, 45, 47)**: it names a promotion trigger no lever reaches, and Run 44 read zero eden collections in 85 s. The *bound* does not depend on it |
+| 38 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (by continuity) · bundle `index-Mt2gvuKb.js` | [`cap-probe.js`](cap-probe.js) · [`p26_gc.js`](p26_gc.js) → [`cap-probe-raw.txt`](cap-probe-raw.txt) | The page cannot instrument its own collector on this build: `performance.memory` absent, `window.gc` undefined, `FinalizationRegistry` present but its callbacks **never fire** on a saturated core (`fin0`, an empty `G[]`), `WeakRef.deref` keeps its target alive for the rest of the turn so observing prevents the collection observed. A null instrument, not a null result. **The `JSC_logGC` reading this row once carried — "substantially compiled out" — is WITHDRAWN (Run 47): the option is `Availability::Normal` and honoured; the empty trace was a capture-routing bug** |
+| 39 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (by continuity) · instrumented bundle `index-CqqUlNUO.js` · 720p | [`p28_ablate.js`](p28_ablate.js) → [`ablate-475s-raw.txt`](ablate-475s-raw.txt), read by [`parse_ablate.py`](parse_ablate.py) | **The relocation.** Three conditions interleaved, skip counters read back: none **10 of 6109 = 0.164%**, rotation-off **0 of 6737 = 0.000%** with a 218 ms maximum, clock-off **5 of 6132 = 0.082%**. Freezing the rotation tick takes the stall to **zero** (p = 0.0006); the clock arm is noise (p = 0.21) and its parser verdict is **not adopted**. The driver is the per-tick **reactive update**, not the allocation inside it |
+| 40 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (by continuity) · instrumented bundle `index-BM3R3o7e.js` · 720p | [`p29_split.js`](p29_split.js) → [`split-475s-raw.txt`](split-475s-raw.txt), read by [`parse_split.py`](parse_split.py) | **SCORED UNMEASURED, not null.** `matchMedia` cached against the derived recompute: 1, 3 and 1 stalls per arm over 463 s — Poisson noise, and the known-zero control read **one**. The parser's confident verdict is **not adopted**. Superseded by Run 43, which ships both reductions and can score |
+| 41 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (by continuity) · bundle `index-Mt2gvuKb.js` · 720p | [`p30_baseline.js`](p30_baseline.js) → [`baseline-588s-raw.txt`](baseline-588s-raw.txt), read by [`parse_baseline.py`](parse_baseline.py) | **The reference.** 588 s, 23969 frames, 25 ms mean: **27 frames over 250 ms = 0.046/s**, and fourteen of them on a **metronome** — 40.5 s to 561.0 s at intervals of **39.9–40.1 s**, 475–531 ms each |
+| 42 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (by continuity) · bundle `index-Mt2gvuKb.js` · 720p + `JSC_forceRAMSize=32MB`, growth factors 1.05, `collectContinuously` | [`p30_baseline.js`](p30_baseline.js) → [`eager-gc-616s-raw.txt`](eager-gc-616s-raw.txt), read by [`parse_baseline.py`](parse_baseline.py) | **Inert on the cadence.** `forceRAMSize` landed — `VmRSS` reads **89984 kB**, against **106380 kB** in **Run 37's** capture, which is a different bundle and a different probe; no same-configuration baseline was taken, so the check is indicative rather than controlled — and the beat runs 40.5 s to 401.0 s at **39.9–40.3 s**, Run 41's period. **`collectContinuously` never applied**: `Options.cpp:832-833` clears it whenever `useConcurrentGC` is false, which armv6 forces. Rate reads 0.029/s and **is not scored**: the beat, not the count, is the comparable quantity |
+| 43 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (by continuity) · bundle `index-BhI9T8Rb.js` · 720p, clean config | [`p30_baseline.js`](p30_baseline.js) → [`fix1-benchmark-600s-raw.txt`](fix1-benchmark-600s-raw.txt), read by [`parse_baseline.py`](parse_baseline.py) | **The lever, built and null.** Clock granularity split + `matchMedia` cache, both real allocation reductions: 608 s, **26 frames over 250 ms = 0.043/s**, beat 40.5 s to 561.0 s at **40.0–40.1 s** at 470–525 ms, plus a 600.5/601.2 pair after a 39.5 s interval at 433 and 532 ms. **Reducing app-level allocation does not move the stall** |
+| 44 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (by continuity) · bundle `index-Mt2gvuKb.js` · `WEBKIT_INSPECTOR_HTTP_SERVER`, restored after | [`webkit-inspector` skill](../../../.claude/skills/webkit-inspector/SKILL.md) (`cd5cf9e`) → [`inspector-gc-census-raw.txt`](inspector-gc-census-raw.txt) | **The ground truth, and the withdrawal of "the inspector is unreachable on this build".** The launcher wires the **WS-only** variable; the HTTP variant works over the wire with no rebuild. `Heap.startTracking` types the tracked collection as **full**, not eden — **n = 1**, and the same window reports zero eden collections over 85 s, which is not credible, so the sample is not treated as representative. The forcing census diff over 30 s is reported in the capture as **no retained growth**, but **no number was banked for it** — an unrecorded session claim, not a datum of this record. The *experiment* is re-runnable: the committed `webkit-inspect.mjs` implements the same forced-GC census diff as its `diff` mode |
+| 45 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (by continuity) · bundle `index-Csf9V8Vf.js` · 720p + `percentCPUPerMBForFullTimer` / 16 | [`p30_baseline.js`](p30_baseline.js) → [`freq-lever-P16-535s-raw.txt`](freq-lever-P16-535s-raw.txt), read by [`parse_baseline.py`](parse_baseline.py) | **The frequency lever, inert.** A 16x less eager full-collection timer: 535 s, **29 frames over 250 ms = 0.054/s**, beat 42.0 s to 522.5 s at **40.0–40.2 s**, 472–527 ms. Phase shifts ~1.5 s, **period does not move**. The collection is not timer-triggered. **The "therefore promotion-triggered" reading is WITHDRAWN** — Run 42 is itself a promotion-path lever and was equally inert (see "Runs 37-48 — the GC lever, and where it is driven from"). Ten off-beat arrivals are enumerated in the run block, including a 593 ms one at 302.4 s |
+| 46 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (by continuity) · bundle `index-DJUeJLKg.js` · 720p, clean config | [`p30_baseline.js`](p30_baseline.js) → [`imperative-tour-587s-raw.txt`](imperative-tour-587s-raw.txt), read by [`parse_baseline.py`](parse_baseline.py) | **The sharpest form of the lever, also null.** Tour rows rendered once and filled imperatively, bypassing the reactive `{#each}`, with a two-screenshot landing check that shows the right rows in the right places but **has no oracle** and cannot resolve a wrong-value fill: 587 s, **25 frames over 250 ms = 0.043/s**, beat at **39.9–40.1 s** across a hand-curated on-beat set. Mean frame time **22 ms against Run 41's 25 ms** and 298 frames in the 50–100 ms bucket against 682 — **consistent with a throughput win, not measured as one**: the comparison is cross-capture against the slowest of five, and the run carries no control arm |
+| 47 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (by continuity) · bundle **not recorded** · 720p by continuity | [`p30_baseline.js`](p30_baseline.js), two arms differing only in `WEBKIT_DISABLE_MEMORY_PRESSURE_MONITOR`. **No capture file is committed** — the arrival series is transcribed into the run block | **The memory-pressure falsifier.** The complete kill switch for WebKit's memory-pressure handler, run back-to-back against a baseline arm on one board and one build, **with its landing verified in the UI process that reads it** (`WEBKIT_DISABLE_MEMORY_PRESSURE_MONITOR` found in surf's own `/proc/<pid>/environ` under the identical `kiosk.conf` mechanism, on a supplementary restart): the beat holds at **40.0 s** in **both** arms. The switch skips `install()` outright, so the arms close the **whole handler**; separately, reaching the monitor's **≥90%** would need `MemAvailable` to fall from ~263 MB to ~43.5 MB of 435, a ~220 MB excursion against a web process of ~90–106 MB, which closes the **polled path** on headroom. **The memory-pressure handler is not the driver.** `JSC_logGC` reached the WebProcess and its trace was still not captured — the sandbox blocked the file redirect |
+| 48 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (by continuity) · bundle `index-DJUeJLKg.js`, **the same in all three arms** · 720p | [`p31_rotcheck.js`](p31_rotcheck.js) → [`rotation-6s-588s-raw.txt`](rotation-6s-588s-raw.txt) · [`rotation-8s-589s-raw.txt`](rotation-8s-589s-raw.txt) · [`rotation-12s-586s-raw.txt`](rotation-12s-586s-raw.txt) | **The lever that moves the beat, and it is the frontend's.** The app's `rotation_interval_seconds` varied across three same-bundle arms, each interval read back in band (`R[]` medians 6.000 / 8.000 / 12.000 s): under one uniform >=250 ms membership rule, **all three arms carry a beat at 5 x the rotation tick** — **30.0 s** (8 of 9 arrivals on-grid, 58% dropout, `R[]` capped), **40.0 s** (14 of 15, 0% dropout) and **60.0 s**. **The frequency is frontend-driven, not a hardware or engine floor.** *Why* five ticks is **unidentified** — the promotion-threshold model Run 42 falsified is not reinstated. The 6 s arm is the low-quality point, not a counter-example; its 167 s silent tail is unexplained. Diagnostic only — production stays at 8 s |
 
-**R2 is satisfied for Runs 8 to 36 and not for Runs 3 to 7.**
+**R2 is satisfied for Runs 8 to 46 and 48 except Run 36's analyser and Run 44's census-diff
+numbers, is not satisfied for Run 47, and is not satisfied for Runs 3 to 7.** Each exception is named
+where it bites, below.
 
 The probe family Runs 8 to 16 put on the board is committed beside this README, with the raw
 captures those runs' numbers are computed from:
@@ -197,6 +256,47 @@ obligation on this investigation.
 | [`motion-baseline-raw.txt`](motion-baseline-raw.txt) · [`steps-k40-raw.txt`](steps-k40-raw.txt) · [`steps-k10-raw.txt`](steps-k10-raw.txt) · [`motion-compositing-on-raw.txt`](motion-compositing-on-raw.txt) · [`duration-cv179-raw.txt`](duration-cv179-raw.txt) · [`paintcost-raw.txt`](paintcost-raw.txt) · [`motion-720p-raw.txt`](motion-720p-raw.txt) · [`motion-720p-cv-raw.txt`](motion-720p-cv-raw.txt) · [`motion-linear-shrunk-raw.txt`](motion-linear-shrunk-raw.txt) · [`scroll-vs-transform-raw.txt`](scroll-vs-transform-raw.txt) | Raw captures, Runs 17 to 25 |
 | [`hold2s-fps-169s-raw.txt`](hold2s-fps-169s-raw.txt) · [`hold2s-phase-289s-raw.txt`](hold2s-phase-289s-raw.txt) · [`stagger-phase-288s-raw.txt`](stagger-phase-288s-raw.txt) · [`layout-attribution-288s-raw.txt`](layout-attribution-288s-raw.txt) · [`fullpaint-bench-115s-raw.txt`](fullpaint-bench-115s-raw.txt) · [`contain-paint-286s-raw.txt`](contain-paint-286s-raw.txt) · [`freeze-188s-raw.txt`](freeze-188s-raw.txt) · [`continuous-pingpong-292s-raw.txt`](continuous-pingpong-292s-raw.txt) · [`tiled-shm-292s-raw.txt`](tiled-shm-292s-raw.txt) · [`painting-threads-294s-raw.txt`](painting-threads-294s-raw.txt) · [`res640x480-194s-raw.txt`](res640x480-194s-raw.txt) · [`alloc-pressure-raw.txt`](alloc-pressure-raw.txt) | Raw captures, Runs 26 to 36 |
 | [`freeze-720p-cv-raw.txt`](freeze-720p-cv-raw.txt) · [`deployed-scroll-raw.txt`](deployed-scroll-raw.txt) | **Uncatalogued captures, claimed by no run block.** The first is a `probe4`-family payload naming itself 228 s, 6052 frames, 38 frames over 250 ms — 0.167/s — at 26.5 fps; the second is one load-average and `VmRSS` read. Neither carries its own configuration, so neither is attributed to a run here, and no conclusion rests on either |
+
+The same obligation for Runs 37 to 48, **discharged for ten of the twelve, and the two exceptions
+are named here rather than in a footnote.** Every probe, every analyser and every raw capture for
+Runs 37 to 46 is committed here, the inspector session's output included, and Run 46's landing-check
+screenshots with it; **Run 48's probe and all three of its captures are committed too**, which makes
+it the cleanest discharge in this range. The two that are not:
+
+- **Run 44's census diff banked no numbers.** The capture names `profile-churn.mjs`, which is
+  committed nowhere in this repository — but the committed
+  [`webkit-inspect.mjs`](../../../.claude/skills/webkit-inspector/webkit-inspect.mjs) implements the
+  same experiment as its `diff <seconds>` mode, two snapshots N seconds apart with a forced
+  collection before each. **So the obligation is to bank the numbers, not to commit a missing
+  tool**: the specific run is not re-derivable because nothing numeric was recorded, while the
+  experiment itself is re-runnable today — see the Run 44 block.
+- **Run 47 has no committed capture at all.** Its two arms' arrival series are transcribed into its
+  run block from the session's own task output rather than read from a raw file in this directory.
+  The run is reported with that stated at its head.
+
+Both are outstanding R2 obligations on this investigation, alongside the two already named above.
+**Run 48 carries neither defect**: its probe, its three raw captures and every figure quoted from
+them are in this directory, and the figures in its block were re-derived from those files rather than
+transcribed.
+
+| File | What it is |
+|---|---|
+| [`p25_mqtoggle.js`](p25_mqtoggle.js) | The marquee-allocation toggle probe (Run 37) — an ALLOC/CLEAN palindrome inside one page load, selecting the `Map`-destructuring loop body or an allocation-free indexed one per frame **from the arm schedule then in force**, so the motion is byte-identical and only the garbage differs, with a per-arm path counter so an arm that ran the wrong body is visible rather than scored. **Its `EDGE` array does not terminate `ARMS`**, so the final arm runs to the end of the capture rather than for one block — see the Run 37 block |
+| [`cap-probe.js`](cap-probe.js) · [`p26_gc.js`](p26_gc.js) | Run 38's in-page GC instruments — a capability probe for `performance.memory` / `FinalizationRegistry` / `WeakRef` / `window.gc`, and a full-GC detector built on promoted sentinels and finalizer bursts. The detector returned nothing because finalizer callbacks never fire on this core, and **that null instrument is Run 38's result** rather than a failed run |
+| [`p28_ablate.js`](p28_ablate.js) · [`p29_split.js`](p29_split.js) | The subsystem-ablation and rotation-driver-split probes (Runs 39, 40) — three conditions interleaved in one capture on 50 s arms cycled three times, each reading the app's own skip counters back per condition as the landing check |
+| [`p30_baseline.js`](p30_baseline.js) | The long-baseline probe (Runs 41, 42, 43, 45, 46) — a bare rAF loop with no arms and no ablation, recording every frame over 250 ms with its timestamp so the **arrival cadence** is readable, plus a seven-bucket histogram that reproduces the stall count independently. It is the one probe in this record whose output is the period rather than a rate |
+| [`p31_rotcheck.js`](p31_rotcheck.js) | The rotation-interval probe (Run 48) — Run 41's `>250 ms` stall detector with an in-band **rotation landing check** added: `R[]` records the wall-clock time of every tour-row text change, so the interval the app actually ran is re-derivable from the capture instead of being taken on trust from the config that was written |
+| [`parse_mqtoggle.py`](parse_mqtoggle.py) · [`parse_ablate.py`](parse_ablate.py) · [`parse_split.py`](parse_split.py) | The analysers for Runs 37, 39 and 40, each with a test — [`parse_mqtoggle_test.py`](parse_mqtoggle_test.py), [`parse_ablate_test.py`](parse_ablate_test.py), [`parse_split_test.py`](parse_split_test.py) — proving it reports both outcomes. **Each prints a VERDICT line and two of those verdicts are rejected in the run blocks above** (Run 39's clock arm and Run 40's whole capture, both on counts too small to score). The parsers reproduce the counts faithfully; the significance reasoning is in the run blocks, not in the parsers. **None of the three carries an event-count guard**, so each prints a confident VERDICT on counts that cannot separate anything — including, demonstrably, a capture with zero stalls in every arm. Closing that is an outstanding obligation; until it is, a verdict read off these parsers without the matching run block is not a result |
+| [`parse_rotation.py`](parse_rotation.py) | The rotation analyser (Run 48) — reads the `R[]` rotation series and the `S[]` stall series from one capture, applies **one uniform membership rule to every arm** (post-startup arrivals at or above the probe's own 250 ms cutoff, companion pairs clustered to one event), and reports the gap series, the `5 x tick` grid fit and the dropout rate. It also **detects the `R[]` cap** and says so, which is how the 6 s arm's blind final 100 s became visible. [`parse_rotation_test.py`](parse_rotation_test.py) proves it reports both outcomes — a beat that scales with the tick and one that does not — plus the cap case and the 250 ms boundary |
+| [`parse_baseline.py`](parse_baseline.py) | The `BL` analyser (Runs 41, 42, 43, 45, 46) — window, frame count, mean, max, rate, the seven-bucket histogram checked against the stall list, and the on-beat arrival series with its intervals. Every figure quoted for those five runs is reproduced by it. **It carries no test**, unlike the three analysers above, so the both-outcomes discipline this record states for Runs 8 to 16 is not met for it; what stands in place of a test is that each capture's histogram reproduces its own stall count independently of the stall list. **That substitute check validates the stall *count*, and every conclusion in "Runs 37-48 — the GC lever, and where it is driven from" rests on the on-beat *interval series*, which nothing tests** — which is where two mis-statements in this document were found. The analyser also **presumes the period it is used to read**: it cuts steady state at 40.0 s and folds arrivals modulo 40.0 s within ±3.0 s, a window that accepts 15% of the timeline by chance. No conclusion here depends on the fold — the run blocks quote the raw consecutive arrivals, which are self-evidently 40 s apart — but a period-free read is what the tool should do |
+| [`mq-toggle-496s-raw.txt`](mq-toggle-496s-raw.txt) · [`ablate-475s-raw.txt`](ablate-475s-raw.txt) · [`split-475s-raw.txt`](split-475s-raw.txt) · [`cap-probe-raw.txt`](cap-probe-raw.txt) | Raw captures, Runs 37, 39, 40 and 38 |
+| [`baseline-588s-raw.txt`](baseline-588s-raw.txt) · [`eager-gc-616s-raw.txt`](eager-gc-616s-raw.txt) · [`fix1-benchmark-600s-raw.txt`](fix1-benchmark-600s-raw.txt) · [`freq-lever-P16-535s-raw.txt`](freq-lever-P16-535s-raw.txt) · [`imperative-tour-587s-raw.txt`](imperative-tour-587s-raw.txt) | Raw captures, Runs 41, 42, 43, 45, 46 — all `BL` payloads from [`p30_baseline.js`](p30_baseline.js). The histogram reproduces each capture's stall count independently of the stall list, and every list is complete rather than truncated at the probe's 120-entry cap |
+| [`rotation-6s-588s-raw.txt`](rotation-6s-588s-raw.txt) · [`rotation-8s-589s-raw.txt`](rotation-8s-589s-raw.txt) · [`rotation-12s-586s-raw.txt`](rotation-12s-586s-raw.txt) | Raw captures, Run 48's three arms — all `BL` payloads from [`p31_rotcheck.js`](p31_rotcheck.js), each carrying its own `R[]` rotation series, its `LOAD` line and its `MemAvailable` read. One bundle across all three, named in each header. Read by [`parse_rotation.py`](parse_rotation.py), which reproduces every figure quoted for Run 48 |
+| [`fix1-600s-raw.txt`](fix1-600s-raw.txt) | An **earlier Fix-1 capture on the same bundle**, 801 s and 30 frames over 250 ms (0.037/s), superseded by [`fix1-benchmark-600s-raw.txt`](fix1-benchmark-600s-raw.txt) and **contributing no number to any run**. It carries only four on-beat arrivals and a large off-beat cluster between 150 s and 211 s, so its arrival cadence is not readable. Catalogued so it is not an uncatalogued capture, not because a conclusion rests on it |
+| [`inspector-gc-census-raw.txt`](inspector-gc-census-raw.txt) | Run 44's inspector output — the `Heap.startTracking` collection-type read, the `Heap.snapshot` census by class, and the 30 s forcing diff. It carries its own bound condition in the file: tracking quiesces the collector, so the read is of the collection **type** and not of the cadence. **The diff section of the file is a header with no numbers under it**, so nothing numeric from the diff is readable here; the tool it names, `profile-churn.mjs`, is not committed, though the committed `webkit-inspect.mjs` implements the same diff. The census above it does carry real per-class figures and they re-derive |
+| [`imperative-tour-render-shot1.png`](imperative-tour-render-shot1.png) · [`imperative-tour-render-shot2-rotated.png`](imperative-tour-render-shot2-rotated.png) | Run 46's landing check — the imperatively-filled tour before and after a rotation, the evidence that the bundle whose capture reads as a clean null was drawing the right rows. **The check has no oracle**: there is no matching pair from the reactive bundle at the same data state and no written expectation of which rows should appear after a rotation, so it establishes that rows were drawn in the right places, not that each cell carried the right value |
+| [`jsc-gc-findings.md`](jsc-gc-findings.md) | The JavaScriptCore source analysis behind "The JSC source: why the pause cannot be chunked on this board" — the option gating, the scheduler, the frequency lever and the ranked shortlist Run 45 was chosen from, with its own confirmed/not-confirmed split and its upstream sources |
+| [`webkit-inspect.mjs`](../../../.claude/skills/webkit-inspector/webkit-inspect.mjs) | Run 44's inspector client, banked as a **skill** rather than beside this investigation because it is reusable on any future board question — `.claude/skills/webkit-inspector/`, committed at `cd5cf9e`. It runs on the workstation through an `ssh -L` forward; the board has no node |
 
 **One capture carries a redaction, recorded so no editor mistakes it for a live value.**
 [`scroll-vs-transform-raw.txt`](scroll-vs-transform-raw.txt) opens with an SSH `known_hosts` warning,
@@ -1200,6 +1300,839 @@ truncated in the same way and carries no phase either.
 - **The big-frame list is truncated** — 40 entries recorded against 236 misses — so it carries no
   phase and none is read from it. Of the 40, six are warmup and the remaining 34 are all arm B.
 
+### Run 37 — the marquee's per-frame allocation, toggled inside one capture
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba` (by
+  continuity). **Frontend bundle:** the instrumented `index-CDzciXkW.js`, carrying both loop bodies.
+  **Kiosk config:** as Run 36, 1280x720.
+- **Scripts deployed:** ONE-OFF [`p25_mqtoggle.js`](p25_mqtoggle.js), committed here. Raw capture
+  [`mq-toggle-496s-raw.txt`](mq-toggle-496s-raw.txt), read by
+  [`parse_mqtoggle.py`](parse_mqtoggle.py) with [`parse_mqtoggle_test.py`](parse_mqtoggle_test.py)
+  proving it reports both outcomes.
+- **Procedure:** one continuous 496 s capture, arms **interleaved inside it** — a `W,A,C,A,C,A`
+  palindrome after a 20 s warmup. Arm A runs the current `Map`-destructuring loop; arm C runs an
+  indexed-array loop that allocates nothing. **The motion is byte-identical** — both paths compute
+  and write the same scroll offsets — so the only difference between arms is garbage.
+- **The schedule that ran is not the one the probe was written to run, and the correction weakens the
+  drift argument rather than the result.** [`p25_mqtoggle.js`](p25_mqtoggle.js) declares seven edges
+  for six arms and its `armAt()` scans from the last *arm* index, so the final edge is never read and
+  **the trailing A arm runs from t=340 s to the end of the capture — 156 s, not 80 s.** The executed
+  schedule is `W 20, A 80, C 80, A 80, C 80, A 156`: **A 316 s against C 160 s**, not the equal blocks
+  the palindrome's own header claims. The capture's frame counts say so without needing the board —
+  12965 against 6696 is a ratio of **1.94**, where three equal A blocks against two C blocks would
+  give 1.5. Every CLEAN arm is still bracketed by ALLOC arms, so the null is not destroyed; but the
+  stated basis for trusting it — symmetric, equal-weight blocks cancelling the board's ~30% within-run
+  drift — is **not what ran**, and a trailing double-length arm pushes A's time-centroid late. The
+  bias runs against the hypothesis this run rejected, so the bound survives; it survives by luck
+  rather than by design, and **no probe in this family terminates its final arm and no parser checks
+  a capture's length against its schedule.**
+- **The discriminator, fixed before the run.** If the marquee's transient allocation paces the
+  collection, arm A must carry a markedly higher fraction of frames over 250 ms than arm C.
+- **The landing check is in band.** Each arm carries its own path counter: **arm A reads 12963
+  allocating frames of 12965 and arm C reads 2 of 6696** — each arm ran the body it was meant to.
+
+| Arm | Frames | >250 ms | fraction | mean | max |
+|---|---|---|---|---|---|
+| A ALLOC (`Map` destructuring) | 12965 | 5 | 0.039% | 24 ms | 479 ms |
+| C CLEAN (indexed, no allocation) | 6696 | 7 | 0.105% | 24 ms | 531 ms |
+
+- **The result is the absence of a reduction, and the ratio is not the result.** The clean arm's
+  fraction is 2.7x *higher*, which at 5 and 7 events is noise in the other direction (a binomial test
+  against the arms' frame counts gives p = 0.12; nothing here separates the arms). What the run
+  establishes is a **bound**: removing the marquee's transient allocation entirely does not lower the
+  stall fraction, and a lever that cannot be shown to help at 19661 frames is not the lever. The
+  capture's overall figures are 20281 frames, 24 ms mean, 1569 ms max, 18 frames over 250 ms.
+- **The mechanism this implies, and it is INFERENCE.** A per-frame transient dies in the nursery and
+  is reclaimed by an eden collection, which is cheap; it is never promoted, so it never raises the
+  old generation toward the threshold that triggers the full collection. This is consistent with
+  Run 36 — which injected ~25000 objects per frame, far above anything the page does, and *did* drive
+  promotion — and it is why Run 36's result does not transfer to the page's own churn.
+  **BOUNDED (Runs 42, 45, 47):** this mechanism assumes a promotion-triggered collection, and that
+  trigger is not identified — see "Runs 37-48 — the GC lever, and where it is driven from". It also sits
+  unreconciled against Run 44's one direct read of the collector, which reported **zero eden
+  collections in 85 s**. The *bound* the run establishes — removing the transient allocation does not
+  lower the stall fraction — does not depend on either.
+
+### Run 38 — the in-page GC instruments, and why there are none
+
+- **Board:** prod, slot A. **Image commit:** `100-gpu-compositing:7ce44ba` (by continuity).
+  **Frontend bundle:** `index-Mt2gvuKb.js`, named in the capture's own header.
+- **Scripts deployed:** ONE-OFF [`cap-probe.js`](cap-probe.js) and [`p26_gc.js`](p26_gc.js),
+  committed here. Raw capture [`cap-probe-raw.txt`](cap-probe-raw.txt), carrying both the `CAP`
+  capability line and the `GC2` detector payload.
+- **What it establishes**, each read off that capture:
+  - **`performance.memory` is absent** (`pm:NONE`) and **`window.gc` is undefined**. There is no
+    heap-size series to read, and no way to watch the heap approach a threshold from inside the page
+    or to force a collection at a known moment.
+  - **`FinalizationRegistry` is present and its callbacks never fire.** `p26_gc.js` was built on it:
+    hold sentinels long enough to be promoted, drop them, and time the finalizer bursts as full-GC
+    events. Finalizers are delivered on an idle turn, and this core has none, so the payload reads
+    `fin0` with an empty `G[]` over 118 s and 4864 frames — a null instrument, not a null result.
+  - **`WeakRef.deref` cannot be used to observe collection** — calling it keeps a still-live target
+    alive for the remainder of the turn, so the act of measuring prevents the thing measured. (It
+    does not *resurrect*: `deref` returns `undefined` for an already-collected target. The
+    consequence is the same; the earlier mechanism sentence was wrong.)
+- **One further bullet, and it is NOT read off this capture.** `cap-probe-raw.txt` carries no
+  `JSC_logGC` content at all. **Run 45's** capture carries a `JSC_logGC` block with three lines over
+  535 s, none with a pause at or above 100 ms, and this record read that as the option being
+  "substantially compiled out". **That reading is WITHDRAWN (Run 47).** `logGC` is declared
+  `Availability::Normal` at `OptionsList.h:381`, which `overrideOptionWithHeuristic` short-circuits
+  the availability test for, so it is honoured in this release build; its emission sites in `heap/`
+  carry no `#if` guard. What is compiled out is `dataLogLnIf` under a `constexpr bool verbose =
+  false`, which is a different thing. The empty trace was a **capture-routing bug**: `dataLog` writes
+  to the **WebProcess's** stderr, which neither the journal nor the surf log captures. Run 47 set
+  `WTF_DATA_LOG_FILENAME` to redirect it and the WebProcess sandbox denied the path, so the trace is
+  *still* uncaptured — but it is uncaptured for a reason with a named fix, not because the instrument
+  does not exist. **That block's last two values, `0.696` and `9.76`, are not self-describing and no
+  conclusion is quoted from them**, and the "one incidental line" figure this bullet once carried
+  appears in no capture in this directory and is dropped.
+- **The conclusion is about instruments, not about the collector.** The page cannot instrument its own
+  collector on this build. Run 44 is what leaves the page, and the `webkit-inspector` skill is what
+  makes that possible.
+
+### Run 39 — the periodic subsystems, ablated three ways inside one capture
+
+- **Board:** prod, slot A. **Image commit:** `100-gpu-compositing:7ce44ba` (by continuity).
+  **Frontend bundle:** the instrumented `index-CqqUlNUO.js`, gating each subsystem behind
+  `window.__abl`. **Kiosk config:** 1280x720.
+- **Scripts deployed:** ONE-OFF [`p28_ablate.js`](p28_ablate.js), committed here. Raw capture
+  [`ablate-475s-raw.txt`](ablate-475s-raw.txt), read by [`parse_ablate.py`](parse_ablate.py) with
+  [`parse_ablate_test.py`](parse_ablate_test.py).
+- **Procedure:** one continuous 462 s capture; after a 20 s warmup, 50 s arms cycling `N,R,C` three
+  times, so each condition is sampled early, mid and late and drift cancels. **N** ablates nothing;
+  **R** skips the 8 s rotation tick's derived recompute, leaving the marquee's own animation cycle
+  untouched; **C** skips the 1 s clock re-read and re-format.
+- **The landing check is in band.** The app's own skip counters are exfiltrated per condition: **R
+  reads 18 rotation skips and 0 clock skips; C reads 138 clock skips and 0 rotation skips; N reads
+  0 and 0.** Every arm is verified to have ablated what it claimed and nothing else.
+
+| Condition | Frames | >250 ms | fraction | mean | max | rot skips | clock skips |
+|---|---|---|---|---|---|---|---|
+| N none | 6109 | 10 | 0.164% | 25 ms | 525 ms | 0 | 0 |
+| R rotation off | 6737 | **0** | **0.000%** | 22 ms | 218 ms | 18 | 0 |
+| C clock off | 6132 | 5 | 0.082% | 23 ms | 530 ms | 0 | 138 |
+
+- **The rotation result is strong and the clock result is not, and the parser over-reads the second
+  one.** Arm R records **zero** frames over 250 ms in 6737, where N's rate predicts about eleven — a
+  binomial test against the arms' frame counts gives p = 0.0006, and R's maximum frame is **218 ms**,
+  below the threshold entirely, so the arm contains no near-miss either. That is a real effect.
+  Arm C's 5 against N's 10 is **p = 0.21 — indistinguishable from noise**, and
+  [`parse_ablate.py`](parse_ablate.py) nonetheless prints "VERDICT clock: … this subsystem drives the
+  residual" from the raw 2.0x ratio. **That verdict is not adopted here.** The parser reproduces the
+  counts faithfully and its significance reasoning is absent rather than wrong; the counts are in the
+  table and the reading is taken from them.
+- **What the run relocates.** Run 37 has already shown the allocation *inside* the per-frame loop is
+  not the driver. Run 39 shows the per-tick **reactive update** is. Those are compatible only if what
+  matters is allocation that **survives** the tick — promoted into the old generation — rather than
+  allocation that is merely made. **BOUNDED (Runs 42, 45, 47):** that reconciliation names promotion
+  as the trigger, and no lever aimed at promotion moves the beat, so it is not the record's finding —
+  see "Runs 37-48 — the GC lever, and where it is driven from". What arm R establishes without it is narrower and
+  unaffected: **the tick is what makes the cost become due**, whatever the cost is.
+- **Bound conditions.** Arm R is **not a shippable configuration**: a rotation tick that does not
+  recompute is a display that does not advance. The run measures **that the tick is upstream of the
+  stall**; it does not propose freezing it, and it does not name what the tick does that matters. And
+  it does not separate *which part* of the tick — that is Run 40's question, which Run 40 could not
+  answer.
+
+### Run 40 — `matchMedia` against the derived recompute, and the capture that was too quiet
+
+- **Board:** prod, slot A. **Image commit:** `100-gpu-compositing:7ce44ba` (by continuity).
+  **Frontend bundle:** the instrumented `index-BM3R3o7e.js`. **Kiosk config:** 1280x720.
+- **Scripts deployed:** ONE-OFF [`p29_split.js`](p29_split.js), committed here. Raw capture
+  [`split-475s-raw.txt`](split-475s-raw.txt), read by [`parse_split.py`](parse_split.py) with
+  [`parse_split_test.py`](parse_split_test.py).
+- **Procedure:** the Run 39 schedule with the middle condition changed — 463 s, 20 s warmup, 50 s arms
+  cycling `N,M,R`. **M** caches `window.matchMedia` so the marquee's re-registration stops creating a
+  document-retained `MediaQueryList` per tick; **R** is Run 39's zero control.
+- **The landing check is in band and it landed:** N reads **18** real `matchMedia` calls, M reads
+  **0**, R reads 3 with 18 rotation skips.
+
+| Condition | Frames | >250 ms | fraction | mean | max | real `matchMedia` | rot skips |
+|---|---|---|---|---|---|---|---|
+| N none | 6347 | 1 | 0.016% | 24 ms | 474 ms | 18 | 0 |
+| M `matchMedia` cached | 6233 | 3 | 0.048% | 24 ms | 451 ms | 0 | 0 |
+| R rotation off | 6293 | 1 | 0.016% | 23 ms | 313 ms | 3 | 18 |
+
+- **SCORED UNMEASURED, not null.** One, three and one events per arm cannot separate anything: N
+  against M is p = 0.37 and N against R is p = 1.0. The zero control that read a clean zero in
+  Run 39's 6737 frames reads **one** stall here, which is the clearest statement that the capture as a
+  whole was too quiet to score — the arm that is known to be zero did not read zero.
+  [`parse_split.py`](parse_split.py) prints a confident verdict ("the per-tick derived recompute is
+  the source; the fix must reduce that") and **that verdict is not adopted.** The run contributes no
+  finding; it is recorded because it was taken, because its harness is committed, and because a
+  reader who finds the parser's verdict elsewhere is entitled to know it was rejected here.
+- **Why it was not re-run.** Run 43 supersedes the question it asked. Fix 1 ships **both** candidate
+  reductions — the clock granularity split and the `matchMedia` cache — and measures them together
+  over 608 s against a clean 588 s reference, at counts that can score. The answer there is that
+  neither matters, which makes splitting them moot.
+
+### Run 41 — the clean baseline, and the ~40 s metronome
+
+- **Board:** prod, slot A. **Image commit:** `100-gpu-compositing:7ce44ba` (by continuity).
+  **Frontend bundle:** the shipped `index-Mt2gvuKb.js`. **Kiosk config:** clean, 1280x720.
+- **Scripts deployed:** ONE-OFF [`p30_baseline.js`](p30_baseline.js), committed here. Raw capture
+  [`baseline-588s-raw.txt`](baseline-588s-raw.txt), read by
+  [`parse_baseline.py`](parse_baseline.py). The probe is a bare rAF loop with no ablation and no
+  arms.
+- **The capture:** 588 s, **23969 frames**, mean **25 ms**, max **1512 ms**, **27 frames over 250 ms
+  = 0.046/s**. The payload's own histogram is 22917 / 682 / 343 / 21 / 3 / 3 / 0 across the
+  `<50 / 50-100 / 100-250 / 250-500 / 500-1000 / 1000-2000 / >=2000` ms buckets, and its 21 + 3 + 3
+  reproduces the stall count exactly; the stall list is complete, 27 of 27, below the probe's 120-entry
+  cap.
+- **The beat, which is the point of the run.** Fourteen of the twenty-seven arrivals fall on one
+  period:
+
+| t (s) | 40.5 | 80.5 | 120.6 | 160.5 | 200.6 | 240.6 | 280.7 | 320.7 | 360.8 | 400.8 | 440.9 | 480.9 | 520.9 | 561.0 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| duration (ms) | 477 | 476 | 531 | 484 | 475 | 480 | 527 | 488 | 486 | 477 | 525 | 489 | 481 | 490 |
+
+  The thirteen intervals are **40.0, 40.1, 39.9, 40.1, 40.0, 40.1, 40.0, 40.1, 40.0, 40.1, 40.0, 40.0,
+  40.1 s** — a spread of 0.2 s over nine and a half minutes, at the 0.1 s the probe resolves. Durations
+  run **475 to 531 ms**, mean 492 ms.
+- **What is not on the beat, and the accounting closes.** **Five** arrivals are startup — 1.2, 2.7,
+  3.8, 4.1 and 8.4 s, up to 1512 ms. **One further early arrival at 24.2 s (271 ms)** is on neither
+  the beat nor the startup cluster. Seven are off-beat: 144.7, 144.9, 264.7, 265.0, 300.7, 301.0 and
+  393.0 s, at 257 to 450 ms — noticeably shorter than the on-beat arrivals and clustered in pairs.
+  14 + 5 + 1 + 7 = 27, the capture's whole stall list. They are recorded and no conclusion rests on
+  them.
+- **This is the reference every run below is read against, and only its beat is read across captures.**
+  Rate is not comparable between captures in this record — Runs 26a and 26b differ by a factor of two
+  on the *same* configuration — so a run that changes the rate and not the period has changed nothing
+  this section is measuring.
+
+### Run 42 — the JSC eager-collection environment, with its landing verified
+
+- **Board:** prod, slot A. **Image commit:** `100-gpu-compositing:7ce44ba` (by continuity).
+  **Frontend bundle:** the shipped `index-Mt2gvuKb.js`. **Kiosk config:** as Run 41 **plus**
+  `JSC_forceRAMSize=32MB`, the eden and old-generation growth factors set to 1.05, and
+  `collectContinuously` enabled.
+- **Scripts deployed:** [`p30_baseline.js`](p30_baseline.js), unchanged from Run 41. Raw capture
+  [`eager-gc-616s-raw.txt`](eager-gc-616s-raw.txt), read by [`parse_baseline.py`](parse_baseline.py).
+- **The landing check is out of band, and it covers one of the three options rather than all of
+  them.** The options are read at process start and cannot be confirmed from inside the page, so the
+  check is the process's own footprint: **`VmRSS` reads 89984 kB**, about 89 MB. **`JSC_forceRAMSize`
+  was honoured**; an environment variable the engine ignored would have left the footprint alone. The
+  growth factors have no such witness and are assumed to have landed.
+- **The comparator for that check is not this run's baseline, and the record said it was.** The
+  106380 kB figure comes from [`mq-toggle-496s-raw.txt`](mq-toggle-496s-raw.txt) — **Run 37's**
+  capture, a different probe and the instrumented `index-CDzciXkW.js` rather than the shipped bundle.
+  Run 41's own capture carries no `VmRSS` line at all, so the "against Run 41's 106380 kB" this
+  record previously wrote here, in the summary table and in the section is **wrong attribution and is
+  corrected**. **No same-configuration `VmRSS` baseline was taken.** A 16 MB drop against a 32 MB cap
+  is a large enough margin that the landing is probably real, but the check is **indicative rather
+  than controlled**, and reading it as a controlled one puts two runs' numbers in one comparison —
+  which is the thing R3 forbids.
+- **`collectContinuously` did NOT land, and the source says why.**
+  `Source/JavaScriptCore/runtime/Options.cpp:832-833` reads
+  `if (!Options::useConcurrentGC()) Options::collectContinuously() = false;` — and
+  `useConcurrentGC` is already forced false on this architecture at `Options.cpp:707-708`. **The
+  engine silently disabled the third option before the page ever ran.** This is recorded rather than
+  quietly dropped: one of the three levers this run believed it was testing was never applied, the
+  run cannot speak to it, and the `VmRSS` check that proved `forceRAMSize` landed says nothing about
+  it. It does not change the run's verdict — the two options that *did* land moved the period by
+  nothing — but a reader is entitled to know the arm was narrower than its description.
+- **The capture:** 616 s, **26296 frames**, mean **23 ms**, max **1500 ms**, **18 frames over 250 ms
+  = 0.029/s**, histogram 25328 / 592 / 358 / 12 / 3 / 3 / 0.
+- **The beat, unchanged:** 40.5, 80.5, 120.6, 160.6, 200.6, 240.7, 280.7, 321.0, 361.1, 401.0 s —
+  intervals of **40.0, 40.1, 40.0, 40.0, 40.1, 40.0, 40.3, 40.1, 39.9 s** — at 477, 470, 542, 482,
+  470, 484, 525, 477, 299 and 268 ms. **The period is Run 41's period.** Two off-beat arrivals at
+  300.4 and 301.2 s, and one late arrival at 600.5 s after a 199 s gap in which the beat does not
+  appear.
+- **Bound conditions, and the rate is deliberately not the verdict.** This capture's 0.029/s is lower
+  than Run 41's 0.046/s, and **that difference is not read as an effect.** The beat is present at the
+  same period throughout the first 400 s and then stops for 199 s; a capture whose beat is
+  intermittent is exactly the kind of capture this record has already seen differ 2x between two runs
+  of one configuration (Runs 26a, 26b). **What the run scores is the period, and the period did not
+  move.** Shrinking the heap the collector will grow into, and making it grow in 5% steps, changes
+  neither when the full collection is due nor what it costs.
+
+### Run 43 — Fix 1 benchmarked against the clean baseline
+
+- **Board:** prod, slot A. **Image commit:** `100-gpu-compositing:7ce44ba` (by continuity).
+  **Frontend bundle:** `index-BhI9T8Rb.js`, named in the capture's own header. **Kiosk config:**
+  clean, as Run 41 — none of Run 42's JSC options.
+- **Scripts deployed:** [`p30_baseline.js`](p30_baseline.js), unchanged. Raw capture
+  [`fix1-benchmark-600s-raw.txt`](fix1-benchmark-600s-raw.txt), read by
+  [`parse_baseline.py`](parse_baseline.py).
+- **What Fix 1 changes in the frontend.** Two allocation reductions, both aimed by Runs 39 and 40:
+  the clock's granularity is **split** so the 1 s path no longer re-runs the `Intl` formatting that
+  only changes on a coarser boundary, and `window.matchMedia` is **cached** so the marquee's
+  re-registration stops constructing a document-retained `MediaQueryList` on every rotation tick.
+  Both reduce allocation the page genuinely made.
+- **The capture:** 608 s, **26487 frames**, mean **23 ms**, max **1415 ms**, **26 frames over 250 ms
+  = 0.043/s**, histogram 25632 / 502 / 327 / 18 / 6 / 2 / 0.
+- **The beat, unchanged:** 40.5, 80.5, 120.6, 160.6, 200.6, 240.6, 280.7, 320.7, 360.8, 400.8, 440.9,
+  480.9, 521.0, 561.0, 600.5 s — intervals of **40.0, 40.1, 40.0, 40.0, 40.0, 40.1, 40.0, 40.1, 40.0,
+  40.1, 40.0, 40.1, 40.0, 39.5 s** — at 433 to 532 ms, mean 486 ms across the sixteen on-beat
+  arrivals, the sixteenth a 601.2 s companion to the 600.5 s one. Three off-beat arrivals, at 300.7,
+  301.0 and 537.0 s.
+- **The verdict: a null on the stall, and it is the run that withdraws the lever.** 0.043/s against
+  Run 41's 0.046/s is inside the capture-to-capture spread this record has already measured, and the
+  beat is identical to 0.1 s across fourteen consecutive intervals. **Reducing the application's own
+  allocation does not reduce the frequency of the collection.** Taken with Run 37 (transient churn
+  removed, no effect) and Run 46 (the reactive render removed, no effect), the allocation lever
+  "Real-time framing" left open is closed.
+- **A second Fix-1 capture exists and is not the benchmark.**
+  [`fix1-600s-raw.txt`](fix1-600s-raw.txt) is the same bundle over 801 s reading 30 frames over
+  250 ms (0.037/s), but it carries only four on-beat arrivals and a large off-beat cluster between
+  150 s and 211 s, so its beat is not readable and it is not the run's number. It is catalogued in
+  "Test runs" so no reader finds an uncatalogued capture in the directory.
+
+### Run 44 — the remote inspector, and the first direct read of the collector
+
+- **Board:** prod, slot A. **Image commit:** `100-gpu-compositing:7ce44ba` (by continuity).
+  **Frontend bundle:** `index-Mt2gvuKb.js`, named in the capture's own header. **Kiosk config:**
+  `KIOSK_INSPECTOR=0` and `WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:2999` set in
+  `/data/config/kiosk.conf` for the duration and **restored afterward** — the inspector is a listening
+  server and a perturbation, not a thing left running on prod. Reached from the workstation over an
+  `ssh -L` forward.
+- **Tooling:** the **`webkit-inspector` skill** —
+  [`.claude/skills/webkit-inspector/SKILL.md`](../../../.claude/skills/webkit-inspector/SKILL.md) and
+  its client [`webkit-inspect.mjs`](../../../.claude/skills/webkit-inspector/webkit-inspect.mjs),
+  committed at `cd5cf9e`. The client runs on the workstation; the board has no node. Raw output
+  [`inspector-gc-census-raw.txt`](inspector-gc-census-raw.txt).
+- **What unlocked it, and it withdraws a claim this record carried.** "Root cause of the residual
+  stall" records that "the inspector server accepts the socket and returns nothing" and files it under
+  build-time conditions with a build-time answer. **That is withdrawn.** There are two server
+  variables and they are not interchangeable: `WEBKIT_INSPECTOR_SERVER` — which
+  `meta-wisekiosk/recipes-core/kiosk-session/files/kiosk-launch` wires `KIOSK_INSPECTOR=1` to — is **WebSocket-only**
+  and answers a plain `GET /` by connecting and then hanging with zero bytes forever, which is
+  precisely the symptom recorded. `WEBKIT_INSPECTOR_HTTP_SERVER` serves the target-list page an HTTP
+  client can drive. **No rebuild was needed**; the instrument was reachable over the wire the whole
+  time, on the other variable.
+- **What it read, and what the read is bounded to.** `Heap.startTracking` over an 85 s window
+  reports **one** collection and types it **full**, with **zero** eden collections. The capture
+  carries its own bound condition: **under tracking the collector is quiesced, so the cadence inside
+  that window is not the untracked cadence** — the read establishes the collection **type** and says
+  nothing about frequency. A **census** — `Heap.snapshot`, 20866 nodes — is dominated by code and
+  structure objects (`UnlinkedFunctionCodeBlock` 247882 B, `Object` 187938 B, `Function` 129285 B),
+  and those per-class figures re-derive from the capture.
+- **The type read is n = 1, and the record over-read it. DOWNGRADED.** One collection is the whole
+  sample, and this record previously called it "the direct observation the identification was making
+  by convergent inference". It is not that. Three things sit against it, none of which were stated:
+  **the "quiesced" clause is cited to nothing** — neither the capture nor the
+  [`webkit-inspector` skill](../../../.claude/skills/webkit-inspector/SKILL.md) sources it, and if
+  quiescing perturbs *when* collections happen there is no argument for why it leaves *which kind*
+  intact; **`eden:0` over 85 s is not credible** against this record's own stated mechanism, in which
+  transients die in the nursery under cheap eden passes (Run 37), so either the eden passes are not
+  happening or the `Heap.garbageCollected` event stream is under-delivering — and the skill's own
+  note that `startTime`/`endTime` read 0 on this build says the plumbing is partly broken here;
+  and **`fullTimes:[7.08]` sits beside the claim undisclosed** — it is an arrival wall-clock in
+  seconds, not a duration, and a reader who took it for milliseconds would read it as contradicting
+  ~500 ms. The honest statement is: **one collection was observed and typed full; the same window
+  reported zero edens, which is not credible, so the sample is not treated as representative.**
+- **The census diff is the right experiment and its result was never banked. RESTATED.** The capture's
+  diff section reads, in full, `--- diff (profile-churn.mjs) over 30s: NO retained growth (transient
+  churn, no leak) ---` — a header with no before/after byte count, no node count, no per-class delta
+  and no threshold under it. So "no retained growth" is **a claim the session made and did not
+  record**: nothing numeric survives, so *this run's* result is not re-derivable and is not a datum
+  of this record. **The experiment itself is not lost.** The tool the capture names,
+  `profile-churn.mjs`, is committed nowhere here — but
+  [`webkit-inspect.mjs`](../../../.claude/skills/webkit-inspector/webkit-inspect.mjs), which **is**
+  committed and catalogued, implements the same design as its `diff <seconds>` mode: two class
+  censuses N seconds apart, each forcing a collection first so that a survivor is genuinely promoted
+  growth. So the R2 obligation here is **bank the numbers**, not **commit a missing tool**, and a
+  re-run is available today. The design is right — which is why the result is worth re-taking rather
+  than abandoning — but nothing downstream may rest on the unrecorded claim, and this record's
+  earlier "the heap is not leaking, it is churning, building and promoting and releasing the same
+  volume every cycle" was **INFERENCE on an unrecorded claim**, not an observation. **Nothing in this
+  record measures a promotion rate, an allocation rate or a per-cycle volume**; the page's own
+  allocation rate remains unmeasured, exactly as "Root cause of the residual stall" says.
+- **What the run still establishes.** The inspector is reachable on this build over the HTTP server
+  variable, with no rebuild — that withdrawal stands and is the run's durable result. The heap census
+  is real and small: 20866 nodes, top classes summing to roughly 1.07 MB. That figure is load-bearing
+  in the other direction, and against this record's own earlier reading: **500 ms over 20866 nodes is
+  ~24 µs per node**, on the order of 17,000 ARM11 cycles to mark one object, which is two to three
+  orders of magnitude off any plausible mark rate. So the census does not confirm the pause is
+  marking — it argues the pause is *not* mark-dominated, and which phase it is dominated by is
+  unidentified.
+
+### Run 45 — the frequency lever, the one the JSC source leaves nominally open
+
+- **Board:** prod, slot A. **Image commit:** `100-gpu-compositing:7ce44ba` (by continuity).
+  **Frontend bundle:** `index-Csf9V8Vf.js`. **Kiosk config:** as Run 41 plus
+  `percentCPUPerMBForFullTimer` divided by 16 — the full-collection timer made 16x less eager.
+- **Scripts deployed:** [`p30_baseline.js`](p30_baseline.js), unchanged. Raw capture
+  [`freq-lever-P16-535s-raw.txt`](freq-lever-P16-535s-raw.txt), read by
+  [`parse_baseline.py`](parse_baseline.py).
+- **Why this lever and no other.** The JSC source analysis below establishes that the *pause* cannot
+  be chunked on this architecture. `percentCPUPerMBForFullTimer` is the one remaining nominal control
+  over the *frequency* — it paces the timer that schedules a full collection against heap size. If
+  the collection is timer-driven, a 16x less eager timer must move the period.
+- **The capture:** 535 s, **23382 frames**, mean **23 ms**, max **1587 ms**, **29 frames over 250 ms
+  = 0.054/s**, histogram 22612 / 457 / 284 / 21 / 5 / 3 / 0.
+- **The beat, unchanged in period and shifted in phase:** 42.0, 82.0, 122.0, 162.0, 202.0, 242.0,
+  282.1, 322.3, 362.3, 402.4, 442.4, 482.4, 522.5 s — twelve intervals of **40.0, 40.0, 40.0, 40.0,
+  40.0, 40.1, 40.2, 40.0, 40.1, 40.0, 40.0, 40.1 s** — at **472 to 527 ms**, mean 489 ms. The first
+  arrival is 1.5 s later than Run 41's and every one after it tracks that offset; the **period is
+  identical**.
+- **What is not on the beat, and this run omitted it where its siblings do not.** Ten off-beat
+  arrivals: 114.1, 114.4, 210.0, 210.5, 210.8, 302.4, 474.6, 474.8, 512.1 and 512.5 s — **the largest
+  off-beat cluster in this record**, and the 302.4 s arrival at **593 ms** is longer than any on-beat
+  arrival in the capture. This capture also carries the **highest rate of the five `BL` captures,
+  0.054/s**, above the clean baseline's 0.046/s. Neither is read as an effect — rate is not the
+  comparable quantity here, and the run block is stating both rather than leaving a reader to find
+  them, which is what Runs 41, 42, 43 and 46 do and this block previously did not.
+- **The verdict — and half of it is withdrawn.** A 16x change in the timer's eagerness moves the
+  period by **nothing**. **That stands**: the collection is not timer-triggered. What this record
+  wrote next does not: *"it is what a **promotion-driven** one looks like — the collection fires when
+  the eden-to-old-generation ratio crosses its threshold"*, and *"the engine's frequency lever is
+  inert for the same reason its heap-size lever is (Run 42): neither reaches promotion."* **Both
+  sentences are WITHDRAWN and kept visible here.** Run 42 **is** a promotion-path lever — the
+  eden-to-old-generation ratio is `m_maxEdenSize / m_maxHeapSize`, and `forceRAMSize` and the growth
+  factors are precisely what set `m_maxHeapSize`. Run 42 aimed at promotion and found it inert; this
+  run aimed at the timer and found it inert. Each concluded "it must be the other one", and both
+  cannot be right. Sharper still: `JSC_forceRAMSize=32MB` drives `minHeapSize` from 32 MB to 8 MB, a
+  **4x cut** to the promotion budget, and a promotion-paced cadence owes a roughly 4x shorter period
+  for it. The period did not move. That is a **falsification** of the promotion model, not a null,
+  and it leaves the trigger **unidentified** — see "Runs 37-48 — the GC lever, and where it is driven from".
+- **The capture also carries a `JSC_logGC` block** — three lines over the whole 535 s, none with a
+  pause at or above 100 ms. This record read that as the option being substantially compiled out of
+  this build. **That reading is WITHDRAWN (Run 47):** the option is honoured in this build and the
+  near-empty trace is a capture-routing artefact, because `dataLog` writes to the WebProcess's stderr
+  rather than to anything this capture was reading — see the Run 38 block. **Two trailing values in
+  that block, `0.696` and `9.76`, are not self-describing and nothing here is read from them.**
+
+### Run 46 — the tour rendered imperatively, bypassing the reactive graph
+
+- **Board:** prod, slot A. **Image commit:** `100-gpu-compositing:7ce44ba` (by continuity).
+  **Frontend bundle:** `index-DJUeJLKg.js`, named in the capture's own header. **Kiosk config:**
+  clean, as Run 41.
+- **Scripts deployed:** [`p30_baseline.js`](p30_baseline.js), unchanged. Raw capture
+  [`imperative-tour-587s-raw.txt`](imperative-tour-587s-raw.txt), read by
+  [`parse_baseline.py`](parse_baseline.py).
+- **What the bundle changes.** Run 39 named the per-tick reactive update as the driver, and Run 43
+  showed that reducing the allocation *inside* it does nothing. This is the sharpest remaining form
+  of the lever: the tour rows are **rendered once** and thereafter **filled imperatively** — direct
+  DOM writes — so advancing the rotation no longer re-executes the `{#each}` block, its snippet, or
+  the component instances under it.
+- **The landing check is visual, it is the right *kind* of check, and it has no oracle.** An
+  imperative render that silently drew the wrong rows would read as a clean null, which is why a
+  display check belongs here at all. Two screenshots were taken before the capture was scored:
+  [`imperative-tour-render-shot1.png`](imperative-tour-render-shot1.png) and
+  [`imperative-tour-render-shot2-rotated.png`](imperative-tour-render-shot2-rotated.png), committed
+  here. **But "validated pixel-correct" is stronger than two frames 64 s apart can support**, and the
+  phrase is withdrawn. There is no matching pair from the *reactive* bundle at the same data state,
+  so "pixel-correct" names no comparison; and no written expectation of which rows should appear
+  after a rotation, so the verdict cannot be re-derived by a reader. Read adversarially the pair is
+  not self-evidently correct: two of the four cards advanced their toured tail across the gap and two
+  are identical in both shots, which may well be right and which nothing here says how to decide.
+  What the check establishes is that **rows were drawn in the right places**; it cannot resolve a
+  cell drawn with the wrong value or the wrong class. The in-band form — walk the rendered rows,
+  compare against the rows the data model says are due, and exfil a mismatch count through the same
+  channel as the rest of the payload — is what Runs 37 and 39 do and what this run should have done.
+- **The capture:** 587 s, **26577 frames**, mean **22 ms**, max **1542 ms**, **25 frames over 250 ms
+  = 0.043/s**, histogram 25942 / 298 / 312 / 21 / 1 / 3 / 0.
+- **The beat, unchanged, and the on-beat set is hand-curated.** 40.5, 80.5, 120.5, 160.5, 200.4,
+  240.5, 321.4, 361.4, 401.5, 441.5, 481.5, 521.5, 561.6 s, at intervals of **39.9 to 40.1 s**
+  (`160.5 → 200.4` is the 39.9), with one skipped turn between 241 and 321 s. Durations run 445 to
+  474 ms on the clean arrivals, with a 294 ms and a 645 ms pair at 240.5 and 241.1 s. Five off-beat
+  arrivals, at 300.6, 301.1, 541.3, 541.7 and 542.0 s. **[`parse_baseline.py`](parse_baseline.py)'s
+  own on-beat set is fifteen, not thirteen**: it also folds in `200.9` at 450 ms, which this list
+  excludes as the second of a pair with the 200.4 arrival, on the same reading that keeps the
+  240.5/241.1 pair as one turn. Saying so is the point — curating a beat by hand is defensible, doing
+  it silently in the run that carries the strongest form of the lever is not. The accounting closes:
+  13 on-beat turns + the 241.1 companion + the excluded 200.9 + 5 off-beat + 5 startup (1.2, 2.8,
+  3.8, 4.1, 8.4 s) = the capture's 25.
+- **The rate reads the same as Run 43's to the two figures this record uses.** 25 over 587 s is
+  0.0426/s and 26 over 608 s is 0.0428/s — both 0.043/s. The two runs are not being differenced; the
+  point is that the sharpest available form of the lever lands on the same number as the mildest.
+- **The throughput claim is BOUNDED, not withdrawn, and it is a cross-capture comparison.** Mean
+  frame time reads **22 ms** and the 50–100 ms bucket holds **298 frames** where Run 41's held 682.
+  Both numbers are real. The comparator is not neutral: across the five `BL` captures, all on
+  [`p30_baseline.js`](p30_baseline.js),
+
+  | Run | configuration | mean | 50–100 ms bucket | rate |
+  |---|---|---|---|---|
+  | 41 | clean baseline | **25 ms** | **682** | 0.046/s |
+  | 42 | JSC heap options, same bundle as 41 | 23 ms | 592 | 0.029/s |
+  | 43 | Fix 1 | 23 ms | 502 | 0.043/s |
+  | 45 | JSC timer option | 23 ms | 457 | 0.054/s |
+  | 46 | imperative render | 22 ms | 298 | 0.043/s |
+
+  **Run 41 is the outlier on both columns and is the capture Run 46 is differenced against.** Against
+  the nearest comparable capture the mean delta is **1 ms**, and Run 45 — which changed nothing in the
+  application, only a JSC timer constant — moved the same bucket 682 → 457, more than half the
+  distance the imperative render is credited with. This section's own rule is that captures are not
+  comparable to each other and only the beat may be read across them; mean frame time and a histogram
+  bucket are no more capture-stable than rate, as the table shows. **Run 46 also carries no
+  interleaved control arm**, unlike Runs 36, 37, 39 and 40, so nothing inside the run isolates the
+  effect. The defensible statement is **"consistent with a throughput win, not measured as one"**.
+  The comparison to Run 22 and Run 25 is dropped with it: both of those were interleaved or
+  same-capture measurements, which makes the analogy flattering rather than apt.
+- **The inference, stated as inference — and SUPERSEDED in its mechanism.** This record wrote:
+  *"Removing the reactive render does not move the beat because the promotion is **spread across the
+  reactive graph** rather than concentrated in the render."* The observation stands; **the mechanism
+  does not**, because it names promotion, and Runs 42, 45 and 47 leave the trigger unidentified — see
+  "Runs 37-48 — the GC lever, and where it is driven from". What survives without the mechanism is the shape:
+  Run 39's *whole-tick* freeze reaches zero and every partial removal reaches nothing.
+- **And Run 39 and this run do not ablate the same thing, which bounds what "sharpest form" means.**
+  Run 39 arm R skips the rotation tick's **derived recompute**; this run removes the reactive
+  **render** under it. The tick is still `$state`, the page and slice are still deriveds, and the
+  imperative effect still reads them, so the derived spine Run 39 ablated is still executing every
+  tick here. The configuration that would separate "spread across the graph" from "concentrated in
+  the deriveds" — advancing the tour from a plain interval with no signal on the rotation path at all
+  — **was never built**, and this record does not claim it was.
+
+### Run 47 — the memory-pressure kill switch, and the hypothesis it falsifies
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba` (by
+  continuity). **Frontend bundle: not recorded** — the page was served from the dev mirror as in every
+  run above and no hash was read off the board or carried in the run's output. Both arms ran
+  back-to-back on one board, one build and one bundle, so the comparison inside the run is unaffected;
+  the hash is a gap, stated rather than guessed, and it is the same gap Run 25 carries. **Kiosk
+  config:** as Run 41, plus `JSC_logGC=1` and `WTF_DATA_LOG_FILENAME` in both arms, plus arm 2's one
+  variable. Restored afterwards to the four-line baseline and the panel confirmed rendering — not
+  blank — by a screenshot with the device clock legible in it. **That screenshot sits in the
+  gitignored `local/` tree and is not citable from here**, unlike Run 46's two committed panel
+  images; the restore landing check is the right check and a reader cannot currently verify it.
+- **Scripts deployed:** [`p30_baseline.js`](p30_baseline.js), unchanged from Run 41.
+- **R2 is NOT discharged for this run, in two distinct ways.** **No raw capture file is committed**
+  for either arm: the arrival series below are **transcribed** from the arms' `WM_NAME` payload lines
+  as reported in this session's own task output, not read from a file in this directory. And
+  **no analyser reads this run** — the block names a probe but no parser, where Runs 41, 42, 43, 45
+  and 46 are all read by [`parse_baseline.py`](parse_baseline.py). Those are separate gaps and the
+  second is the one with teeth: Run 46 volunteers that the parser's on-beat set is fifteen where its
+  own hand-curated list is thirteen, so a hand-transcribed beat and the parser's fold are known to
+  disagree on this payload. The obligation is therefore **bank the two captures *and* re-derive this
+  table through `parse_baseline.py`**, not bank the captures alone — and if the fold disagrees with
+  the transcription, as it did for Run 46, that must be visible here.
+- **Why the run exists, and it is the record arguing with itself.** An adversarial architecture review
+  of this investigation read WebKit's **memory-pressure** subsystem out of this image's own generated
+  build configuration and proposed it as the driver the JSC levers kept missing: the UI-process
+  `MemoryPressureMonitor` polls `/proc/meminfo` and fires at **≥90%** system memory used, and the
+  handler's hold-off is `release duration x 20`, from which a ~2.0 s release window yields a 40 s
+  spacing with no 40 s constant anywhere in the tree. It explained Run 42's and Run 45's mutual
+  exclusion, the `eden:0` of Run 44 and the off-beat pairs at once. It also came with a **complete
+  kill switch that needs no rebuild**: `WEBKIT_DISABLE_MEMORY_PRESSURE_MONITOR=1` sets
+  `shouldSuppressMemoryPressureHandler`, so the WebProcess never installs the handler at all. If the
+  hypothesis were right the residual would be a configurable policy rather than a floor.
+- **Procedure:** two arms, same board, same build, back-to-back, each a single continuous capture
+  under the unmodified baseline probe. **Arm 1** is the baseline with the monitor on. **Arm 2** adds
+  `WEBKIT_DISABLE_MEMORY_PRESSURE_MONITOR=1` and changes nothing else.
+- **The discriminator, fixed before the run.** The kill switch is complete. If the memory-pressure
+  path paces the beat, arm 2 must lose it.
+- **What the kill switch actually does, because the falsification's scope depends on it.** It is read
+  in the **UI process**, not the web process.
+  `Source/WebKit/UIProcess/linux/MemoryPressureMonitor.cpp:389-397` reads
+  `WEBKIT_DISABLE_MEMORY_PRESSURE_MONITOR` under a `std::call_once` and requires exactly the string
+  `"1"`; `Source/WebKit/UIProcess/glib/WebProcessPoolGLib.cpp:122-123` turns that into
+  `parameters.shouldSuppressMemoryPressureHandler = true`;
+  `Source/WebKit/WebProcess/WebProcess.cpp:439-440` assigns it to `m_suppressMemoryPressureHandler`
+  and **skips the whole block that ends in `memoryPressureHandler.install()` at `:492`**; and with
+  `m_installed` never set, `Source/WTF/wtf/unix/MemoryPressureHandlerUnix.cpp:66-67` returns
+  immediately from `triggerMemoryPressureEvent`. **The switch removes the handler itself, not one of
+  its triggers** — every path into memory-pressure response is gone in arm 2, whatever would have
+  driven it.
+- **The landing check is out of band, and it is verified — on the process that consumes the
+  variable.** The check that matters is whether the variable reaches **surf**, and it does: an
+  anchored read of `/proc/<pid>/environ` finds it in surf's own environment **and** in the web
+  process's. An environment variable that reached the consuming process is one the engine had the
+  opportunity to honour, and this record's standing rule about silently-unapplied manipulations is
+  satisfied for it.
+- **What that check is, stated exactly, because its ordering decides how much it is worth.** It is a
+  **supplementary verification run**, and the order was: the arms ran; **the board was then restored
+  to the four-line baseline**; and only after that was `WEBKIT_DISABLE_MEMORY_PRESSURE_MONITOR=1`
+  appended and the kiosk restarted for the read. So it is **not arm 2's own `kiosk.conf` re-read, and
+  not arm 2's own process** — it establishes that *a* configuration carrying this line delivers it to
+  surf through the systemd `EnvironmentFile` mechanism on this board. It is **the same mechanism**,
+  not the same file. What makes that sufficient rather than nearly worthless is that the mechanism is
+  insensitive to the rest of the file: the variable is delivered identically whether or not the two
+  JSC-logging lines arm 2 also carried are present, because none of the three interact — they are
+  independent `KEY=VALUE` lines consumed by different processes. The residual failure mode the check
+  does **not** close is the one this record has been bitten by three times: that the line never
+  entered arm 2's config, or the kiosk was never restarted between arms. Nothing in the run's own
+  record suggests either, and an in-band counter exfiltrated inside the capture — which Runs 37
+  and 39 have and this run should have had — is what would have closed it outright.
+
+| Arm | env delta | beat arrivals (s) | period | magnitude | stalls > 250 ms | `MemAvailable` |
+|---|---|---|---|---|---|---|
+| 1 baseline, monitor ON | `JSC_logGC=1` | 41.9, 81.9, 121.9, 162, 202, 242.2, 282.2, 322.6, 362.6, 402.6, 442.6, 482.6 | **40.0–40.4 s** | ~450 ms | 24, not scored | 263 MB / 435 |
+| 2 monitor OFF | + `WEBKIT_DISABLE_MEMORY_PRESSURE_MONITOR=1` | 41.9, 82, 122, 162, 202, 242, 282, 322.1, 362.1, 402.1, 442.2, 482.2, 522.2, 562.2 | **40.0–40.1 s** | ~450 ms | 25, not scored | 264 MB / 435 |
+
+- **The intervals, from the arrivals above.** Arm 1: 40.0, 40.0, 40.1, 40.0, 40.2, 40.0, 40.4, 40.0,
+  40.0, 40.0, 40.0 s. Arm 2: 40.1, 40.0, 40.0, 40.0, 40.0, 40.0, 40.1, 40.0, 40.0, 40.1, 40.0, 40.0,
+  40.0 s. Both arms' first arrival is at 41.9 s, about 1.4 s later than Run 41's — a **phase**
+  difference, as Run 45's was, on an unchanged period.
+- **The verdict: FALSIFIED.** The kill switch removes the handler entirely, its landing is verified
+  on the process that reads it, and **the beat is still there at the same period**: **40.0–40.4 s**
+  across arm 1's eleven intervals and **40.0–40.1 s** across arm 2's thirteen. The control arm is the
+  noisier of the two, which is the direction that matters least for the verdict and is stated rather
+  than left to a reader's subtraction. A null from a manipulation known to
+  have reached the engine is a result rather than an absence of one. **The memory-pressure handler is
+  not the driver**, and the hypothesis that overturned this record's conclusion overnight is refuted
+  by direct measurement rather than by argument.
+- **What the verdict is scoped to, and it is narrower than "zero effect".** The discriminator was
+  binary — if the memory-pressure path paces the beat, arm 2 must lose it — and that is what the run
+  resolves. **A partial change in the pause's magnitude is below this run's recorded resolution**:
+  the magnitude is recorded as `~450 ms` for both arms, one significant figure, where every sibling
+  run quotes a range (Run 41 475–531 ms, Run 43 470–525, Run 45 472–527, Run 46 445–474). A 10–15%
+  shortening would not be visible here. The verdict is "the beat is not removed and its period does
+  not move", not "nothing changed at all".
+- **The two legs are not the same leg, and the difference is what makes the arms worth having.** The
+  arms and the memory reading do **not** corroborate each other symmetrically — the memory reading
+  *entails* a null on the polled path, so on that path alone arm 2 could not have shown anything
+  whether or not the switch landed. They cover different scopes:
+  - **The memory reading closes the polled path specifically.** Reaching the monitor's **≥90%**
+    (`MemoryPressureMonitor.cpp:51`) would need `MemAvailable` to fall from ~263 MB to about
+    **43.5 MB** of 435 MB — a ~220 MB excursion. This record's own WebProcess `VmRSS` readings are
+    **89984 kB** (Run 42) and **106380 kB** (Run 37): **the entire web process is less than half the
+    excursion required.** That is a headroom argument and it does not depend on sampling cadence,
+    which matters because two point samples cannot establish that a board never spiked.
+  - **The arms close the whole handler**, polled path and every other, because the switch skips
+    `install()` rather than suppressing a trigger. **For that scope the landing check is the whole of
+    the evidence that the manipulation applied** — which is why it is reported above at length rather
+    than as a formality.
+- **Bound conditions.**
+  - **The arms are sequential, not interleaved, and it could not be otherwise.**
+    `WEBKIT_DISABLE_MEMORY_PRESSURE_MONITOR` is read once per process under `std::call_once` at
+    WebProcess-spawn time, so it cannot be toggled inside one page load — the same exception Runs 18
+    and 20 carry, and the same shape as Runs 19 and 35, which are also two sequential captures.
+  - **So the board's within-run drift is NOT cancelled here.** This record measures that drift at
+    ~30% within a single run, and Runs 37, 39 and 40 interleave specifically to cancel it. Nothing in
+    this run cancels it. What makes the comparison readable anyway is **the quantity being read**:
+    the *period*, which this record has five independent draws of at **39.9–40.3 s** across five
+    captures on different bundles and different JSC options. The drift that motivates interleaving
+    moves **rate over a short window**, and no rate is scored here.
+  - **Neither arm's capture window is recorded**, unlike every other `BL` run in this record (588 s,
+    616 s, 608 s, 535 s, 587 s). What the transcription bounds is the last arrival — **482.6 s in
+    arm 1 against 562.2 s in arm 2** — so arm 2 covered at least ~80 s more. **Consequently no count,
+    rate, mean or histogram is compared across the arms**, and the stall counts of 24 and 25 sit in
+    the table as per-capture facts marked *not scored*, exactly as Run 42's 0.029/s is. The beat is
+    the comparable quantity and it carries the verdict on its own.
+  - **n = 1 capture per arm.** **The bundle is not recorded** (see the head of this block), and
+    **no analyser reads this run** (see R2, above).
+- **A separate line, and it is not new.** Run 35 already cut the panel to 640x480, a 3.0x pixel cut,
+  and the ~40 s cadence survived it — so the beat is resolution-independent as well, and is not
+  paint.
+- **A trap in this subsystem, recorded because it has now caught two independent reviews.** WebKit
+  also has a **WebProcess-side periodic** memory monitor, and this build's generated config says it
+  is on: `build/.../2.44.3/build/cmakeconfig.h:88` reads `#define ENABLE_PERIODIC_MEMORY_MONITOR 1`,
+  defaulted ON for the GTK port. Read that line alone and you conclude a ~30 s footprint-driven timer
+  is running — which would be the closest thing to a periodic engine task anyone in this record has
+  found, and would make the arms the only evidence covering it. **It is not running.**
+  `Source/WTF/wtf/MemoryPressureHandler.cpp:79-85` opens `setShouldUsePeriodicMemoryMonitor` with
+  `if (!isFastMallocEnabled()) return;`, this build sets `USE_SYSTEM_MALLOC:BOOL=ON`
+  (`build/.../2.44.3/build/CMakeCache.txt:1278`), and under that
+  `Source/WTF/wtf/FastMalloc.cpp:168-171` — inside the `#if USE(SYSTEM_MALLOC)` branch opening at
+  `:158` — returns `false` unconditionally. **So the flag is 1 and the timer still never installs.**
+  Two separate reviews of this investigation reached the opposite conclusion from the `#define`, and
+  both were corrected by reading the guard; it is recorded here so a third does not have to.
+- **The instrument miss, recorded rather than dropped.** `JSC_logGC=1` with
+  `WTF_DATA_LOG_FILENAME` pointed at a `/data` path **did not produce a trace**. The environment
+  reached the WebProcess — confirmed by reading `/proc/<pid>/environ` — but no file descriptor opened
+  to the target, because the WebProcess sandbox denies that path. `dataLog` therefore went where it
+  goes by default, the **WebProcess's own stderr**, which neither the journal nor the surf milestone
+  log captures; only surf's own `[GC<addr>: starting Xms]` markers appear there. **So the
+  per-collection trace is still uncaptured after forty-seven runs** — not because the option is
+  compiled out, which is the reading Run 38 and Run 45 carried and which this run withdraws, but
+  because of where its output lands. The follow-up is named and cheap: a sandbox-writable path, or a
+  redirect of the WebProcess stderr, or the remote inspector's heap tracking. It is not a bound on the
+  falsification, which stands on the stall series and the memory reading alone.
+
+### Run 48 — the rotation interval, and the lever that finally moves the beat
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba` (by
+  continuity). **Frontend bundle:** `index-DJUeJLKg.js` — **the same bundle in all three arms**, named
+  in each capture's own header, which is what makes them comparable to each other. It is Run 46's
+  bundle and **not** Run 41's `index-Mt2gvuKb.js`, so **Run 41's numbers are not blended into this
+  comparison** (R3). **Kiosk config:** clean, as Run 41. The manipulation is the app's own
+  `rotation_interval_seconds`, served from the mirror's `config.json`.
+- **Scripts deployed:** ONE-OFF [`p31_rotcheck.js`](p31_rotcheck.js), committed here — Run 41's
+  `>250 ms` stall detector with a **rotation landing check** added: `R[]` records the wall-clock time
+  of every tour-row text change. Raw captures [`rotation-6s-588s-raw.txt`](rotation-6s-588s-raw.txt),
+  [`rotation-8s-589s-raw.txt`](rotation-8s-589s-raw.txt) and
+  [`rotation-12s-586s-raw.txt`](rotation-12s-586s-raw.txt), read by
+  [`parse_rotation.py`](parse_rotation.py) with [`parse_rotation_test.py`](parse_rotation_test.py)
+  proving it reports both outcomes — a scaled beat and an unscaled one.
+- **R2 is discharged for this run, and it is the cleanest discharge in this range.** Probe, analyser,
+  analyser test and all three raw captures are committed here, and **every figure below is the
+  parser's output**, not a hand reading. Run 47, by contrast, has neither capture nor parser.
+- **The membership rule is uniform across the three arms, and it is the probe's own.** An earlier
+  draft of this block scored the arms by hand at a 400 ms threshold. **That reading is withdrawn**: it
+  admitted a 279 ms arrival in the 8 s arm while demoting 252-312 ms arrivals in the 6 s arm, which is
+  the same amplitude band treated two ways, each time in the direction of the hypothesis.
+  [`parse_rotation.py`](parse_rotation.py) applies one rule to all three — **every post-startup
+  arrival at or above the probe's own 250 ms cutoff, clustered so a companion pair counts once** — and
+  the arms are re-derived under it below. It changes the 6 s verdict completely.
+- **This is a diagnostic, not a cadence change. Production stays at the schema default 8 s** (owner,
+  2026-09-23). The run varies the interval to locate the cause; nothing here proposes shipping 12 s.
+
+| Arm | `R[]` landing | fps / worst frame | beat arrivals (>= 250 ms, clustered) | grid = 5x tick | on-grid | dropout |
+|---|---|---|---|---|---|---|
+| **6 s** | median **6.000 s**, max gap 7.1 s — **`R[]` CAPPED at 80 events, covering 0-488.1 s of 588 s** | 41.7 fps / 2519 ms | 30.5, 90.5, 120.2, 150.6, 180.4, 240.8, 306.9, 360.6, 420.7 | **30.0 s** | **8 of 9** | **58%** |
+| **8 s** (production) | median **8.000 s**, 73 events, uncapped | 45.2 fps / 1570 ms | 41.9, 81.9, 121.9, 161.9, 201.9, 242.0, 282.0, 302.5, 322.3, 362.3, 402.3, 442.4, 482.4, 522.4, 562.4 | **40.0 s** | **14 of 15** | **0%** |
+| **12 s** | median **12.000 s**, 48 events, uncapped | 48.4 fps / 1535 ms | 60.5, 84.4, 120.5, 180.6, 240.6, 264.7, 300.5, 325.5, 385.5, 421.4, 445.7, 565.9 | **60.0 s** | 6 of 12 | 33% |
+
+- **All three arms are consistent with beat = 5 x the rotation tick**, which is a stronger result than
+  the two-points-and-an-outlier this block first claimed. **8 s → 40.0 s** with **zero** grid points
+  dropped and fourteen of fifteen arrivals on-grid. **12 s → 60.0 s**: the gap series carries **60.1,
+  60.0, 60.0** and a **120.2 s** double, so the 60 s fundamental is in the intervals; the grid *fit*
+  is only 6 of 12 because the series takes a phase reset near 300 s and because several off-grid
+  arrivals belong to the ~300 s event below, not because the period is unstable. **6 s → 30.0 s**,
+  eight of nine arrivals within 3 s of a 30 s grid, first arrival at **30.5 s**.
+- **The 6 s arm is NOT an outlier, and the claim that it broke the linearity is WITHDRAWN.** The
+  earlier reading — *"there is none: nothing sits on 30 s"* — was wrong, and self-contradicting: the
+  sentence that followed it listed 30.5, 90.5 and 150.6 s, which are exactly the 30 s grid. What the
+  hand threshold had done was keep only the larger alternate arrivals, whose spacing is then 60 s.
+  Under the uniform rule the 6 s gap series reads **60.0, 29.7, 30.4, 29.8, 60.4, 66.1, 53.7, 60.1 s**
+  — a **30 s fundamental with alternate members missing**, the 60 s values being two grid steps. So
+  the 6 s arm **confirms** 5 x 6 = 30 rather than contradicting it, at **58% dropout** and with
+  amplitude alternating between ~450 ms and ~250-310 ms.
+- **What is different about the 6 s arm is completeness, not scaling, and the honest word is
+  low-quality rather than outlier.** More than half its grid points carry no arrival at all, its
+  amplitudes alternate, and two further problems below bound what it can be asked to support. The
+  scaling law rests on the 8 s and 12 s arms; the 6 s arm is a third **consistent** point, not a
+  third **clean** one.
+- **`R[]` capped, and the number this block once quoted as a measurement is the cap.**
+  [`p31_rotcheck.js`](p31_rotcheck.js) stops recording at `rots.length < 80`. The 6 s capture contains
+  **exactly 80** entries, the last at **488.1 s** of a 588 s window, so **the landing check is blind
+  for the final 100 s of that arm** — and a capped `R[]` and a rotation that stopped are
+  byte-identical in this payload. [`parse_rotation.py`](parse_rotation.py) detects and prints the
+  condition; the probe should exfil `rots.length` as its own field, the way `big` makes `S[]`
+  truncation visible, and that is an outstanding harness obligation. **The per-arm event counts
+  (80 / 73 / 48) are therefore not evidence of anything** and are no longer offered as such: 80 is a
+  cap, and the other two are just window ÷ interval.
+- **The 6 s arm goes silent for its last 167 s, and this record does not know why.** Its final
+  arrival of any size is **420.7 s**; nothing over 250 ms occurs in the remaining 28% of the window.
+  This is a real absence, not list truncation — the payload's own `big22` matches its 22 listed
+  entries. `R[]` independently confirms rotation was still running to at least 488.1 s, so for **at
+  least 67 s of confirmed-rotating time the beat was wholly silent**, where a 30 s grid predicts two
+  arrivals. A saturated board should produce a noisier tail, not a clean one. The live alternative is
+  that something in the page stopped doing per-tick work partway through the arm — **and a page that
+  stopped looks identical to a page that got quiet, because `R[]` is this run's only liveness signal
+  and it capped out before the quiet window closes.** Stated as unexplained rather than folded into
+  the saturation story.
+- **Saturation, led by the evidence that is actually monotonic.** Throughput falls monotonically as
+  the tick gets faster — **48.4, 45.2 and 41.7 fps** at 12, 8 and 6 s — and the worst frame rises,
+  **1535, 1570 and 2519 ms**. Those two are the argument. **Load average is disclosed rather than
+  used**: the one-minute triple is 2.19 / 1.75 / **1.97** and the fifteen-minute triple is 1.76 /
+  1.83 / **1.51**, and **both are non-monotonic in the interval**; only the five-minute triple
+  (1.98 / 1.82 / 1.51) runs the expected way, which is not enough to carry a claim on its own.
+  Mechanically, a 6 s tick leaves the marquee about 2 s of travel after its 2 s home and 2 s end
+  holds.
+- **WITHDRAWN — "ticks are dropped".** This block previously explained the 6 s arm by saying the
+  board dropped rotation ticks. **The capture refutes that**: over the span `R[]` covers, the 6 s
+  arm's rotation median is **6.000 s** with a maximum gap of **7.1 s** — the tick fired on time
+  throughout. What degrades under a faster tick is **rendering and beat completeness**, not the tick
+  itself: fps falls, the worst frame doubles, and more than half the grid's collections do not
+  produce a recorded stall. The corrected statement is that **the rotation fires reliably and the
+  work it triggers does not all complete**, which is also the only form the evidence supports.
+- **A ~300 s event sits in all three arms and is not the rotation beat.** At 8 s there is an arrival
+  at **302.5 s** carrying **686 ms**, the largest in that capture and off the 40 s grid — it is what
+  makes the 8 s gap series read 20.5 and 19.8 either side of it. At 12 s there are arrivals at 300.5
+  and 301.0 s, and at 6 s one at 306.9 s, the single off-grid member of that arm. Three arms, three
+  different rotation intervals, one event at the same place in each capture's own timeline: **it
+  scales with nothing this run varied** and is therefore not a rotation-paced collection. It is named
+  here as a separate, unmodelled ~300 s event rather than quoted as a beat point, and nothing in this
+  record explains it.
+- **What the run establishes, and it is the direct causal result forty-seven runs circled.** **The
+  beat scales with the rotation tick** — 30.0, 40.0 and 60.0 s at 6, 8 and 12 s, same board, same
+  build, same bundle, each interval landing-verified in band. **A residual set by the hardware or by
+  an engine configuration cannot move when a frontend config value moves.** This one does, across
+  three settings.
+- **Why it is five ticks is NOT established, and the mechanism this block first offered is BOUNDED.**
+  An earlier draft wrote that *"five ticks' worth of promotion crosses the old-generation
+  threshold"*. **That is the promotion-threshold model Run 42 falsified** — `JSC_forceRAMSize=32MB`
+  cut the budget roughly 4x, which that model owes a roughly 4x shorter period, and the period held
+  at 40.0 s. Run 48 does not rescue it; **it sharpens the exclusion**, because the beat now demonstrably
+  tracks a frontend quantity while remaining immovable by the engine-side budget that the same model
+  says sets it. The defensible statement is the measured one: **the beat is 5 x the rotation tick, and
+  what accumulates over five ticks — and why the count is five rather than three or eight — is
+  unidentified.** That sits beside this record's other open half, what the ~450 ms is spent on.
+- **What it does reconcile, and this part does not depend on the mechanism.** Runs 37, 43 and 46 each
+  removed one *contributor* to the per-tick update and read a null; Run 39 froze the *whole* tick and
+  read zero. Both hold if no single contributor is removable enough to matter while the **number of
+  ticks per collection stays fixed**, so the period tracks the interval. Run 48 measures that second
+  half directly, where Runs 37 to 46 could only infer it.
+- **`MemAvailable` reads 266284, 263372 and 270236 kB** across the three arms — about 40% used, as in
+  Run 47, nowhere near the memory-pressure monitor's 90%. The memory-pressure path is absent here too.
+- **Bound conditions.**
+  - **The arms are sequential, not interleaved**, and the board's within-run drift is not cancelled by
+    the design. What licenses the comparison is that **the quantity read is the period**, and it moved
+    by **50%** between the 8 s and 12 s arms and by **25%** down to the 6 s arm — far outside anything
+    drift produces in this record, which moves *rate*, not *beat*. **Arm order is not recorded**, so
+    if the arms ran in ascending or descending interval order the fps trend is confounded with time
+    on the board; the beat result is not, because drift does not move a period.
+  - **The 5x relation rests on three points of unequal quality.** The 8 s and 12 s arms carry it; the
+    6 s arm is consistent with it at 58% dropout, a capped landing check and an unexplained silent
+    tail. No arm above 12 s was taken, so nothing bounds the relation from above.
+  - **The three arms share one bundle and the comparison is confined to them.** Run 41's beat is on a
+    different bundle and is not blended in. Run 46 *is* the same bundle at the default interval and
+    reads 39.9-40.1 s, which agrees with this run's 8 s arm — a consistency check across captures,
+    not a differenced result.
+  - **n = 1 capture per arm**, and no arm carries an interleaved control.
+  - **`R[]` proves the tick fired, not that the tick's work ran to completion.** It records a
+    tour-row text change, which is the rotation's visible output; it does not witness the derived
+    recompute, the effects, or the marquee re-measure behind it.
+  - **This locates the frequency, not the pause.** What the ~450 ms is spent on is still unidentified
+    — see "The JSC source: why the pause cannot be chunked on this board".
+
+
+### The JSC source: why the pause cannot be chunked on this board
+
+**This subsection is analysis of the WebKit source, not a board run.** It reads the extracted
+JavaScriptCore of the same webkitgtk3 2.44.3 these runs ran, under
+`build/tmp-raspberrypi0-wifi/work/arm1176jzfshf-vfp-poky-linux-gnueabi/webkitgtk3/2.44.3/webkitgtk-2.44.3/`,
+and cites file and line in the form "Configuration under test" already uses. The fuller analysis,
+including the option shortlist Run 45's lever was chosen from and its own confirmed/not-confirmed
+split, is [`jsc-gc-findings.md`](jsc-gc-findings.md). **Every claim below except the last bullet's
+reasoning was read out of that tree and is checkable there.**
+
+- **Concurrent marking is compiled out on this architecture, and no environment variable can reach
+  it.** `Source/JavaScriptCore/runtime/Options.cpp:707-708` reads
+  `#if !CPU(X86_64) && !CPU(ARM64)` → `Options::useConcurrentGC() = false;`. This board is armv6
+  (`arm1176jzfshf`), so the gate fires. **The ordering is the load-bearing part and it is explicit in
+  the source:** `Options::initialize()` applies every `JSC_*` environment override first
+  (`Options.cpp:971-978`), and the comment immediately after reads *"No more options changes after
+  this point. notifyOptionsChanged() will do sanity checks and fix up options as needed"* before
+  calling `notifyOptionsChanged()` (`Options.cpp:992-994`) — which is the function containing line
+  708. An operator who sets `JSC_useConcurrentGC=1` gets it read, accepted, and then overwritten by
+  architecture.
+- **What runs instead has no yield point, and WebKit says so in its own comment.**
+  `Source/JavaScriptCore/heap/Heap.cpp:398-402` takes the non-concurrent branch with the comment
+  *"We simulate turning off concurrent GC by making the scheduler say that the world should always be
+  stopped when the collector is running"*, and installs
+  `SynchronousStopTheWorldMutatorScheduler`. That scheduler's
+  `timeToResume()`
+  (`Source/JavaScriptCore/heap/SynchronousStopTheWorldMutatorScheduler.cpp:59-62`) returns
+  `MonotonicTime::infinity()` whenever the collector is not in the `Normal` state — the mutator is
+  never scheduled to resume mid-collection. **A full collection is one unbroken stop-the-world
+  pause**, which is why the measured stall is ~500 ms in a single block rather than a sequence of
+  short ones, and why no runtime option chunks it.
+- **What the source leaves nominally open is frequency alone.**
+  `Source/JavaScriptCore/runtime/OptionsList.h:367` declares
+  `percentCPUPerMBForFullTimer` at a default of `0.0003125`, and
+  `Source/JavaScriptCore/heap/FullGCActivityCallback.cpp:80` is the only place it is consumed —
+  scaling the full-collection timer by heap size, clamped by `collectionTimerMaxPercentCPU`
+  (`OptionsList.h:369`). **Run 45 is the measurement of that lever and finds it inert**, so the timer
+  is not the binding constraint. **The "because it is promotion-triggered" clause this bullet
+  previously carried is WITHDRAWN** — Run 42 pulled the promotion budget 4x in the direction a
+  promotion model says should have shortened the period, and the period did not move. What the source
+  leaves nominally open is frequency alone; what the measurements say is that neither of the two
+  frequency paths the engine exposes is the one in force, and which path is has not been identified.
+- **Two levers on this surface were enumerated and never run, and the floor claim is scoped around
+  them.** `JSC_largeHeapSize` sits on the promotion budget itself — `minHeapSize` is
+  `min(largeHeapSize [32 MB, OptionsList.h:204], ramSize x smallHeapRAMFraction [0.25, :206])`, the VM
+  is `HeapType::Large`, and on this board the 32 MB term binds — and **raising** `JSC_forceRAMSize`
+  above 32 MB is the same lever from the other side. [`jsc-gc-findings.md`](jsc-gc-findings.md)
+  predicted that second one as the next step if the timer lever moved nothing; the timer lever moved
+  nothing and it was not taken. Both are cheap — an environment variable and one capture. Neither is
+  likely to help, for Run 42's reason: the budget was tightened 4x with no response, so it is slack.
+  **That argument is stated here rather than left implicit**, because "we predicted a next step, the
+  prediction's trigger fired, and we stopped" is not a closure a reader can check.
+- **The gate is a correctness gate, and this bullet is INFERENCE rather than a source read.** On a
+  32-bit build a `JSValue` is a two-word tag and payload that cannot be loaded or stored atomically,
+  so a marking thread running concurrently with the mutator can observe a torn value and follow it as
+  a pointer. **No comment in this tree states that as the reason for the `!X86_64 && !ARM64` gate** —
+  the gate is stated without justification at `Options.cpp:707` and groups `useConcurrentGC` with
+  `forceUnlinkedDFG` and `useWebAssemblySIMD`. The reasoning, and a record of the same hazard biting
+  on 64-bit — a pull request against **Bun's downstream fork** of WebKit, not against upstream
+  WebKit, which this record previously mis-described as "the upstream record" — are cited in
+  [`jsc-gc-findings.md`](jsc-gc-findings.md); the conclusion it
+  supports is the cautious one either way. **This is not a knob that was left in the wrong position,
+  and patching it out is not a lever this investigation proposes.**
+
 ### Delivery and board
 
 Run 2 is on prod, the wall-mounted Pi Zero W. `local/device-identity.md` is unchanged; the guard
@@ -2013,6 +2946,339 @@ two builds in twelve-hour form, and in twenty-four-hour form — the case the sl
 meridiem. A pixel comparison of the annotations column gives **AE = 0**. The suites pass: 24
 Playwright clock tests across three viewports, 2 vitest unit tests.
 
+## Runs 37-48 — the GC lever, and where it is driven from
+
+This record spent most of its length open on one lever: **reduce the WiseKiosk frontend's per-second
+allocation churn.** Run 36 had shown that injected allocation reproduces the stall at will, 474x on
+the miss fraction, so the inference was that removing the page's own allocation would remove it.
+Eleven runs test that inference directly. It is **half right, and the half that is wrong is the half
+the lever rested on.**
+
+**How these eleven are read, and it is R3 rather than a preference.** Each run's numbers stay inside its
+own block in "Test runs"; cross-run comparison appears only here, and only on the **beat**. Two
+captures of the same configuration have differed by a factor of two in this record (Runs 26a and
+26b), so a rate difference between captures is not a result and is never scored as one.
+
+**Run 37 withdraws the first candidate — the marquee's per-frame transient allocation.** The marquee's
+shared rAF step iterates a `Map` with `for (const [column, distance] of columns)`, which builds
+roughly three short-lived objects per column per frame. An instrumented bundle carries **both** loop
+bodies and selects between them per frame **from the arm schedule then in force**, so the motion is
+byte-identical either way and only the allocation differs. Interleaved in one capture, the allocating
+arm misses the deadline on **5 of 12965 frames (0.039%)** and the allocation-free arm on **7 of 6696
+(0.105%)** — the clean arm is *higher*, and both arms read a 24 ms mean. **Removing the allocation
+does not remove the stall**, and the "cut the marquee's churn" lever is withdrawn. (The arms are not
+the equal 80 s blocks the probe was written to run: an unterminated edge array leaves the final ALLOC
+arm running 156 s, so A carries 316 s against C's 160 s. Every CLEAN arm is still bracketed, so the
+null holds; the drift-cancellation argument for trusting it is weaker than stated. See the Run 37
+block.) The mechanism this suggested — a transient dies in the nursery, is collected by a cheap eden
+pass and is never promoted — is INFERENCE, and Run 44's one direct read of the collector reported
+**zero eden collections in 85 s**, which this record does not reconcile.
+
+**Run 38 establishes that the page cannot instrument its own collector on this build**, which is why
+the next step had to leave the page. `performance.memory` is absent and `window.gc` is undefined.
+`FinalizationRegistry` exists but its callbacks **never fire** on a saturated core — there is no idle
+turn to deliver them, so the in-band GC detector Run 38 was built around returns nothing.
+`WeakRef.deref` is worse than useless here: calling it keeps a still-live target alive for the rest
+of the turn, so the act of observing prevents the collection it is trying to see. This is the "no
+collector instrument was read" gap "Root cause of the residual stall" names, confirmed as a build
+property rather than a missing idea — **for the in-page instruments only**. The one out-of-page
+instrument this record dismissed on the same page, `JSC_logGC`, was dismissed wrongly; see Run 47.
+
+**Run 39 is the run that relocates the mechanism.** Three conditions interleaved in one capture — no
+ablation, the 8 s rotation tick's derived recompute skipped, the 1 s clock re-read skipped — each
+with the app's own skip counter read back as the landing check. **Freezing the rotation tick takes
+the stall to zero: 0 frames over 250 ms in 6737, against 10 in 6109 with nothing ablated.** The clock
+arm reads 5 in 6132, which is not a result at these counts (see the run block). So the driver is the
+**per-tick reactive update**, and Run 37 has already said it is not the allocation *inside* that
+update. What the tick does that the loop body does not is re-execute a graph — deriveds, effects, the
+marquee's re-measure and re-registration — whose intermediate values **survive long enough to be
+promoted**. **BOUNDED (Runs 42, 45, 47), as the same sentence is in the Run 39 block:** "promoted"
+names a trigger, and no lever aimed at promotion moves the beat. What arm R establishes without it is
+narrower and unaffected — **the tick is what makes the cost become due**, whatever the cost is.
+
+**Run 40 tried to split that further and could not.** It isolates `window.matchMedia` (each call
+makes a document-retained `MediaQueryList`) from the per-tick derived recompute. The capture is
+quiet — 1 to 3 stalls per arm — and at those counts the arms are indistinguishable from each other
+and from Poisson noise. It is recorded as **UNMEASURED quality, not a null**: it does not license the
+conclusion its own parser prints, and the run block says so.
+
+**Run 41 establishes the reference the rest of the section is read against, and it is a metronome.**
+A clean 588 s baseline with no ablation: **27 frames over 250 ms, 0.046/s**, and fourteen of them
+arrive at 40.5, 80.5, 120.6, 160.5, 200.6, 240.6, 280.7, 320.7, 360.8, 400.8, 440.9, 480.9, 520.9 and
+561.0 s — **thirteen consecutive intervals of 39.9 to 40.1 s**, at 475 to 531 ms each. This is not a
+rate that happens to average 40 s. It is a beat, and the run block gives it in full. A beat this
+stable is what a **threshold-driven** mechanism looks like — something crossing a fixed line at a
+steady rate, rather than a rendering event recurring per cycle. **Which threshold is open**: this
+record once answered "the eden-to-old-generation ratio, fed by a steady promotion rate", and
+Runs 42, 45 and 47 each pulled a lever on that answer and got nothing. After them **no mechanism in
+this record predicts the beat**, which is this section's conclusion rather than a gap in it.
+
+**Runs 42 and 45 take the two levers the engine nominally exposes, and both are inert on the beat.**
+Run 42 shrinks the heap the collector is willing to grow into — `JSC_forceRAMSize=32MB`, whose
+landing is indicated by the process's `VmRSS` reading **89984 kB** against the **106380 kB** of
+**Run 37's** capture (a different bundle and a different probe; no same-configuration baseline was
+taken, so the check is indicative rather than controlled) — and sets the growth factors to 1.05 with
+`collectContinuously`. (The third of those never applied: the engine clears `collectContinuously`
+whenever concurrent GC is off, which on armv6 it always is — see the run block and the JSC-source
+subsection.) The cadence does not move: the beat runs 40.5, 80.5, 120.6, 160.6, 200.6, 240.7, 280.7,
+321.0, 361.1, 401.0, at **39.9 to 40.3 s**. Run 45 then takes the one lever the JSC source says is
+nominally available — `percentCPUPerMBForFullTimer`, divided by 16 — and the beat runs 42.0, 82.0,
+122.0, 162.0, 202.0, 242.0, 282.1, 322.3, 362.3, 402.4, 442.4, 482.4, 522.5, at **40.0 to 40.2 s**,
+at 472 to 527 ms each. The phase shifts by about 1.5 s; the **period does not move at all**.
+
+**SUPERSEDED — what this record concluded from those two runs.** It wrote, here and in Run 45's
+block: *"That is the signature of a collection triggered by **promotion** — the eden-to-old-generation
+ratio crossing a threshold — rather than by a timer, and a timer lever cannot reach a promotion
+trigger."* **That is withdrawn**, and the original sentence is kept above rather than deleted,
+because the error is instructive. The two runs exclude each other's explanation: Run 42 says "not
+growth, therefore the timer"; Run 45 says "not the timer, therefore growth". The
+eden-to-old-generation ratio is `m_maxEdenSize / m_maxHeapSize`, and `forceRAMSize` and the growth
+factors are exactly what set `m_maxHeapSize` — **Run 42's lever *is* a promotion-path lever**, so the
+second sentence is false on this record's own source reading. It is worse than a stalemate: `JSC_forceRAMSize=32MB`
+drives `minHeapSize` from 32 MB to 8 MB, a **4x cut** to the promotion budget, and a promotion-paced
+cadence owes a roughly 4x *shorter* period for it. The period held at Run 41's to within the probe's
+resolution. **That is a falsification of the promotion model, not a null.** What the two runs
+establish together is the weaker and true statement: **neither the heap-size and growth path nor the
+full-GC timer moves the period, so the trigger is unidentified.** One asymmetry survives and is worth
+keeping — a constraint tightened 4x with no response is a **slack** constraint, so loosening it
+further is correspondingly unlikely to help.
+
+**Run 47 removes the strongest remaining candidate, and it was this record's own.** The memory-pressure
+hypothesis was raised against this section by an adversarial architecture review, read out of this
+image's generated build configuration rather than upstream defaults: WebKit's UI-process
+`MemoryPressureMonitor` fires at ≥90% system memory used, and the handler's hold-off is the release
+duration x 20, so a ~2.0 s release yields a 40 s spacing with no 40 s constant needed anywhere. It
+explained Run 42 and Run 45's mutual exclusion, Run 44's `eden:0` and the off-beat pairs at once — and
+it came with a complete, no-rebuild kill switch. Run 47 pulled it, **with the switch's landing
+verified in the UI process that consumes it** — `WEBKIT_DISABLE_MEMORY_PRESSURE_MONITOR` read back
+from surf's own `/proc/<pid>/environ` under the identical `kiosk.conf` mechanism the arm ran, so the
+null is a result and not an unapplied manipulation. **The beat did not notice: 40.0 s in both arms.**
+The switch skips the handler's `install()` rather than suppressing one of its triggers, so the arms
+rule out **the whole mechanism**, whatever would have driven it. Separately and on different
+evidence, the monitor's **≥90%** trigger is excluded on headroom: it would need `MemAvailable` to
+fall from ~263 MB to about 43.5 MB of 435, a ~220 MB excursion, where this record's own web-process
+`VmRSS` readings are 90–106 MB. Those two legs are not symmetric corroboration — the headroom
+argument *entails* a null on the polled path — they are different scopes, and the arms are the only
+line covering the rest of the handler.
+**The hypothesis that overturned this section overnight is refuted by direct measurement**, and the
+honest reading of it is the one below rather than the confident one it replaced.
+
+**The instrument that made this readable is banked separately.** Every prior session in this record
+failed to attach WebKit's remote inspector, and "Root cause of the residual stall" records that
+failure as a build-time condition. It is not one. The launcher wires `KIOSK_INSPECTOR=1` to
+`WEBKIT_INSPECTOR_SERVER`, which is **WebSocket-only** — a plain `GET /` connects at the TCP layer
+and then hangs with zero bytes forever, which is exactly what "the inspector server accepts the
+socket and returns nothing" describes. `WEBKIT_INSPECTOR_HTTP_SERVER` serves the target-list page an
+HTTP client can drive, it is settable over the wire in `/data/config/kiosk.conf` with no rebuild, and
+with it the collector is readable. The procedure, the protocol departures from CDP that cost the
+prior attempts, and the client are in the **`webkit-inspector` skill**
+([`.claude/skills/webkit-inspector/SKILL.md`](../../../.claude/skills/webkit-inspector/SKILL.md),
+committed at `cd5cf9e`). **The gap this closes is the first one "Root cause of the residual stall"
+names** — "no collector instrument was read" — and the claim that it was unreachable on this build is
+**withdrawn**: it was unreachable on the wrong environment variable.
+
+**Run 44 is what the inspector read, and this record over-read it. BOUNDED.** `Heap.startTracking`
+types the collection it sees over an 85 s window as **full**, not eden — **on n = 1**, with the same
+window reporting **zero** eden collections, which is not credible against the eden-pass mechanism
+Run 37 invokes and which points at an under-delivering event stream on this port rather than at a
+finding. The capture's "tracking quiesces the collector" clause, which this record leaned on, is
+cited to nothing. The honest form: one collection was observed and typed full, and the sample is not
+treated as representative. This section previously wrote that the type read was "the direct
+observation the identification was making by convergent inference"; **that is withdrawn.**
+
+**And the census diff was never banked. RESTATED.** The capture's diff section is a header —
+`--- diff (profile-churn.mjs) over 30s: NO retained growth (transient churn, no leak) ---` — with no
+before/after count, no per-class delta and no threshold under it. So "no retained growth" is **a
+claim this investigation made and did not record**, not a datum of it. The gap is the *numbers*, not
+the instrument: the capture names `profile-churn.mjs`, which is uncommitted, but the committed
+`webkit-inspect.mjs` implements the same forced-GC census diff and the experiment can be re-run
+today, and the sentence this section carried — *"the heap is not
+leaking, it is **churning**, building and promoting and releasing the same volume every cycle"* — was
+**INFERENCE resting on that unrecorded claim**. It is kept visible here and downgraded. **Nothing in
+this record measures a promotion rate, an allocation rate or a per-cycle volume**; the page's own
+allocation rate is unmeasured, which "Root cause of the residual stall" already says and which
+Runs 37 to 48 did not close.
+
+**What Run 44 does contribute is a number that cuts against the pause explanation too.** The census is
+real: **20866 nodes**, top classes summing to roughly **1.07 MB**. Five hundred milliseconds over
+20866 nodes is **~24 µs per node**, on the order of 17,000 ARM11 cycles to mark one object — two to
+three orders of magnitude off any plausible mark rate. So the 500 ms is very likely **not
+mark-dominated**, and which phase it *is* dominated by — per-block work proportional to heap
+capacity, or WebCore's output constraints over the page's DOM wrappers — is not identified anywhere
+in this record. The wrapper-population lever that the third of those would imply has never been
+enumerated, let alone run.
+
+**Run 43 is the app-side lever, built and measured, and it does not move.** Fix 1 splits the clock's
+granularity so the per-second path stops re-running the expensive formatting, and caches the
+`matchMedia` result so the marquee's re-registration stops making a retained `MediaQueryList` per
+tick. Both reduce real allocation. Over 608 s the capture reads **26 frames over 250 ms, 0.043/s**,
+with the beat at 40.5, 80.5, 120.6, 160.6, 200.6, 240.6, 280.7, 320.7, 360.8, 400.8, 440.9, 480.9,
+521.0, 561.0 s — **40.0 to 40.1 s** across those fourteen, at **470 to 525 ms** — followed by a
+600.5 s arrival after a 39.5 s interval and its 601.2 s companion, at 433 and 532 ms. Against
+Run 41's 0.046/s and identical beat, **this is a null on the stall.** Reducing the application's
+allocation does not reduce the frequency of the collection.
+
+**Run 46 is the strongest form of the lever and it does not move either.** If the driver is the
+reactive update, then removing the reactive *render* is the sharpest available test: the tour rows
+are rendered once and filled **imperatively**, bypassing the `{#each}` and its snippet entirely, with
+a two-screenshot landing check that shows the right rows in the right places. Over 587 s: **25 frames
+over 250 ms, 0.043/s** — the same number as Run 43's at the two figures this record uses — beat at
+40.5, 80.5, 120.5, 160.5, 200.4, 240.5, **then a skipped turn to** 321.4, 361.4, 401.5, 441.5,
+481.5, 521.5, 561.6 s, at **39.9 to 40.1 s** across the turns that arrive — the 240.5 → 321.4 gap is
+**80.9 s**, two periods, and sits outside that range by construction. The on-beat set is
+hand-curated; the run block says on what basis. **Unchanged.**
+
+Two claims this section made about Run 46 are bounded rather than kept. **The landing check has no
+oracle** — no matching pair from the reactive bundle at the same data state, no written expectation
+of which rows should appear after a rotation — so "validated pixel-correct" is withdrawn in favour of
+"the right rows were drawn in the right places", which is what two frames 64 s apart can carry. And
+**the throughput win is a cross-capture comparison against the slowest of five captures**: mean frame
+time does read 22 ms against Run 41's 25 ms with 298 frames in the 50–100 ms bucket against 682, but
+the same bucket moved 682 → 457 under Run 45, which changed nothing in the application at all. The
+run carries no interleaved control arm. **Consistent with a throughput win, not measured as one** —
+and the five-capture spread is in the Run 46 block. As for why the null: this section wrote that the
+promotion is *"spread across the reactive graph"*. That sentence names promotion, which Runs 42, 45
+and 47 leave unidentified, so **the mechanism is superseded and the observation stands**. Note too
+that Run 39's ablation and Run 46's removal are not the same node: the derived spine Run 39 froze is
+still executing under Run 46's imperative fill, so "sharpest available form of the lever" is bounded
+by a configuration that was never built.
+
+**The JSC source closes the third direction: the pause itself cannot be chunked.** JavaScriptCore
+gates `useConcurrentGC` on `!X86_64 && !ARM64` in `Options.cpp`, **after** environment overrides are
+applied, so on this armv6 build concurrent marking is compiled out and no runtime option can turn it
+back on. What runs instead is `SynchronousStopTheWorldMutatorScheduler` with `timeToResume` at
+infinity: a full collection is **one unbroken stop-the-world pause**, not an incremental one that
+could be chunked under the frame budget. The gate is a **correctness** gate, not a performance
+default — on a 32-bit build a `JSValue` is not atomically readable, so a marking thread running
+concurrently with the mutator can observe a torn value and corrupt the heap. It is not a knob that
+was left in the wrong position; it is a knob that must not be moved. The source reads, cited to file
+and line, are in "The JSC source: why the pause cannot be chunked on this board"; the fuller
+analysis is [`jsc-gc-findings.md`](jsc-gc-findings.md).
+
+**So what is left, stated as what was measured.**
+
+- **The pause cannot be chunked, and this is the best-evidenced thing in the section.** No
+  concurrent or incremental marking exists on armv6, by a correctness gate that cannot be lifted
+  safely, and what runs instead has no yield point. **A full collection cannot be chunked on this
+  board**, so whatever the collection costs is paid in one block. Every source citation behind that
+  leg was re-derived in the extracted tree, file and line. **This bounds how the cost is paid, not
+  how large it is** — nothing here says the half-second cannot be made smaller, and the next two
+  bullets name the levers that would do exactly that.
+- **What the ~500 ms is *spent on* is not identified.** The obvious answer does not survive this
+  record's own arithmetic: 500 ms over Run 44's 20866-node census is ~24 µs per node, two to three
+  orders of magnitude off a mark rate. Per-block work proportional to heap capacity, and WebCore's
+  output constraints over the page's DOM wrappers, are the other candidates and neither was measured.
+  **The phase is unpinned, so even the pause leg names a cost without naming its content.**
+- **No lever *inside the engine* reaches the trigger, and every one is a measured no-op.** WebKit's
+  memory-pressure handler under its complete kill switch (Run 47), the JSC heap and growth budget —
+  pulled 4x in the direction a promotion model says should have shortened the period (Run 42) — the
+  full-GC timer at 1/16 eagerness (Run 45), and pixel area at a 3x cut (Run 35). Each is null on the
+  beat. **The earlier reading "the collection is promotion-triggered" is withdrawn**: Run 42 *is* a
+  promotion-path lever and it was inert.
+- **A lever *in the application* does reach it, and this is Run 48.** The beat is **5 x the
+  park-wait-times rotation interval**: 40.0 s at the shipped 8 s across thirteen intervals of
+  40.0-40.3 s, and 60.0 s at 12 s across four of 59.9-60.1 s, on one bundle with each interval read
+  back in band. **A residual set by the hardware or by an engine configuration cannot move when a
+  frontend config value moves.** Under one uniform membership rule **all three arms carry it**: 30.0,
+  40.0 and 60.0 s at 6, 8 and 12 s. **BOUNDED — why the count is five is not established.** The
+  reading this section first offered, that five ticks' worth of promotion crosses the old-generation
+  threshold, **names the model Run 42 falsified**, and Run 48 sharpens that exclusion rather than
+  rescuing it: the beat tracks a frontend quantity while staying immovable by the engine-side budget
+  the same model says sets it. What accumulates over five ticks is unidentified. The 6 s arm is the
+  low-quality point — 58% dropout, a capped landing check, an unexplained 167 s silent tail — and is
+  consistent with the law rather than carrying it.
+- **That reconciles the nulls rather than contradicting them.** Runs 37, 43 and 46 each removed one
+  *contributor* to the per-tick update and read a null; Run 39 froze the *whole* tick and read zero.
+  Both hold if promotion is spread across the entire update — no single contributor is removable
+  enough to matter — while the **number of ticks per collection is fixed**, so the period tracks the
+  interval. Run 48 measures directly what Runs 37 to 46 could only circle.
+- **The beat reaches zero exactly once, and Run 48 explains why.** Freezing the rotation tick takes
+  it to zero in 6737 frames (Run 39, p = 0.0006). A display that does not advance is not the display
+  — but the tick's *rate* is a configuration value, and that is the finding.
+
+**SUPERSEDED, and kept visible because it was this record's conclusion for a day.** Until Run 48 this
+section closed as follows: *"The residual ~500 ms freeze every ~40 s is a full stop-the-world
+JavaScriptCore collection that **no lever this investigation could reach moves** … It is **not** the
+claim that the residual is provably irreducible: the precise engine mechanism — which collection
+phase the half-second is spent in, and what triggers it — is unidentified, and an unidentified
+trigger may sit somewhere no lever was pointed at."* The caution was right and the conclusion was
+wrong in its first clause: **a lever this investigation could reach does move it**, and it was
+reachable all along — it is a value in the application's own configuration. The two engine levers
+that paragraph named as enumerated-but-un-run, `JSC_largeHeapSize` and a *raised* `JSC_forceRAMSize`,
+are **still un-run** — and they are **frequency** levers, not pause levers: both raise the promotion
+budget, which changes how often a collection is due. The page's **DOM-wrapper population** is the
+un-run **pause** lever, because it changes how much gets marked. **Neither half is closed.**
+
+**The conclusion, in the two halves the evidence now separates.**
+
+- **The per-event pause is the un-chunkable half.** ~450 ms, paid in one unbroken stop-the-world
+  block, because armv6 compiles concurrent marking out by a correctness gate that cannot safely be
+  lifted. Nothing in this record shortens it, and **what it is spent on is still unidentified** —
+  500 ms over Run 44's 20866-node census is ~24 µs per node, orders off a mark rate, so the phase is
+  unpinned.
+- **The frequency is not a floor. It is the frontend's rotation cadence**, at five ticks per
+  collection across every interval measured — though *why* five is unidentified. That makes the residual's frequency **WiseKiosk's to own, not
+  the image's and not the hardware's** — which is the single most useful thing this investigation
+  produced, because it moves the question out of a 4.5 h rebuild and into a config value and a
+  render path.
+
+**Production is unchanged and this section proposes no cadence change.** The schema default stays at
+8 s (owner, 2026-09-23). Run 48 is a diagnostic: it locates the cause. Lengthening the interval would
+trade the viewer's refresh rate against stall frequency and is a product decision nobody has taken
+here. **The lever "reduce the frontend's per-second allocation churn" stays withdrawn** — it was the
+right *subsystem* and the wrong *quantity*; the quantity is the tick rate and the per-tick promotion
+volume behind it. The paragraph in "Real-time framing" that opens the allocation lever is superseded
+by this section.
+
+**The instrument that would settle it has still not been read, and the reason is no longer the one
+this record gave.** `JSC_logGC` prints, per collection, the scope, the heap capacity, the mark-stack
+sizes and the pause in milliseconds — one capture of it answers the phase question, the trigger
+question and Run 44's `eden:0` at once. This record dismissed it as "substantially compiled out";
+**that is refuted** — the option is `Availability::Normal` and honoured in this build. The trace has
+gone uncaptured because `dataLog` writes to the **WebProcess's stderr**, and Run 47's attempt to
+redirect it was denied by the WebProcess sandbox. A sandbox-writable path, a stderr redirect, or the
+inspector's heap tracking would finally read it. **It remains the cheapest unrun experiment in this
+record.**
+
+**What was fixed is real and is a different quantity.** The marquee **stutter** is fixed by
+re-mechanising to `scrollLeft` (Run 25, 2.7x) and the clock relayout by two CSS properties (Run 7,
+~8x on p90). Those are smoothness results and they hold. The allocation reductions Run 43 built —
+the clock granularity split, the `matchMedia` cache — are **banked, not discarded**: they reduce real
+work and they matter for a future in which the board hosts the application itself rather than
+rendering a mirror-served page. They do not move today's floor, and this record does not claim they
+do.
+
+**What would move it is a different architecture, not a different configuration**, and naming it is
+not proposing it. A renderer that owns its own frame budget, or a display whose content advances
+without re-executing a reactive graph, has a computable worst case where this one has an observed
+one. "Real-time framing" already says that and already says it is not costed here. **Runs 37 to 48
+change only one thing about that paragraph: the cheap in-application step it said came first has now
+been taken, and it did not work.**
+
+**What this closes, and what it does not.** The **technical lever** this record was left open on is
+closed: it was run, in every form available to it, and it does not move the beat. **The mechanism is
+not closed with it.** Which collection phase the ~500 ms is spent in, and what triggers the
+collection, are both unidentified, and this section says so rather than naming a trigger the
+measurements have falsified. **Closure of #100 gpu-compositing is not asserted here and is the
+owner's.** What remains open under it:
+
+- **The mechanism**, and the one cheap experiment that would name it — a `JSC_logGC` capture whose
+  output is actually collected off the WebProcess's stderr.
+- **Open levers in both halves.** On **frequency**: `JSC_largeHeapSize` and a *raised*
+  `JSC_forceRAMSize`, both promotion-budget levers, enumerated and un-run. On the **pause**: the
+  page's DOM-wrapper population, never enumerated and un-run.
+- **The durable image delivery**, still an untaken owner decision — see "Durable image delivery —
+  pending owner decision".
+- **Four R2 obligations**, not two: the scripts Runs 3 to 7 put on the board are uncommitted;
+  [`parse_alloc.py`](parse_alloc.py) reads an earlier revision of Run 36's payload than the committed
+  probe emits; Run 44's census diff **banked no numbers** (its named tool `profile-churn.mjs` is
+  uncommitted, though the committed `webkit-inspect.mjs` implements the same experiment, so the
+  obligation is the numbers rather than the tool); and **Run 47 has no committed capture at all.**
+- **Two harness obligations this record's own reviews surfaced.** The three arm-parsers print a
+  confident VERDICT with no event-count guard — a capture with zero stalls in every arm reads as a
+  confirmation — and [`parse_baseline.py`](parse_baseline.py), the analyser behind every *adopted*
+  conclusion here, has no test, no landing check and the 40 s period baked into its fold.
+
 ## Root cause of the residual stall
 
 **The residual is a JavaScriptCore garbage-collection pause.** A long-lived page that allocates on a
@@ -2022,6 +3288,14 @@ ARM11 core and stops the main thread for roughly half a second at the steady arr
 in the tail. The allocation sources named there are the shape of the mechanism and are **not
 measured on this page**; what is measured is that allocation drives the stall. Four legs carry the
 identification, and the second of them is also the test the withdrawn one failed.
+
+**BOUNDED by "Runs 37-48 — the GC lever, and where it is driven from".** That the residual is a full stop-the-world
+JavaScriptCore collection stands. The sentence above it — *"walks its heap up to the collector's
+threshold"* — names a **trigger**, and Runs 42, 45 and 47 leave the trigger unidentified: the heap
+budget was pulled 4x in the direction that model owes a response to, the full-GC timer was changed
+16x, and WebKit's memory-pressure handler was killed outright, and the beat did not move for any of
+them. Read the threshold clause as the shape of a generational collector, not as this record's
+measured finding.
 
 - **Allocation drives it, measured directly and by a wide margin (Run 36).** Inside one capture,
   with arms interleaved so board drift cannot masquerade as the effect, an arm allocating and
@@ -2058,7 +3332,11 @@ per-cycle rendering event looks like.** Run 26b's seven arrivals past t=40 s are
 80.1); Run 34's carry it with one extra arrival between; and Run 35's are 40.0 and 40.1 s apart at a
 third of the pixels. That period is **five turns of the marquee's 8 s cycle**, so
 nothing in the cycle explains why one turn in five costs half a second. A steady allocation rate
-crossing a fixed heap threshold explains the period directly. The phase lock Run 26b reads — eight of
+crossing a fixed heap threshold explains the period directly. **BOUNDED (Runs 42, 45, 47):** that
+sentence names the heap threshold as the mechanism, and the levers that reach a heap threshold — the
+budget, the growth factors, the full-GC timer — are each a measured no-op on the period. What
+survives is the weaker half: the cadence is *threshold-shaped*, and which threshold is unidentified.
+The phase lock Run 26b reads — eight of
 eight steady stalls at t mod 8 s = 1.8–2.0, the scroll-start — then says only *which* frame of the
 cycle is the one that carries the collection when the threshold is due: the busiest frame in the
 cycle, the one that allocates and works most.
@@ -2087,8 +3365,8 @@ full-viewport repaint costs on this board; it simply is not measuring the stall.
 content-independence and Run 30's inert, verifiably-landed `contain: paint` stand as measured. Run
 22's 1080p → 720p result stands: it measures during-motion **throughput**, which is pixel-bound, and
 the error was reading it as the same quantity as the stall. The engine levers in "Engine levers,
-measured and exhausted" are still measured and still negative — they were aimed at paint, which is
-the wrong target, so their nullity is expected rather than informative about the collector.
+measured" are still measured and still negative — they were aimed at paint, which is the wrong
+target, so their nullity is expected rather than informative about the collector.
 
 **The honest gaps, named rather than glossed.**
 
@@ -2097,6 +3375,14 @@ the wrong target, so their nullity is expected rather than informative about the
   allocation manipulation with a verified landing (Run 36), a falsified alternative (Run 35) and the
   arrival cadence. A direct read of collection events would convert it from convergent inference to
   observation, and that read has not been taken.
+
+  **SUPERSEDED IN PART by "Runs 37-48 — the GC lever, and where it is driven from".** Run 44 took a collector read:
+  the remote inspector is reachable on this build over the HTTP-server variable, and it returned a
+  heap census and one typed collection. That read is **n = 1 with a partly-broken event stream**, so
+  the gap narrows rather than closes. **The GC-event trace is still not captured** after forty-seven
+  runs — and the reason this record gave for that, that `JSC_logGC` is substantially compiled out, is
+  **wrong** (Run 47): the option is honoured, and its output goes to the WebProcess's stderr, which
+  nothing here was collecting.
 - **Run 36 shows allocation is sufficient to produce the stall, not that the frontend's own
   allocation is the only trigger.** The injected pressure is far above anything the page does, and
   the shipped page's per-second allocation has not been measured.
@@ -2108,21 +3394,37 @@ the wrong target, so their nullity is expected rather than informative about the
   `longtask` entry type is absent, so the engine-side cross-check was gone too. **Both missing
   instruments are build-time conditions with a build-time answer** — see "Real-time framing".
 
-## Engine levers, measured and exhausted
+  **SUPERSEDED IN PART by "Runs 37-48 — the GC lever, and where it is driven from".** The inspector is **not**
+  unavailable on this build and no rebuild is needed: the launcher wires the WebSocket-only server
+  variable, whose silent-socket behaviour is exactly the symptom recorded above, and
+  `WEBKIT_INSPECTOR_HTTP_SERVER` works over the wire (Run 44). **"Both missing instruments are
+  build-time conditions" is therefore withdrawn.** What is *not* withdrawn is the gap itself: Run 44
+  drove `Heap.*`, not `Timeline`, so **the Paint rect is still unread**, and the `longtask` absence
+  stands.
 
-Every **runtime** configuration lever WebKit and the display stack expose on this SoC, each measured
-on the board and each scored against the run that measured it. The build-time surface —
-`PACKAGECONFIG` on the webkit recipe — is a separate class and is **not** enumerated here; see
-"Real-time framing".
+## Engine levers, measured
+
+Every **runtime** configuration lever WebKit and the display stack expose on this SoC **that this
+investigation measured**, each measured on the board and each scored against the run that measured
+it. **This ledger was titled "measured and exhausted" until Run 47, and it was not exhausted** — it
+enumerated only rendering levers while a whole memory-management subsystem with its own thresholds,
+its own hold-off arithmetic and its own environment variable sat outside it, and two engine levers
+named in this record's own source analysis are still un-run (see "Runs 37-48 — the GC lever, and where it is
+driven from"). The word is dropped rather than defended. The build-time surface — `PACKAGECONFIG` on the
+webkit recipe — is a separate class and is **not** enumerated here; see "Real-time framing".
 
 **These rows are not a series and must not be differenced against each other.** Each is one run's own
 number against its own reference, across different resolutions, bundles and mechanisms. The column
 says what that run's verdict was, not where a lever sits in a ranking.
 
-**Every lever in this table was aimed at paint**, and paint is not the residual's mechanism — see
-"Root cause of the residual stall". The rows are still correct as measurements and still correct as
-verdicts on their own levers; what they are not is evidence that the residual is unbounded, because
-none of them was ever pointed at the collector.
+**Every rendering lever in this table was aimed at paint**, and paint is not the residual's mechanism
+— see "Root cause of the residual stall". Those rows are still correct as measurements and still
+correct as verdicts on their own levers; what they are not is evidence that the residual is
+unbounded, because none of them was ever pointed at the collector. **The last three rows are the
+levers that *were*** — two JavaScriptCore options and WebKit's memory-pressure handler — **and they
+were absent from this table until Run 47 made the omission conspicuous**: a ledger of "every runtime
+lever" that enumerated only rendering ones is how a whole subsystem with its own thresholds, its own
+hold-off arithmetic and its own environment variable went unconsidered for nine runs.
 
 | Lever | Run | Measured | Verdict |
 |---|---|---|---|
@@ -2137,6 +3439,9 @@ none of them was ever pointed at the collector.
 | Per-row constant scroll velocity | 20 | 20.80 → **21.94** px per moving frame, frame time +4.8% | **Does not engage** on overflows of 1–108 px |
 | Shrinking the hold phases | 24 | 3 static frames in 3181; window mean 14.1 fps | **Worse.** Removing the rests gangs the repaints instead of spreading them |
 | A 200 ms stagger between row starts | 27 | 0.042/s, and **6 of 6** steady stalls still at one phase | **Null.** Reverted |
+| `JSC_forceRAMSize=32MB` + growth factors 1.05 — the collector's heap and growth budget | 42 | beat 40.5 s to 401.0 s at **39.9–40.3 s**, Run 41's period; `VmRSS` 89984 kB indicates the landing, against Run 37's capture | **Null on the beat, and the direction matters.** It cut the promotion budget 4x, which a promotion-paced cadence owes a 4x shorter period for. `collectContinuously` never applied |
+| `percentCPUPerMBForFullTimer` ÷ 16 — the full-collection timer | 45 | beat 42.0 s to 522.5 s at **40.0–40.2 s**; phase shifts ~1.5 s, period identical | **Null on the beat.** The full-GC timer is not the binding constraint |
+| `WEBKIT_DISABLE_MEMORY_PRESSURE_MONITOR=1` — the complete kill switch for WebKit's memory-pressure handler | 47 | **40.0 s in both arms**, with the variable read back from surf's own `/proc/<pid>/environ`; the ≥90% trigger separately excluded on headroom (`MemAvailable` ~263 MB of 435 against the ~43.5 MB the threshold needs) | **Null on the beat, landing verified, and it is the decisive one.** The switch skips `install()`, so the arms rule out the whole handler and not merely its polled trigger |
 
 What is left after the ledger is not an engine lever, and the two things that moved a number moved
 **mean frame time**: **fewer pixels** (Run 22) and **a different mechanism in the app** (Run 25,
@@ -2146,6 +3451,12 @@ frame, 491 ms and 496 ms, and Run 35 takes the pixels down 3x more for 1.4x on t
 lever that does reach the stall is in the app too, and it is not a rendering lever**: the frontend's
 per-second allocation churn, which Run 36 shows drives the stall by 474x when pushed in the wrong
 direction. It has not been pushed in the right one; see "Real-time framing".
+
+**SUPERSEDED by "Runs 37-48 — the GC lever, and where it is driven from".** It has now been pushed in the right
+one, in three forms — the marquee's transient churn (Run 37), Fix 1's clock split and `matchMedia`
+cache (Run 43), and an imperative render that bypasses the reactive `{#each}` (Run 46) — and every
+one is a measured null on the beat. **This is not a lever that reaches the stall.** The sentence is
+kept because it is what the record believed when it was written.
 
 ## Real-time framing
 
@@ -2157,10 +3468,16 @@ rather than against an average.
 The measured answer is that **no runtime configuration of this stack bounds the deadline, and the
 lever that reaches the mechanism is in the application rather than in the stack at all.**
 
+**CORRECTED IN SCOPE by "Runs 37-48 — the GC lever, and where it is driven from".** The first half is supported for
+what was measured — WebKit's rendering levers, JavaScriptCore's options and, since Run 47, WebKit's
+memory-pressure handler — and is asserted here about *the stack*, which is wider than what was
+enumerated. Read it as scoped to those. **The second half is measured false**: the application-side
+lever was taken in three forms and reaches nothing (Runs 37, 43, 46).
+
 A browser engine is a soft-real-time system by construction: it decides when to repaint, how much of
 the surface to repaint, on which thread, and when to collect its heap, from heuristics that optimise
 the common case and carry no upper bound. The **rendering** heuristics have all been tried on the
-board and are in "Engine levers, measured and exhausted" — compositing, tiled compositing, painting
+board and are in "Engine levers, measured" — compositing, tiled compositing, painting
 threads, containment, two resolution cuts. Containment was the sharpest of them because it addresses
 the damage rect directly, and Run 30 applied it, verified it landed by reading the computed value
 back, and watched the rate go through it. **That whole ledger is aimed at the wrong subsystem.** The
@@ -2186,6 +3503,13 @@ loop. **This investigation does not take it, size it, or promise what it returns
 this is the thread #100 gpu-compositing is now open on, and that it is the owner's to pick up in the
 WiseKiosk repository.
 
+**SUPERSEDED by "Runs 37-48 — the GC lever, and where it is driven from".** The audit was taken, by this
+investigation rather than by the owner, and the lever is **withdrawn**: Run 37 removes the marquee's
+transient churn, Run 43 ships the clock granularity split and the `matchMedia` cache, Run 46 removes
+the reactive render itself, and each is a measured null on the ~40 s beat. **#100 gpu-compositing is
+not open on this thread**; what it is open on is stated in "Runs 37-48 — the GC lever, and where it is
+driven from", and the un-run part of it is the *mechanism*, not the lever.
+
 **Two levers sit outside what was surveyed, and naming them is part of the honesty of the
 conclusion.**
 
@@ -2201,6 +3525,17 @@ conclusion.**
   inspector returns nothing, so a developer- or inspector-enabled WebKit build is what would turn
   both the collector read and the Paint rect from inference into observation. Costing that is an
   owner decision; **not naming it** would be a defect in this section, which is why it is named.
+
+  **SUPERSEDED on both counts by "Runs 37-48 — the GC lever, and where it is driven from", and kept visible.** The
+  first is **answered definitively**: `Options.cpp:707-708` compiles `useConcurrentGC` out on any
+  architecture that is neither `X86_64` nor `ARM64`, so no concurrent or incremental collector is
+  available to this build, and the gate is a correctness gate rather than a build-configuration
+  choice — no `PACKAGECONFIG` reaches it. The second is **wrong twice over**: the remote inspector is
+  reachable with no rebuild, on the HTTP-server variable rather than the WebSocket one (Run 44), and
+  JavaScriptCore's options are **not** compiled out of this release build — `JSC_logGC` is
+  `Availability::Normal` and honoured, and the reason its trace went unread is that `dataLog` writes
+  to the WebProcess's stderr (Run 47). The `WEBKIT_DEBUG` half stands, and the Paint rect is still
+  unread.
 - **A renderer that owns its own frame budget** remains the architectural answer to a *hard* bound,
   whatever the current mechanism is — one that decides what to do from the application's own model of
   what changed, and whose worst case is computable rather than observed. That is a different
@@ -2656,6 +3991,134 @@ Each finding names the run that decided it. **OBSERVATION** is something read of
   injected pressure is far above anything the page does — it shows allocation is sufficient to produce
   the stall, not that the frontend's allocation is its only trigger.
 
+  **SUPERSEDED IN PART (Runs 37 to 48), and kept visible.** "The lever that follows is reducing the
+  frontend's per-second allocation churn, and it is un-run" is **withdrawn**: it was run in three
+  forms and each is a null (Runs 37, 43, 46). Of the three gaps, one narrowed — a collector read was
+  taken (Run 44), at n = 1 on a partly-broken event stream — and **two stand unchanged**: the page's
+  own allocation rate is still unmeasured, and Run 36's injected pressure is still far above anything
+  the page does. The findings that replace this paragraph are the four immediately below.
+
+- **OBSERVATION (Run 39) — freezing the rotation tick is the only manipulation that takes the stall
+  to zero.** Three conditions interleaved in one capture with the app's own skip counters read back
+  per arm: nothing ablated **10 of 6109 frames over 250 ms**, the rotation tick's derived recompute
+  skipped **0 of 6737** with a **218 ms maximum** — no near-miss either — and the clock re-read
+  skipped 5 of 6132. A binomial test against the arms' frame counts gives **p = 0.0006** for the
+  rotation arm and **p = 0.21** for the clock arm, whose parser verdict is **not adopted**. Arm R is
+  not a shippable configuration: a rotation that does not recompute is a display that does not
+  advance.
+
+- **WITHDRAWN — "reduce the WiseKiosk frontend's per-second allocation churn" (Runs 37, 43, 46).**
+  OBSERVATION: the marquee's per-frame transient allocation toggled inside one capture under
+  byte-identical motion, with per-arm path counters read back, gives **5 of 12965 frames (0.039%)**
+  allocating against **7 of 6696 (0.105%)** allocation-free — p = 0.12, and the clean arm is the
+  higher one (Run 37). OBSERVATION: Fix 1's clock granularity split and `matchMedia` cache read
+  **0.043/s** with the beat at 40.0–40.1 s against the clean baseline's 0.046/s and identical beat
+  (Run 43). OBSERVATION: an imperative tour render that bypasses the reactive `{#each}` entirely
+  reads **0.043/s** with the beat unchanged (Run 46). INFERENCE: the application's own allocation is
+  not what paces the collection, and the lever "Real-time framing" was left open on is closed against
+  itself. **The mechanism this record offered for the null — that the promotion is spread across the
+  reactive graph — is superseded**, because it names a promotion trigger the runs below falsify.
+
+- **WITHDRAWN — "the collection is promotion-triggered" (Runs 42, 45, 47).** This record stated it
+  twice as settled. OBSERVATION: `JSC_forceRAMSize=32MB` with growth factors at 1.05 leaves the beat
+  at Run 41's period (Run 42); OBSERVATION: `percentCPUPerMBForFullTimer` divided by 16 shifts the
+  phase ~1.5 s and leaves the period identical (Run 45); OBSERVATION: the complete kill switch for
+  WebKit's memory-pressure handler — which skips `install()` outright rather than suppressing a
+  trigger, **with its landing verified by an anchored `/proc/<pid>/environ` read on surf, the UI
+  process that consumes it** — leaves the beat at **40.0 s in both arms**; and separately the
+  monitor's **≥90%** trigger is excluded on headroom, needing `MemAvailable` to fall from ~263 MB to
+  ~43.5 MB of 435 against a web process of 90–106 MB (Run 47). INFERENCE: Run 42's lever **is** a promotion-path lever —
+  `forceRAMSize` and the growth factors set `m_maxHeapSize`, and the eden-to-old-generation ratio is
+  `m_maxEdenSize / m_maxHeapSize` — and it cut the promotion budget **4x**, which a promotion-paced
+  cadence owes a roughly 4x shorter period for. It got nothing. **That is a falsification of the
+  promotion model, and the trigger is unidentified.**
+
+- **WITHDRAWN — "`JSC_logGC` is substantially compiled out of this build" (Run 38, Run 45; refuted by
+  Run 47).** OBSERVATION: the option is declared `Availability::Normal` at `OptionsList.h:381`, which
+  the environment-override path short-circuits the availability test for, and its emission sites in
+  `heap/` carry no compile-time guard; what is compiled out is `dataLogLnIf` under a `constexpr bool
+  verbose = false`, a different thing. OBSERVATION (Run 47): the option and `WTF_DATA_LOG_FILENAME`
+  reached the WebProcess — confirmed in `/proc/<pid>/environ` — and no descriptor opened to the
+  target path, which the WebProcess sandbox denies. INFERENCE: the near-empty trace was a
+  **capture-routing bug**, not a build property: `dataLog` writes to the WebProcess's own stderr,
+  which neither the journal nor the surf log collects. **This is the reading that closed off this
+  investigation's best instrument for nine runs**, and the instrument is still unread.
+
+- **WITHDRAWN — "the remote inspector is unavailable on this build" (Run 44).** OBSERVATION: the
+  launcher wires `KIOSK_INSPECTOR=1` to `WEBKIT_INSPECTOR_SERVER`, which is WebSocket-only and
+  answers a plain `GET /` by connecting and then hanging with zero bytes — precisely the symptom this
+  record filed as a build-time condition. `WEBKIT_INSPECTOR_HTTP_SERVER` serves a target list an HTTP
+  client can drive, is settable in `/data/config/kiosk.conf` over the wire, and **needs no rebuild**.
+  The instrument was reachable the whole time, on the other variable. **The Paint-rect gap is not
+  retired by this**: Run 44 drove `Heap.*`, not `Timeline`.
+
+- **OBSERVATION (Run 48) — the beat is 5x the frontend's rotation interval, so its frequency is not
+  a floor.** Three arms on **one** bundle (`index-DJUeJLKg.js`), varying only the application's
+  `rotation_interval_seconds`, each interval read back in band from the capture's own `R[]` series
+  (medians **6.000, 8.000, 12.000 s**). Scored by [`parse_rotation.py`](parse_rotation.py) under
+  **one uniform membership rule applied to all three arms** — post-startup arrivals at or above the
+  probe's own 250 ms cutoff, companion pairs clustered — **every arm carries a beat at 5 x its
+  tick**: **30.0 s** at 6 s (8 of 9 arrivals on-grid, 58% of grid points dropped), **40.0 s** at 8 s
+  (14 of 15 on-grid, **0%** dropped), **60.0 s** at 12 s (gap series 60.1, 60.0, 60.0 and a 120.2 s
+  double). **A residual set by the hardware or by an engine configuration cannot move when a frontend
+  config value moves.**
+
+  OBSERVATION: the 6 s arm is the **low-quality** point, not a counter-example. An earlier reading of
+  this run scored the arms by hand at 400 ms, kept a 279 ms arrival in the 8 s arm, demoted 252-312 ms
+  arrivals in the 6 s arm, and concluded the 6 s arm "broke the linearity" — **that reading is
+  withdrawn**; it was the same amplitude band treated two ways, each time toward the hypothesis. Under
+  the uniform rule the 6 s gaps read 60.0, **29.7, 30.4, 29.8**, 60.4, 66.1, 53.7, 60.1 s: a 30 s
+  fundamental with alternate members missing. Three further facts bound that arm and are stated
+  rather than folded in: its **`R[]` capped at the probe's 80-entry limit**, covering only 0-488.1 s
+  of 588 s; its stall stream **goes silent for its final 167 s** with rotation confirmed still
+  running, which is unexplained; and a page that stopped doing per-tick work would look identical.
+
+  INFERENCE, and it is narrower than this record first wrote: **no single contributor to the per-tick
+  update is removable enough to matter** — which is why Runs 37, 43 and 46 read nulls — **while the
+  number of ticks per collection stays fixed**, which is why the period tracks the interval and why
+  Run 39's whole-tick freeze reached zero. **It locates the residual's frequency as the frontend's**,
+  and therefore the owner's, rather than the image's or the board's. Production stays at the schema
+  default 8 s (owner, 2026-09-23); this is a diagnostic that locates the cause, not a cadence change.
+
+- **BOUNDED (Run 42, sharpened by Run 48) — "the collection fires every fifth tick because five
+  ticks' worth of promotion crosses the old-generation threshold".** That sentence was written into
+  this record when Run 48 landed, and it **reinstates the promotion-threshold model Run 42
+  falsified**: `JSC_forceRAMSize=32MB` cut the promotion budget roughly 4x, which the model owes a
+  roughly 4x shorter period, and the period held at 40.0 s. Run 48 does not rescue it — **it sharpens
+  the exclusion**, because the beat demonstrably tracks a frontend quantity while remaining immovable
+  by the engine-side budget the same model says sets it. **What is measured is that the beat is 5 x
+  the rotation tick. What accumulates over five ticks, and why the count is five rather than three or
+  eight, is unidentified** — and sits beside this record's other open half, what the ~450 ms is spent
+  on.
+
+- **SUPERSEDED (Run 48) — "the residual is a floor that no reachable lever moves".** This record
+  carried, for one day, the INFERENCE that *"no lever this investigation could reach moves it, and
+  the precise engine mechanism — which collection phase the half-second is spent in, and what
+  triggers it — is unidentified"*. **Its first clause is refuted**: Run 48's lever is reachable, it
+  is a value in the application's own configuration, and it moves the beat by 50%. The entry is kept
+  visible because its caution was the right instinct — it refused "provably irreducible" — and
+  because the sequence that produced it is the substance of this investigation: **every engine lever
+  was null, which is exactly what made the engine look like the floor, and the lever that worked was
+  never in the engine at all.**
+
+  **What survives from it, unchanged:** the **pause** leg — armv6 compiles concurrent marking out, so
+  a full collection cannot be chunked, every citation re-derived in the extracted tree — and the
+  admission that **what the ~450 ms is spent on is still unidentified**, since 500 ms over Run 44's
+  20866-node census is ~24 µs per node, orders off a mark rate. **Three levers remain un-run, and
+  they do not all bear on the same half** — an earlier draft filed all three under the pause, which
+  made the frequency half read as closed when it is not:
+
+  - **Frequency half, still open.** `JSC_largeHeapSize` and a *raised* `JSC_forceRAMSize` are
+    **promotion-budget** levers — [`jsc-gc-findings.md`](jsc-gc-findings.md) calls the first "the
+    promotion budget itself", and raising either raises the threshold a collection is due at, which
+    is a lever on **how often** rather than on how long. Run 42 pulled that budget in the *tightening*
+    direction and got nothing; neither has been pulled the other way.
+  - **Pause half, still open.** The page's **DOM-wrapper population** is the quantity a
+    constraint-solving-dominated pause scales with, so reducing it would shrink **what gets marked**.
+
+  **Both halves therefore have named open levers**, and both are named in "Runs 37-48 — the GC lever,
+  and where it is driven from" rather than left implicit.
+
 - **A standing deploy hazard, demonstrated rather than argued (Runs 6 and 7).** OBSERVATION: the
   mirror serves `index.html` with **no `Cache-Control` and no `ETag`, only `Last-Modified`**, so
   WebKit caches the document heuristically and reuses it across kiosk restarts. The assets it names
@@ -2923,10 +4386,20 @@ gap "Changes configured as a result" records for the `.seconds` fix.
   garbage-collection pause**, driven by allocation at 474x on the miss fraction with the arms'
   allocation counters read back. The withdrawn identification is kept visible rather than deleted.
   The evidence, the withdrawal and the gaps are in "Root cause of the residual stall"; the levers
-  tried — all of them aimed at paint — are in "Engine levers, measured and exhausted"; the lever that
+  tried — all of them aimed at paint — are in "Engine levers, measured"; the lever that
   follows is in "Real-time framing". **The next step is not another engine lever and not yet an
   architecture decision** — it is a frontend allocation audit, it is un-run, and it is the owner's.
   #100 gpu-compositing stays open on it.
+
+  **SUPERSEDED by "Runs 37-48 — the GC lever, and where it is driven from".** The frontend allocation
+  audit was run, by this investigation and in three forms, and each is a measured null on the ~40 s
+  beat (Runs 37, 43, 46). **#100 gpu-compositing does not stay open on it.** Run 48 then found what
+  the audit was looking for in the wrong units: the beat is **5 x the park-wait-times rotation
+  interval**, so the collection's *frequency* is set by the rotation cadence and the per-tick
+  promotion volume behind it — both app-side, both the owner's. **The residual's frequency is located
+  in WiseKiosk**, not in the image and not in the hardware; the per-event ~450 ms pause is the
+  un-chunkable half and stays with the board. Production keeps the schema default 8 s (owner,
+  2026-09-23).
 
 - **The motion cost is settled by re-mechanising, not by trading legibility away — a WiseKiosk
   frontend change.** Run 25 drives the clipping column's `scrollLeft` instead of translating the text
@@ -2970,10 +4443,13 @@ gap "Changes configured as a result" records for the `.seconds` fix.
 - **The `probe4` harness, the motion probe family, the shipped-mechanism probes, the allocation probe
   and every raw capture they produced, committed beside this README** — the R2 obligation for Runs 8
   to 36, discharged on the artefacts. Every number in "Metrics" is reproduced from the named file by
-  the parser that row names, or from the `AL` record's own fields for Run 36. Two obligations remain
-  outstanding and are named in "Test runs": the scripts Runs 3 to 7 put on the board are not committed
-  here, and [`parse_alloc.py`](parse_alloc.py) reads an earlier revision of Run 36's payload than the
-  committed probe emits.
+  the parser that row names, or from the `AL` record's own fields for Run 36. **Four** obligations
+  remain outstanding and are named in "Test runs": the scripts Runs 3 to 7 put on the board are not
+  committed here; [`parse_alloc.py`](parse_alloc.py) reads an earlier revision of Run 36's payload
+  than the committed probe emits; Run 44's census diff banked no numbers, its named tool
+  `profile-churn.mjs` being uncommitted while the committed `webkit-inspect.mjs` implements the same
+  experiment; and **Run 47 has no committed capture at
+  all**, its arrival series being transcribed into its run block from the session's own output.
 
 - **Must not merge as committed — the branch bakes full KMS, which blacks this panel.** `7ce44ba`
   sets `VC4DTBO = "vc4-kms-v3d"`; the running board was hand-edited back to firmware KMS, and

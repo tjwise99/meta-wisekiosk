@@ -1,0 +1,4 @@
+=== Run 38 capability probe (cap-probe.js), prod, bundle index-Mt2gvuKb.js ===
+CAP|pm:NONE|FinalizationRegistry:function|WeakRef:function|gc:undefined|qMt:function|AppleWebKit/605.1.15
+=== Run 38 FinalizationRegistry GC detector (p26_gc.js) — fin=0, callbacks never fired ===
+GC2|118|f4864|big10|fin0|S[1.6:1445,2.7:1080,3.1:369,3.9:793,4.2:300,8.4:286,40.2:304,41:860,41.6:569,42:466]|G[]

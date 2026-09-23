@@ -1,0 +1,9 @@
+=== MQ final payload ===
+xprop: error: Invalid window id format: xwininfo:.
+xprop: error: Invalid window id format: Root.
+xprop: error: Invalid window id format: Parent.
+WM_NAME(STRING) = "@cgDISMfxT:- | MQ|496|f20281|av24|mx1569|BT18|N4|A:12965.5.24.479.12963|C:6696.7.24.531.2|H19419.549.295.12.3.3.0|B1.6:1569W,2.6:978W,4.1:1512W,5.1:1081W,5.5:312W,9.8:286W,41.9:474A,82:472A,122:531C,162:482C,202:474A,242.1:479A,282.2:525C,302:334C,322.5:489C,338.2:381C,338.6:411C,402.5:275A"
+=== loadavg ===
+1.97 2.03 2.07 2/132 14587
+VmRSS:	  106380 kB
+=== done ===

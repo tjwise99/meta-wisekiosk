@@ -1,0 +1,16 @@
+=== Run 44 remote inspector (webkit-inspect.mjs), prod, WEBKIT_INSPECTOR_HTTP_SERVER, bundle index-Mt2gvuKb.js ===
+--- gc 85s: Heap.startTracking -> Heap.garbageCollected events ---
+{"seconds":85,"total":1,"full":1,"eden":0,"fullTimes":[7.08]}
+(collections report type "full"; under tracking the collector is quiesced, so cadence is not the untracked cadence -- used only to confirm the collection TYPE, not frequency)
+--- census: Heap.snapshot (HeapSnapshot v2, 20866 nodes), top classes by bytes ---
+   247882 B     569   UnlinkedFunctionCodeBlock
+   187938 B    2272   Object
+   129285 B    3954   Function
+    91695 B     376   Map
+    84880 B    1061   UnlinkedFunctionExecutable
+    75214 B    2651   string
+    69200 B     865   FunctionExecutable
+    66736 B    1257   JSLexicalEnvironment
+    64256 B    2008   DOMAttributeGetterSetter
+    60320 B     750   Structure
+--- diff (profile-churn.mjs) over 30s: NO retained growth (transient churn, no leak) ---

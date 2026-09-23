@@ -260,7 +260,7 @@ that qualifies, and "Known gaps" says what closes it.
   [`docs/issue_investigation/gpu_compositing/README.md`](docs/issue_investigation/gpu_compositing/README.md) §"Durable image delivery — pending owner decision".
   Two of its findings decide the shape and are not open questions: full KMS **boots and presents a
   black scanout on this panel**, and accelerated compositing measures **5.2x worse than software** —
-  [`docs/issue_investigation/gpu_compositing/README.md`](docs/issue_investigation/gpu_compositing/README.md) §"Engine levers, measured and exhausted".
+  [`docs/issue_investigation/gpu_compositing/README.md`](docs/issue_investigation/gpu_compositing/README.md) §"Engine levers, measured".
 - **Rollback has never been exercised.** RAUC reports healthy slots; that is not the same as proving
   a bad update rolls back, or that a slow-but-healthy boot does *not* trigger one.
 - **Issue #6 RAUC signing private key is committed in this public repository** — closed by rotation;
