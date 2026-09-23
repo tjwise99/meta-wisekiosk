@@ -766,7 +766,24 @@ else
         | sed 's/^/        /'
 fi
 
-# --- 15. no recipe may invoke a bare `python3` ----------------------------
+# --- 15. the GPU check must still pass its own self-test ------------------
+# tools/kiosk-gpu-check.sh is a gate whose whole claim is that it FAILS when a
+# change re-disables the GPU. Its verdict is three greps over probe text, and the
+# failure it exists to catch -- mesa falling back to its software rasteriser --
+# passes every naive version of the check, because swrast opens a DRM node like
+# the hardware driver does. The self-test drives that case and its
+# spelled-differently variant from fixtures, on no hardware.
+gputest15="tools/kiosk-gpu-check-test.sh"
+if [ ! -f "$gputest15" ]; then
+    bad "guard 15: $gputest15 missing -- the GPU check is no longer self-tested"
+elif out15=$(bash "$gputest15" 2>&1); then
+    ok "the GPU check passes its self-test ($(printf '%s\n' "$out15" | tail -n1))"
+else
+    bad "the GPU check FAILS its own self-test:"
+    printf '%s\n' "$out15" | grep -E '^(FAIL|kiosk-gpu-check:)' | sed 's/^/        /'
+fi
+
+# --- 16. no recipe may invoke a bare `python3` ----------------------------
 # just sources no startup file, so a repo .venv is never on PATH and a bare
 # `python3` takes a host interpreter that may have no PyYAML -- which failed the
 # YAML guard on a tree that parses fine, repeatedly. The Justfile resolves the
@@ -774,11 +791,11 @@ fi
 # reintroducing the bare call, which would fail for one person and not another
 # with nothing in the diff to say why.
 if [ ! -f Justfile ]; then
-    bad "guard 15: Justfile missing -- the python interpreter is unpinned"
+    bad "guard 16: Justfile missing -- the python interpreter is unpinned"
 elif ! grep -qE '^py[[:space:]]*:=' Justfile; then
-    bad "guard 15: Justfile sets no \`py\` variable -- python recipes would take whatever python3 is on PATH"
+    bad "guard 16: Justfile sets no \`py\` variable -- python recipes would take whatever python3 is on PATH"
 else
-    bare15=""
+    bare16=""
     while IFS= read -r f; do
         [ -f "$f" ] || continue
         # python3 at the start of a recipe line (after its leading indent) or
@@ -789,12 +806,12 @@ else
         # python3 handed to a wrapper (`xargs`/`env`/`timeout ... python3`) and a
         # `#!/usr/bin/env python3` or `[script('python3')]` recipe body -- neither
         # shape occurs here, and widening to them would risk false positives.
-        hit15=$(grep -nE '(^[[:space:]]*|[|;&(][[:space:]]*)python3([[:space:]]|$)' "$f")
-        [ -n "$hit15" ] && bare15="$bare15$(printf '%s\n' "$hit15" | sed "s|^|$f:|")"$'\n'
+        hit16=$(grep -nE '(^[[:space:]]*|[|;&(][[:space:]]*)python3([[:space:]]|$)' "$f")
+        [ -n "$hit16" ] && bare16="$bare16$(printf '%s\n' "$hit16" | sed "s|^|$f:|")"$'\n'
     done < <(git ls-files -- Justfile 'justfiles/*.just')
-    if [ -n "$bare15" ]; then
-        bad "guard 15: a recipe invokes a bare python3 instead of {{py}} -- it will miss the repo .venv:"
-        printf '%s\n' "$bare15" | sed 's/^/        /'
+    if [ -n "$bare16" ]; then
+        bad "guard 16: a recipe invokes a bare python3 instead of {{py}} -- it will miss the repo .venv:"
+        printf '%s\n' "$bare16" | sed 's/^/        /'
     else
         ok "every python recipe runs the resolved interpreter, not a bare python3"
     fi

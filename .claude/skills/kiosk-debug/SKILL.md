@@ -3,9 +3,10 @@ name: kiosk-debug
 description: >-
   Diagnose a running wisekiosk device that has no keyboard, no visible console and a display
   whose correct state is a black screen. Decides which instrument to reach for — TCP-state
-  inference, a screenshot, a soak read, or a boot profile — and drives the tools/kiosk-*.sh
-  scripts behind them. Invoke when the kiosk is unreachable, blank, stale, suspected of
-  leaking memory, or slow to come up, and when a boot-time change needs measuring.
+  inference, a screenshot, a soak read, a boot profile, or a GPU-compositing read — and drives
+  the tools/kiosk-*.sh scripts behind them. Invoke when the kiosk is unreachable, blank, stale,
+  suspected of leaking memory, rendering slowly or tearing, or slow to come up, and when a
+  boot-time change needs measuring.
 ---
 
 # Debugging a display you cannot see
@@ -23,6 +24,7 @@ something definite.
 | Is the screen showing the right thing, right now? | [`tools/kiosk-screenshot.sh`](../../../tools/kiosk-screenshot.sh) | The only check that can catch a *frozen* render. Nothing process-level can. |
 | Is memory flat, or climbing over hours? | `kiosk-soak.sh --summary` on the device, via [`tools/kiosk-ssh.sh`](../../../tools/kiosk-ssh.sh) | The sampler already runs; the answer is in `/data/kiosk-soak.log`, and its own header says how to read it. |
 | Where is boot time going, and would reordering work help? | [`tools/kiosk-bootprofile.sh`](../../../tools/kiosk-bootprofile.sh) | Only source of per-window CPU/I-O and the module timeline. Costs a reboot and ~3 minutes. |
+| Is the page animating on the GPU, or being repainted on the CPU? | [`tools/kiosk-gpu-check.sh`](../../../tools/kiosk-gpu-check.sh) | Reach for this when the page renders but *stutters* — the other rows all answer "is it rendering at all", and a smooth-enough-looking panel and a CPU-bound one are indistinguishable from the room. It reads a PROXY, not the answer: whether a web process holds `/dev/dri` open with a vc4/v3d driver mapped. The authoritative read is `webkit://gpu`'s Renderer row, which no SSH can reach — `--capture` (`just gpu-capture`) drives that page and hands back a PNG for a person to read, and MUTATES the device: it rewrites `/data/config/kiosk.conf` and restarts the kiosk twice. `just gpu-check` is the read-only half. |
 | The device is not answering and its address is unknown | [`tools/kiosk-find.sh`](../../../tools/kiosk-find.sh) | The router's client list is DHCP leases, so a reachable host can be missing from it. Identifying a board needs its MAC, so the script picks the best L2 view it has — Windows interop under WSL, a local interface otherwise — and names it, because under WSL2's NAT this host's own neighbour table never holds a LAN peer. |
 
 Reach for the cheapest instrument that can *fail*. TCP state and a screenshot cost seconds and

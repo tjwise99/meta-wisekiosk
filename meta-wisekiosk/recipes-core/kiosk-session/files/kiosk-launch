@@ -5,7 +5,23 @@
 # kiosk -- systemd Restart=always does that job now.
 export SURF_OVERRIDE_REDIRECT=1
 export SURF_MILESTONES=1
-export GDK_GL=disable
+
+# The rendering architecture, measured rather than chosen. Accelerated
+# compositing runs 5.2x worse than software on this SoC, and the forced vblank
+# timer is part of every board configuration those numbers were taken on -- see
+# docs/issue_investigation/gpu_compositing/README.md under "Engine levers,
+# measured and exhausted" and "Changes configured as a result". They belong in
+# the image rather than in /data/config/kiosk.conf, which reproduces on no
+# reflash: tools/provision.sh writes that file wholesale from the site template,
+# so a renderer setting kept there is destroyed by the next provisioning run.
+#
+# Defaults, not hard sets. Both variables are value-sensitive in WebKit and read
+# "0" as off, so kiosk.service's EnvironmentFile can still re-test either arm
+# over the wire without a build; an unconditional export here would silently
+# beat the device's own config file.
+: "${WEBKIT_DISABLE_DMABUF_RENDERER:=1}"
+: "${WEBKIT_FORCE_VBLANK_TIMER:=1}"
+export WEBKIT_DISABLE_DMABUF_RENDERER WEBKIT_FORCE_VBLANK_TIMER
 
 # Remote Web Inspector. OFF by default for two reasons: it must not perturb a
 # complete-display measurement, and it should not listen unless asked. Turn it
@@ -23,6 +39,19 @@ if [ "${KIOSK_INSPECTOR:-0}" = "1" ]; then
 	export WEBKIT_INSPECTOR_SERVER="${KIOSK_INSPECTOR_BIND:-127.0.0.1:2999}"
 	INSPECT="-N"
 fi
+
+# 1280x720 on a panel the firmware brings up at 1080p. Pixel area is what the
+# during-motion framerate is bound by -- a 2.25x cut doubles it, and it is the
+# one display-stack lever that moves the number at all. See
+# docs/issue_investigation/gpu_compositing/README.md under "Engine levers,
+# measured and exhausted".
+#
+# Not fatal and not silenced. A refused mode-set leaves the firmware's 1080p,
+# which renders correctly and slower, so it must not stop the browser starting;
+# xrandr's own diagnostic and the line below both reach the journal, which is
+# what distinguishes that from a mode-set that took.
+xrandr --output HDMI-1 --mode 1280x720 ||
+	echo "kiosk-launch: 1280x720 mode-set failed, panel stays at the firmware mode" >&2
 
 # There is no backend-readiness wait before the exec, and one must not be built
 # on busybox `nc`: it exits 1 against an open port as well as a closed one, so

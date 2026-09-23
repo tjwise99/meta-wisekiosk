@@ -51,14 +51,19 @@ local_conf_header:
   kernel: |
     PREFERRED_VERSION_linux-raspberrypi = "6.12.%"
 
-  # The live kiosk runs the legacy fbdev path, not vc4 KMS -- gldriver_test.sh
-  # installs 99-fbturbo.conf there because v3d is not "okay" on this board. KMS
-  # would also ignore the firmware HDMI settings above, replacing a display path
-  # that demonstrably works with one that is untested. Nothing here needs GL:
-  # the launcher sets GDK_GL=disable, as the Raspbian kiosk does.
+  # vc4graphics is in MACHINE_FEATURES (rpi-base.inc gates it on
+  # DISABLE_VC4GRAPHICS, which this file does not set), so the image takes the
+  # vc4 path: mesa for virtual/egl, xf86-video-modesetting instead of
+  # xf86-video-fbdev, and xserver-xorg-extension-glx in the X server. That is
+  # what gives the X server glamor -- GPU-accelerated 2D for the display path,
+  # confirmed enabled on the board with no software rasteriser mapped. It is
+  # load-bearing for the throughput the panel reaches, and it is the display
+  # path only: WebKit paints above it in software, because accelerated
+  # compositing measures worse on this SoC. See
+  # docs/issue_investigation/gpu_compositing/README.md under "Engine levers,
+  # measured and exhausted". The `graphics` block carries the overlay and the
+  # mesa pin that go with it; kiosk-launch carries the renderer and the mode.
   display: |
-    DISABLE_VC4GRAPHICS = "1"
-
     # console=tty1 ONLY. The kiosk panel is the console (owner, 2026-08-12) --
     # this unit IS a display, so kernel output always has a screen, and there is
     # no serial adapter and will not be one. The 4.0s mmc_rescan panic was read
@@ -74,6 +79,53 @@ local_conf_header:
     # measured, and changing the firmware setting in config.txt is a different,
     # untested change.
     CMDLINE_SERIAL = "console=tty1"
+
+  # VC4DTBO CANNOT TRAVEL BY OTA. It reaches a board only as the `dtoverlay=`
+  # line rpi-config_git.bb writes into config.txt, which is on the shared FAT
+  # partition, and RAUC_BUNDLE_SLOTS = "rootfs" means RAUC never writes it. The
+  # two PREFERRED_VERSION lines DO ride the bundle. So an OTA alone lands a mesa
+  # userland on whatever overlay the card was flashed with -- the delivery that
+  # covers both halves is in
+  # docs/issue_investigation/gpu_compositing/README.md under "Delivery and board".
+  #
+  # Firmware KMS, not full KMS. Full KMS presents a content-black scanout on
+  # this panel, measured across forced 1080p and 720p, `disable_fw_kms_setup=1`,
+  # an xrandr kick, and compositing both on and off -- it is not a performance
+  # lever on this display, it is a blank one. See
+  # docs/issue_investigation/gpu_compositing/README.md under "Engine levers,
+  # measured and exhausted". A hard set rather than a default taken:
+  # rpi-config_git.bb spells VC4DTBO `?=`, raspberrypi0-wifi.conf overrides
+  # nothing, and sibling machine configs (raspberrypi3, raspberrypi-armv8) do
+  # override it.
+  #
+  # No `video=` on the kernel command line. Firmware KMS leaves the mode to the
+  # firmware, so the HDMI keys in
+  # meta-wisekiosk/recipes-bsp/bootfiles/rpi-config_%.bbappend are the live
+  # mechanism: hdmi_force_hotplug asserts a connector the panel behind the glass
+  # is too slow to answer for, and hdmi_group/hdmi_mode name the mode. The kiosk
+  # then runs at 1280x720, set by xrandr in kiosk-launch -- 2.25x fewer pixels is
+  # the one display-stack lever that moves the during-motion framerate, per the
+  # same section.
+  #
+  # mesa is pinned to poky's 24.0.7. meta-raspberrypi ships mesa 25.1.6, which
+  # inherits the rust class -- a rust toolchain build on armv6 nothing else in
+  # this image needs -- and ships no mesa-gl at that version, so the two halves
+  # of one source tree would build at different versions. meta-raspberrypi's
+  # PACKAGECONFIG bbappends are `_%` and still apply at 24.0.7, so the vc4/v3d
+  # gallium drivers and dri3 come with the older recipe. `just
+  # preferred-version` reports this pin as behind by design; this comment is
+  # the reason it is not a bump to take. See docs/layer-currency.md.
+  graphics: |
+    VC4DTBO = "vc4-fkms-v3d"
+    PREFERRED_VERSION_mesa = "24.0.7"
+    PREFERRED_VERSION_mesa-gl = "24.0.7"
+    # WebKit dlopens libGLESv2.so.2 on its accelerated path, and a runtime dlopen
+    # is invisible to build-time RDEPENDS, so mesa's GLESv2 package ships only if
+    # named here -- without it the web process segfaults the instant compositing
+    # is attempted. kiosk-launch defaults the renderer to software and
+    # /data/config/kiosk.conf can switch it back over the wire, so this package
+    # is what keeps that switch from crashing the browser instead of answering.
+    IMAGE_INSTALL:append = " libgles2-mesa"
 
   kiosk: |
     AUTONOMOS_FEATURES = "graphics"

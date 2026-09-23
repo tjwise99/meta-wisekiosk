@@ -89,6 +89,16 @@ t "prod rauc install"     BLOCK "$(b "ssh root@$PROD rauc install /data/update.r
 t "prod bare reboot"      BLOCK "$(b "ssh root@$PROD reboot")"
 t "prod reprovision"      BLOCK "$(b "tools/provision.sh device root@$PROD")"
 t "prod scp-style target" BLOCK "$(b "just kiosk-send-direct host=root@$PROD:/data")"
+# gpu-capture rewrites /data/config/kiosk.conf and restarts the kiosk twice.
+# Nothing else in rule 1 reaches it: the restart is inside a heredoc and
+# `restart` is not one of the power verbs, so without its own alternative it ran
+# against the wall-mounted board unprompted.
+t "prod gpu-capture"      BLOCK "$(b "just gpu-capture $PROD")"
+t "prod gpu-capture user@" BLOCK "$(b "just gpu-capture host=root@$PHOST")"
+# The direct-script spelling, which is what the script's own usage line prints
+# and therefore the likelier one to be copied. tools/provision.sh and
+# tools/rauc-rotate are already covered both ways for the same reason.
+t "prod gpu-capture direct" BLOCK "$(b "tools/kiosk-gpu-check.sh root@$PROD --capture")"
 # The hostname in ssh-target position, with no `user@` to key on. `-l root <host>`
 # and a bare `ssh <host> <cmd>` are ordinary spellings, and matching the bare
 # TOKEN is not available here -- it is also the MACHINE name (see the ALLOW
@@ -209,6 +219,16 @@ t "MACHINE name, ls path" ALLOW "$(b "ls build/tmp-$PHOST/deploy/images/$PHOST/"
 echo "--- must ALLOW: observing PROD is not destroying it ---"
 t "prod soak-summary"     ALLOW "$(b "just soak-summary root@$PROD 24")"
 t "prod screenshot"       ALLOW "$(b "just screenshot root@$PROD")"
+# The spelled-differently-but-valid neighbour of the two BLOCK cases above.
+# gpu-check only reads /proc, and a prefix-matching rule that caught
+# `gpu-capture` would take this observation with it.
+t "prod gpu-check"        ALLOW "$(b "just gpu-check $PROD")"
+# The same neighbour for the DIRECT spelling. Without it, an alternative that
+# dropped the `--capture` bound -- leaving a bare `tools/kiosk-gpu-check.sh` --
+# would block the read-only probe of prod while this suite stayed fully green.
+# Reading that board is the main legitimate activity on it, and rule 1's own
+# block message promises observation is allowed.
+t "prod gpu-check direct" ALLOW "$(b "tools/kiosk-gpu-check.sh root@$PROD")"
 t "prod backup"           ALLOW "$(b "just kiosk-backup host=root@$PROD")"
 t "prod rauc-status"      ALLOW "$(b "just rauc-status root@$PROD")"
 t "prod preflight"        ALLOW "$(b "just kiosk-preflight host=root@$PROD")"

@@ -130,7 +130,9 @@ it was measured (both pins moved in one commit) it cost 4 h 52 m of `webkitgtk3`
 ([kernel_cve_triage](docs/issue_investigation/kernel_cve_triage/README.md)), a rebuild that bought 16
 CVE closures. Make those decisions before starting, not after. `config.txt`-only knobs (`GPU_MEM`,
 HDMI, overscan, UART) are free to change, and so is the kernel's `PREFERRED_VERSION` — the kernel is
-outside webkit's dependency closure.
+outside webkit's dependency closure. Cheap to rebuild is not the same as reaching a board: the
+`config.txt` knobs are on the shared FAT partition RAUC never writes — see
+[gpu compositing](docs/issue_investigation/gpu_compositing/README.md) §"Delivery and board".
 
 ### Flashing a card
 
@@ -243,19 +245,29 @@ Two more fixes belong upstream but did not need a patch, because a downstream la
 
 ## Status
 
-**Working.** Boots, joins WiFi, renders the kiosk page on the real hardware. Verified on a Pi Zero W
-(BCM2835, ARMv6, 512 MB).
+**Working.** Boots, joins WiFi, renders the kiosk page on the real hardware — verified on a Pi Zero W
+(BCM2835, ARMv6, 512 MB). The vc4 display path the table below describes runs on prod and is measured
+there, but it reaches the board as hand-edits rather than out of a build; the cells say which rows
+that qualifies, and "Known gaps" says what closes it.
 
 | | |
 |---|---|
 | Engine | WebKitGTK 2.44.3, `ENABLE_JIT=OFF`, `MinSizeRel` — genuine ARMv6 (`Tag_CPU_arch: v6KZ`) |
 | Browser | `surf` 2.1 + the kiosk patch (milestones, override-redirect, shims) |
-| Display | bare Xorg, `xf86-video-fbdev`, no display manager, no window manager |
+| Display | bare Xorg on vc4 firmware KMS at 1280x720, `xf86-video-modesetting` + mesa for glamor, WebKit painting in software, no display manager, no window manager — **measured on prod, never out of a build** |
 | Update | RAUC A/B over U-Boot — both slots visible, **rollback never exercised** |
-| Memory | 87 MB used of 428; zram present and never touched |
+| Memory | 87 MB used of 428; zram present and never touched — **measured on the fbdev image** |
 
 ### Known gaps
 
+- **The display path has never come out of a build.** It runs on prod, and every number for it was
+  measured there, but the overlay and the mode-set reached that board as hand-edits to an image that
+  built neither. This tree is reconciled to what was measured; the build and the delivery that close
+  the gap are
+  [`docs/issue_investigation/gpu_compositing/README.md`](docs/issue_investigation/gpu_compositing/README.md) §"Durable image delivery — pending owner decision".
+  Two of its findings decide the shape and are not open questions: full KMS **boots and presents a
+  black scanout on this panel**, and accelerated compositing measures **5.2x worse than software** —
+  [`docs/issue_investigation/gpu_compositing/README.md`](docs/issue_investigation/gpu_compositing/README.md) §"Engine levers, measured".
 - **Rollback has never been exercised.** RAUC reports healthy slots; that is not the same as proving
   a bad update rolls back, or that a slow-but-healthy boot does *not* trigger one.
 - **Issue #6 RAUC signing private key is committed in this public repository** — closed by rotation;
