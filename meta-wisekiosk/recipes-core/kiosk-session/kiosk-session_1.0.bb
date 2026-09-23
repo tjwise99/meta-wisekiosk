@@ -9,7 +9,10 @@ S = "${WORKDIR}"
 
 inherit systemd
 
-RDEPENDS:${PN} = "surf xinit xserver-xorg xserver-xorg-module-exa"
+# xrandr sets the kiosk's 1280x720 mode in kiosk-launch. packagegroup-core-x11
+# pulls it too, so this adds no bytes -- it keeps the launcher's mode-set from
+# depending on an image-level package list it does not own.
+RDEPENDS:${PN} = "surf xinit xserver-xorg xserver-xorg-module-exa xrandr"
 
 SYSTEMD_SERVICE:${PN} = "kiosk.service"
 SYSTEMD_AUTO_ENABLE = "enable"

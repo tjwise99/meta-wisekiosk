@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Issue** | #100 gpu-compositing |
-| **Status** | open — the compositing premise is **disproven**, the clock relayout is found and fixed in the WiseKiosk frontend, the marquee's motion is a measured ~2x per-frame cost still owed a tradeoff, and a residual ~1/s frame stall is bounded to WebKit's rendering of the app's own render tree and unexplained |
+| **Status** | **open, and not ready to close.** The compositing premise is **disproven**; the clock relayout is found and fixed in the WiseKiosk frontend; the marquee's motion cost is settled by re-mechanising it from `transform` to `scrollLeft` (Run 25). The residual stall is root-caused as a **JavaScriptCore garbage-collection pause** (Runs 35 and 36) — the identification this record previously carried, an intermittent full-viewport software repaint, is **withdrawn and kept visible below**. The lever that follows from the corrected mechanism — **reducing the WiseKiosk frontend's per-second allocation churn** — is un-run, and #100 gpu-compositing stays open on it. The **fix** is not in this repository: it spans a WiseKiosk frontend change the owner holds and a durable image change not yet taken |
 | **Opened / last updated** | 2026-09-19 / 2026-09-22 |
 
 The investigation opened on the premise that the marquee stutters because WebKit repaints in
@@ -31,6 +31,54 @@ Run 16 turns every animation in the page off under a computed-value landing chec
 halves — 76.6 → 36.5 ms, ~13 → ~27 fps — leaving the ~1/s floor untouched. The earlier reading that
 the marquee is not the driver, and that no motion tradeoff is owed, is **withdrawn**.
 
+Runs 17 to 36 answer both questions Runs 8 to 16 left open, and the second of them twice: the first
+answer was wrong, and the record keeps it. Run 17 replaces the derived during-motion estimate with a
+measurement — **7.86 fps while any row is moving**, against a 12.5 fps window mean — and the levers
+that follow fall into two kinds. The ones that work are **mechanism and pixels**: Run 25 drives the
+clipping column's `scrollLeft` instead of translating the text inside it and the same motion costs
+**26.5 ms against 71.5 ms per frame, 2.7x cheaper**, inside one interleaved capture; Run 22 cuts the
+panel to 1280x720 and during-motion throughput goes **7.86 → 15.26 fps** for 2.25x fewer pixels. The
+ones that do not are every **engine lever** on this SoC — compositing (Run 19, 5.2x worse), tiled
+software compositing with painting threads (Run 33, 11x more deadline misses), painting threads alone
+(Run 34, null), `contain: paint` on the cards (Run 30, inert and landed), and full KMS, which blacks
+this panel. **Every one of those levers was aimed at paint**, which the runs below establish is not
+the mechanism they needed to reach.
+
+**Those two wins are real, and they are a smoothness result rather than a stall result.** 720p and
+`scrollLeft` buy mean frame time and sustained framerate, and Run 25's own capture says as much
+inside one window: the arms' worst frames are **491 ms and 496 ms**, the same size, while their means
+are 71.5 ms and 26.5 ms. The deadline-miss rate did fall across the same span — **1.07/s** at 1080p
+with the transform marquee (Run 9) against **0.045/s over 289 s** (Run 26b) and **0.089/s over 169 s**
+(Run 26a) on the shipped mechanism at 720p, a 12x to 24x reduction read across runs that differ in
+resolution, mechanism and bundle at once — but Run 36 places that fall on a different cause than this
+record long attributed it to. The same frontend work that changed the mechanism also removed the
+park-card remount, the per-frame style writes and the transform churn, so the page **allocates less
+per second**, so the collector runs less often. It is an allocation win that was read as a rendering
+win.
+
+What is left is one thing, and it is named by the runs that first named it wrongly. The residual is a
+**JavaScriptCore garbage-collection pause** — **468–537 ms** on Run 26b's seven steady arrivals past
+t=40 s (278 ms on its eighth and earliest), with a tail reaching **~1.5 s**, arriving on a **~40 s**
+cadence at a fixed point of the marquee's 8 s cycle. Run 36 drives it directly: an allocation arm interleaved against a baseline
+arm inside one capture takes **216 of 219 frames over 250 ms at a 1147 ms mean**, against **14 of
+6730** in the baseline arm — a **474x** change in the fraction of frames that miss the deadline, with
+each arm's own allocation counter read back (219 and 0). Run 35 cuts the panel to **640x480**, a
+**3.0x** pixel cut, and the stall does not follow it down: the rate reads **0.036/s** against
+0.045/s, the ~40 s cadence is unchanged, and the steady stalls fall only **1.4x** where a pixel-bound
+cost owes 3x. Run 28 excludes layout, and Run 31 takes the floor to nothing on a page whose scripts
+have been stopped.
+
+**The identification this record previously carried — an occasional full-viewport software repaint —
+is withdrawn, and it is kept visible rather than deleted.** Run 35 is what falsified it; Run 29's
+benchmark still prices a full-viewport repaint correctly and is simply not pricing the stall. The
+withdrawal, the evidence that overturned it and the reasoning that pointed away from paint are in
+"Root cause of the residual stall" and in the finding "WITHDRAWN — the residual stall is not a
+full-viewport software repaint". The engineering conclusion in "Real-time framing" changes with it:
+the lever is not a deterministic renderer but the **WiseKiosk frontend's per-second allocation
+churn**, and that lever is un-run. The durable image change that would reproduce the shipped
+configuration is staged and reviewed but undelivered, and remains an owner decision — see "Durable
+image delivery — pending owner decision".
+
 ## Test runs
 
 <!-- One row per (board x image build x test). A `### Run N` block below expands each. -->
@@ -46,6 +94,26 @@ inherits, so each run names both. From Run 8 onward the **frontend bundle hash**
 read off the board's own cache, because the frontend changed under the board mid-investigation and
 the hash is the only thing that says which page a number belongs to. Numbers are never read across
 runs.
+
+Runs 17 to 36 keep that discipline and add two facts about themselves, because an adversarial read
+is entitled to both. **R1:** every one ran on **prod**, on `100-gpu-compositing:7ce44ba` read off
+`/etc/buildinfo`, slot A. **Frontend bundle:** the hash is named on the run that deployed it and
+inherited by continuity until the next deploy — Run 17 to Run 22 on `index-dKJ9KDWL.js`, Run 23 on
+`index-Dqt17Jj2.js`, Run 24 on `index-Ci1lj58e.js`, Runs 26 to 31, Runs 33 to 34 and Runs 35 to 36 on
+the shipped `index-Mt2gvuKb.js`, Run 32 on the diagnostic `index-B8gPvD4g.js`. **The captures do not
+carry the hash** — unlike Runs 8 to 16, where it was read off the board's own WebKit cache — so for
+these runs the bundle is the deploy record's claim, not the board's. **Run 25's bundle is not recorded at all**:
+it follows Run 24's reverted build and no hash was captured for the revert. The run is still readable
+because both its arms live inside one capture and the probe derives arm S's motion from the page's
+own constants, so the bundle is common to both arms whatever it was — but the hash is a gap, and it
+is stated rather than guessed.
+
+**Display mode and renderer change inside this range and are named per run.** Runs 17 to 21 are
+1920x1080; Run 19 alone runs with accelerated compositing **on**; Runs 22 to 34 and Run 36 are
+1280x720 and **Run 35 alone is 640x480**, each set by `xrandr --output HDMI-1 --mode <mode>` in the
+launcher as a hand-edit, with `vc4-fkms-v3d` in `/boot/config.txt` and no `video=` in
+`/boot/cmdline.txt` throughout. The mode is returned to 1280x720 after Run 35, which is why Run 36
+reads at 720p. Runs 33 and 34 each add one environment variable and say which.
 
 | Run | Board (role) | Image commit | Harness / scripts | Result (1 line) |
 |---|---|---|---|---|
@@ -64,8 +132,30 @@ runs.
 | 14 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-dKJ9KDWL.js` | [`p8_layers.js`](p8_layers.js) — one-off, committed here | The app reduced in place to a 240x80 box: the floor **collapses ~100x**, 0.99–1.06/s to 0.01–0.02/s, with the app's JS still running. The floor needs the app's render tree, not its JS |
 | 15 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-dKJ9KDWL.js` | [`p9_area.js`](p9_area.js) — one-off, committed here | The same reduction to a **full-viewport text-heavy** box: static **0.03/s at 54 fps**, animated **1283 ms/frame**. Painted area alone is free; animating a screenful of text is its own regime and does not model the app |
 | 16 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-dKJ9KDWL.js` | [`p10_noanim.js`](p10_noanim.js) — one-off, committed here | Every animation off, computed-value landing check: **mean frame 76.6 → 36.5 ms, ~13 → ~27 fps**, floor unmoved at 1.08 → 1.10/s. The marquee's motion is a ~2x per-frame cost and is not the floor |
+| 17 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-dKJ9KDWL.js` · 1080p | [`p12_motion.js`](p12_motion.js) → [`motion-baseline-raw.txt`](motion-baseline-raw.txt), read by [`parse_motion.py`](parse_motion.py) | **The first measured during-motion framerate**: 127 ms, **7.86 fps** while any row moves, against a 12.5 fps window mean. Cost scales with rows in motion, 22.7 fps at zero to 5.1 fps at five |
+| 18a | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-dKJ9KDWL.js` · 1080p | [`p13_steps.js`](p13_steps.js) → [`steps-k40-raw.txt`](steps-k40-raw.txt), read by [`parse_steps.py`](parse_steps.py) | `steps(40)` quantisation is a near-null: overall 75.0 → 71.3 ms, moving-frame fraction 35.8 → 32.3% |
+| 18b | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-dKJ9KDWL.js` · 1080p | [`p13_steps.js`](p13_steps.js) → [`steps-k10-raw.txt`](steps-k10-raw.txt), read by [`parse_steps.py`](parse_steps.py) | `steps(10)` takes the overall mean 70.8 → 48.6 ms **by stepping, not by cheapening**: moving frames fall 34.6 → 11.1% of the capture and each one gets *slower*, 131.5 → 153.2 ms. Rejected |
+| 19 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-dKJ9KDWL.js` · 1080p, **compositing ON** | [`p12_motion.js`](p12_motion.js) → [`motion-compositing-on-raw.txt`](motion-compositing-on-raw.txt), read by [`parse_motion.py`](parse_motion.py) | The Run 5 retest, on the motion metric: during-motion **1.50 fps** against Run 17's 7.86 — **5.2x worse** — and static frames are 745 ms too, so it is not a motion confound |
+| 20 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-dKJ9KDWL.js` · 1080p | [`p16_duration.js`](p16_duration.js) → [`duration-cv179-raw.txt`](duration-cv179-raw.txt), read by [`parse_duration.py`](parse_duration.py) | Per-row constant scroll velocity does **not** shrink the per-frame jump: 20.80 → 21.94 px per moving frame, the wrong direction, with frame time up 3.5 ms. The overflows are too small for the lever to engage |
+| 21 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-dKJ9KDWL.js` · 1080p | [`p17_paintcost.js`](p17_paintcost.js) → [`paintcost-raw.txt`](paintcost-raw.txt), read by [`parse_steps.py`](parse_steps.py) | Replacing every glyph with a solid fill over the same box leaves the moving frame at **141.7 ms against 140.0 ms**. The cost is not glyph rasterisation, and a pre-rendered bitmap buys nothing |
+| 22 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-dKJ9KDWL.js` · **720p** | [`p12_motion.js`](p12_motion.js) → [`motion-720p-raw.txt`](motion-720p-raw.txt), read by [`parse_motion.py`](parse_motion.py) | 1280x720 takes during-motion **7.86 → 15.26 fps** for a 2.25x pixel cut, and the window mean 12.5 → 24.4 fps. The cost is pixel-area-bound |
+| 23 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-Dqt17Jj2.js` · 720p | [`p12_motion.js`](p12_motion.js) → [`motion-720p-cv-raw.txt`](motion-720p-cv-raw.txt), read by [`parse_motion.py`](parse_motion.py) | A constant-velocity marquee runs at **20.19 fps during motion** — faster than Run 22's 15.26 — while moving in **65.7%** of read-carrying frames against Run 22's 28.5%. Framerate is not what the owner is seeing |
+| 24 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-Ci1lj58e.js` · 720p | [`p12_motion.js`](p12_motion.js) → [`motion-linear-shrunk-raw.txt`](motion-linear-shrunk-raw.txt), read by [`parse_motion.py`](parse_motion.py) | Shrinking the holds to keep the rows nearly always moving leaves **3 static frames in 3181** and the window mean at 14.1 fps. Ganging the repaints is worse. Reverted |
+| 25 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle not recorded · 720p | [`p18_scroll.js`](p18_scroll.js) → [`scroll-vs-transform-raw.txt`](scroll-vs-transform-raw.txt), read by [`parse_scroll.py`](parse_scroll.py) | **The mechanism result.** Same rows, same distance, same px/s, interleaved in one capture: `scrollLeft` **26.5 ms / 37.8 fps** against `transform` **71.5 ms / 14.0 fps** — **2.7x cheaper** |
+| 26a | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-Mt2gvuKb.js` · 720p | [`p7_min.js`](p7_min.js) → [`hold2s-fps-169s-raw.txt`](hold2s-fps-169s-raw.txt) | The shipped mechanism, throughput read: 169 s, mean **24 ms ~41 fps**, **96.4% of frames under 50 ms**, deadline misses **0.089/s** |
+| 26b | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-Mt2gvuKb.js` · 720p | [`p7_min.js`](p7_min.js) → [`hold2s-phase-289s-raw.txt`](hold2s-phase-289s-raw.txt) | The same mechanism over 289 s: **0.045/s**, and **8 of 8** steady stalls land at t mod 8 s = 1.8–2.0 — the scroll-start, not a random arrival |
+| 27 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-Mt2gvuKb.js` + 200 ms stagger · 720p | [`p7_min.js`](p7_min.js) → [`stagger-phase-288s-raw.txt`](stagger-phase-288s-raw.txt) | Staggering the rows' starts by 200 ms moves nothing: **0.042/s**, and **6 of 6** steady stalls still at t mod 8 s ≈ 2. Reverted |
+| 28 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-Mt2gvuKb.js` · 720p | [`p20_profile.js`](p20_profile.js) → [`layout-attribution-288s-raw.txt`](layout-attribution-288s-raw.txt), read by [`parse_profile.py`](parse_profile.py) | A forced layout flush timed in every frame: **0–1 ms on all 14 stall frames**, **0.0% of the worst** and 0.0% frame-weighted. The stall is **not layout** |
+| 29 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-Mt2gvuKb.js` · 720p | [`p21_fullpaint.js`](p21_fullpaint.js) → [`fullpaint-bench-115s-raw.txt`](fullpaint-bench-115s-raw.txt), read by [`parse_fullpaint.py`](parse_fullpaint.py) | A deliberately forced full-viewport repaint costs **p50 203 / p90 458 / max 530 ms** against a 34 ms baseline — an isolated **183 ms** at the median. The parser returns a **negative** verdict against the stall, and Run 35 later confirms it: this prices a repaint, not the residual |
+| 30 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-Mt2gvuKb.js` · 720p | [`p22_contain.js`](p22_contain.js) → [`contain-paint-286s-raw.txt`](contain-paint-286s-raw.txt), read by [`parse_contain.py`](parse_contain.py) | `contain: paint` on all four cards, **computed value read back as `paint`**, and the rate goes **up**: 0.084/s with a 1454 ms max. The stall is not card-bounded |
+| 31 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-Mt2gvuKb.js` · 720p | [`p23_freeze.js`](p23_freeze.js) → [`freeze-188s-raw.txt`](freeze-188s-raw.txt), read by [`parse_freeze.py`](parse_freeze.py) | Every timer and `rAF` neutered: **0.016/s, and no stall after t=3.9 s** at 59.6 fps. **Scored INCONCLUSIVE by its own parser** — one content change survived the freeze, so it is suggestive of a content trigger, not proof |
+| 32 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-B8gPvD4g.js` · 720p | [`p7_min.js`](p7_min.js) → [`continuous-pingpong-292s-raw.txt`](continuous-pingpong-292s-raw.txt) | A continuously ping-ponging marquee, never at rest: **0.017/s**, 2.6x fewer than Run 26b, at a worse mean (33 ms against 24 ms). Two stalls survive post-startup and their phase is **not derivable from this capture**. Diagnostic, reverted |
+| 33 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-Mt2gvuKb.js` · 720p, compositing ON + `FORCE_SHM` + 4 painting threads | [`p7_min.js`](p7_min.js) → [`tiled-shm-292s-raw.txt`](tiled-shm-292s-raw.txt) | Tiled software compositing is the worst configuration measured: **14.3 fps, 0.507/s**, 11x the shipped rate, only 73.8% of frames under 50 ms |
+| 34 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-Mt2gvuKb.js` · 720p + 4 painting threads | [`p7_min.js`](p7_min.js) → [`painting-threads-294s-raw.txt`](painting-threads-294s-raw.txt) | `NICOSIA_PAINTING_THREADS=4` without compositing is a null: **41.3 fps, 0.041/s** against the shipped 0.045/s. Painting threads do not engage on the non-composited path |
+| 35 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-Mt2gvuKb.js` · **640x480** | [`p7_min.js`](p7_min.js) → [`res640x480-194s-raw.txt`](res640x480-194s-raw.txt), read by [`parse_min.py`](parse_min.py) | **The falsifier.** A 3.0x pixel cut below 720p leaves the stall where it was: **0.036/s** against 0.045/s, the same ~40 s arrival cadence, steady stalls past t=40 s 324–378 ms against 468–537 ms — **1.4x for 3x fewer pixels**. The residual is **not pixel-area-bound**, and the full-viewport-repaint identification does not survive it |
+| 36 | prod · Pi Zero W | `100-gpu-compositing:7ce44ba` (slot A) · bundle `index-Mt2gvuKb.js` · 720p | [`p24_alloc.js`](p24_alloc.js) → [`alloc-pressure-raw.txt`](alloc-pressure-raw.txt) | **The confirmer.** JS allocation pressure interleaved against a baseline arm in one capture: the ALLOC arm misses **216 of 219 frames** at a **1147 ms mean / 2020 ms max**, the BASELINE arm **14 of 6730** at 24 ms — a **474x** change in miss fraction, with each arm's allocation counter read back (219 and 0). The stall is a **JavaScriptCore GC pause** |
 
-**R2 is satisfied for Runs 8 to 16 and not for Runs 3 to 7.**
+**R2 is satisfied for Runs 8 to 36 and not for Runs 3 to 7.**
 
 The probe family Runs 8 to 16 put on the board is committed beside this README, with the raw
 captures those runs' numbers are computed from:
@@ -80,6 +170,40 @@ captures those runs' numbers are computed from:
 | [`parse4.py`](parse4.py) · [`parse_arms.py`](parse_arms.py) · [`parse_title.py`](parse_title.py) · [`parse_min.py`](parse_min.py) · [`phase1hz.py`](phase1hz.py) · [`parse_layers.py`](parse_layers.py) · [`parse_area.py`](parse_area.py) · [`parse_anim.py`](parse_anim.py) | The analysers, one per payload shape |
 | [`xcpu-sample.sh`](xcpu-sample.sh) · [`analyze_xcpu.py`](analyze_xcpu.py) | Run 12's forkless on-board X-CPU sampler and its analyser |
 | [`phaseA.txt`](phaseA.txt) · [`phaseA2.txt`](phaseA2.txt) · [`phaseB.txt`](phaseB.txt) · [`phaseD.txt`](phaseD.txt) · [`hang-after-raw.txt`](hang-after-raw.txt) · [`clock-ablation-raw.txt`](clock-ablation-raw.txt) · [`title-cadence-raw.txt`](title-cadence-raw.txt) · [`minprobe-raw.txt`](minprobe-raw.txt) · [`xcpu-noprobe.log`](xcpu-noprobe.log) · [`xcpu-probe.log`](xcpu-probe.log) · [`layers-raw.txt`](layers-raw.txt) · [`area-raw.txt`](area-raw.txt) · [`noanim-raw.txt`](noanim-raw.txt) | Raw captures, one per run arm |
+
+The same obligation for Runs 17 to 36, discharged the same way: every probe, every parser and every
+raw capture is committed here. **How each number is produced differs by payload shape, and the
+difference is stated rather than smoothed over.** Runs 17 to 25 and Runs 28 to 31 each name a parser
+that computes their figures. Runs 26, 27, 32, 33, 34 and 35 carry the bare `MP` payload, which
+[`parse_min.py`](parse_min.py) reads — it reproduces every figure quoted for them, including 26b's
+window, frame count, mean, max, rate, histogram and big-frame list — and those rows name it. Run 36's
+`AL` payload is read from the record's own fields against the probe that wrote them
+([`p24_alloc.js`](p24_alloc.js)); [`parse_alloc.py`](parse_alloc.py) in this directory was written
+against an **earlier revision of that payload** carrying an `AO` field the committed probe does not
+emit, so it does not read the committed capture and is not the source of any number here. That
+mismatch is a real R2 defect, recorded rather than papered over, and closing it is an outstanding
+obligation on this investigation.
+
+| File | What it is |
+|---|---|
+| [`p12_motion.js`](p12_motion.js) | The motion probe — tags each frame MOVING or STATIC from the live computed `translateX` of every marquee row, and buckets frame time by how many rows moved (Runs 17, 19, 22, 23, 24) |
+| [`p13_steps.js`](p13_steps.js) · [`p16_duration.js`](p16_duration.js) · [`p17_paintcost.js`](p17_paintcost.js) | The three 1080p lever arms spliced onto that measurement — `steps()` quantisation, per-row constant velocity, and glyphs replaced by a solid fill (Runs 18, 20, 21) |
+| [`p18_scroll.js`](p18_scroll.js) | The mechanism probe — arm T keeps the stylesheet's transform animation, arm S cancels it and drives `scrollLeft` at the same px/s over the same distance (Run 25) |
+| [`p20_profile.js`](p20_profile.js) · [`p21_fullpaint.js`](p21_fullpaint.js) · [`p22_contain.js`](p22_contain.js) · [`p23_freeze.js`](p23_freeze.js) | The residual-stall probes — one timed layout flush per frame, a forced full-viewport repaint benchmark, paint containment on the cards, and the frozen page (Runs 28, 29, 30, 31) |
+| [`p24_alloc.js`](p24_alloc.js) | The allocation-pressure probe (Run 36) — a palindrome of ALLOC and BASELINE arms inside one capture, allocating and dropping ~25000 short-lived objects per frame in the ALLOC arms, with a per-arm frame-time split and an in-band allocation counter so an arm that never allocated is visible rather than scored |
+| [`ovf_track.js`](ovf_track.js) | A helper that records each ride name's maximum marquee overflow across a full tour rotation. It sized the demonstration data's overflows and contributes no number to any run |
+| [`run-phase-motion.sh`](run-phase-motion.sh) | Deploys a probe, restarts onto a cleared cache and reads the longer `KP2` payload back with `xprop`. Takes the board on its command line, as [`run-phase.sh`](run-phase.sh) does |
+| [`parse_motion.py`](parse_motion.py) · [`parse_steps.py`](parse_steps.py) · [`parse_duration.py`](parse_duration.py) · [`parse_scroll.py`](parse_scroll.py) · [`parse_profile.py`](parse_profile.py) · [`parse_fullpaint.py`](parse_fullpaint.py) · [`parse_contain.py`](parse_contain.py) · [`parse_freeze.py`](parse_freeze.py) | The analysers, one per payload shape. [`parse_motion_test.py`](parse_motion_test.py) and [`parse_steps_test.py`](parse_steps_test.py) prove the two reused across the most runs report both outcomes |
+| [`motion-baseline-raw.txt`](motion-baseline-raw.txt) · [`steps-k40-raw.txt`](steps-k40-raw.txt) · [`steps-k10-raw.txt`](steps-k10-raw.txt) · [`motion-compositing-on-raw.txt`](motion-compositing-on-raw.txt) · [`duration-cv179-raw.txt`](duration-cv179-raw.txt) · [`paintcost-raw.txt`](paintcost-raw.txt) · [`motion-720p-raw.txt`](motion-720p-raw.txt) · [`motion-720p-cv-raw.txt`](motion-720p-cv-raw.txt) · [`motion-linear-shrunk-raw.txt`](motion-linear-shrunk-raw.txt) · [`scroll-vs-transform-raw.txt`](scroll-vs-transform-raw.txt) | Raw captures, Runs 17 to 25 |
+| [`hold2s-fps-169s-raw.txt`](hold2s-fps-169s-raw.txt) · [`hold2s-phase-289s-raw.txt`](hold2s-phase-289s-raw.txt) · [`stagger-phase-288s-raw.txt`](stagger-phase-288s-raw.txt) · [`layout-attribution-288s-raw.txt`](layout-attribution-288s-raw.txt) · [`fullpaint-bench-115s-raw.txt`](fullpaint-bench-115s-raw.txt) · [`contain-paint-286s-raw.txt`](contain-paint-286s-raw.txt) · [`freeze-188s-raw.txt`](freeze-188s-raw.txt) · [`continuous-pingpong-292s-raw.txt`](continuous-pingpong-292s-raw.txt) · [`tiled-shm-292s-raw.txt`](tiled-shm-292s-raw.txt) · [`painting-threads-294s-raw.txt`](painting-threads-294s-raw.txt) · [`res640x480-194s-raw.txt`](res640x480-194s-raw.txt) · [`alloc-pressure-raw.txt`](alloc-pressure-raw.txt) | Raw captures, Runs 26 to 36 |
+| [`freeze-720p-cv-raw.txt`](freeze-720p-cv-raw.txt) · [`deployed-scroll-raw.txt`](deployed-scroll-raw.txt) | **Uncatalogued captures, claimed by no run block.** The first is a `probe4`-family payload naming itself 228 s, 6052 frames, 38 frames over 250 ms — 0.167/s — at 26.5 fps; the second is one load-average and `VmRSS` read. Neither carries its own configuration, so neither is attributed to a run here, and no conclusion rests on either |
+
+**One capture carries a redaction, recorded so no editor mistakes it for a live value.**
+[`scroll-vs-transform-raw.txt`](scroll-vs-transform-raw.txt) opens with an SSH `known_hosts` warning,
+and the address in it reads `<PROD_ADDRESS>` — the placeholder, not the board. This repository is
+public and investigations are redaction-only, so a capture is redacted in place rather than
+regenerated. `tools/scrub-identity.py --check` covers the whole tracked tree, this directory
+included, and passes.
 
 `run-phase.sh` takes the board on its command line. No device address is in any of these files; this
 repository is public and the address is resolved at use time from the gitignored
@@ -524,6 +648,558 @@ reporting the render advancing.
 - **Bound condition:** the ablation stops the **motion**; it does not remove the overflowing names or
   change layout. What it measures is therefore the cost of animating, not the cost of the rows.
 
+### The motion probe family — the harness Runs 17 to 24 share
+
+Stated once rather than eight times. [`p12_motion.js`](p12_motion.js) is the frame loop Runs 8 to 16
+used, with one addition that is the point of the family: **every frame reads each marquee row's live
+computed `translateX` and tags the frame MOVING or STATIC** by whether any row moved more than a
+fixed epsilon. Every fps figure before Run 17 is a whole-window mean over a page that is in motion
+for part of its cycle; this family separates the two, so a lever can be scored on the frames a person
+actually sees move. Deployment is [`run-phase-motion.sh`](run-phase-motion.sh) — write
+`~/.surf/script.js`, clear the WebKit cache, restart, read the payload back with `xprop` — the
+`probe4` path with a wider title window, because the payload carries one record per 20 s block.
+
+Runs 18, 20 and 21 splice an **arm B** onto that measurement and run a palindrome W/A/B/A/B/A across
+the capture, so the board's ~30% within-run drift cancels between the arms instead of loading onto
+one. Each names its own manipulation, and each carries an in-band landing check read from the
+**computed** value on every live row every frame: a block whose rows disagree with the arm is dropped
+by the parser rather than averaged in. That discipline is Runs 8 to 16's, and it is not restated per
+run below.
+
+Three bound conditions hold across the family. **Each arm is n=1** within its run. **The MOVING/STATIC
+tag costs a computed-style read per row per frame**, which is present identically in every arm, so
+between-arm deltas hold while the absolute level sits above a bare loop's. And **a row is tagged
+moving by its transform**, so Run 25's scroll mechanism is outside what this probe can see — which is
+why Run 25 uses a different probe and a different metric.
+
+Device state touched, every run: `~/.surf/script.js` and the WebKit cache. No image rebuild, no OTA,
+no reboot, no keyring touch. The 720p runs and the compositing arm are the exception and say so: they
+change `/data/config/kiosk.conf` or the launcher's `xrandr` line, each named in its own block. Every
+run ends with a zero-byte `script.js`, a restart, and
+[`kiosk-render-check.sh`](../../../tools/kiosk-render-check.sh) reporting the render advancing.
+
+### Run 17 — the during-motion framerate, measured rather than derived
+
+- **Board:** prod, Raspberry Pi Zero W, slot A.
+- **Image commit:** `100-gpu-compositing:7ce44ba`, read off the board's `/etc/buildinfo`.
+- **Frontend bundle:** `index-dKJ9KDWL.js`, unchanged from Runs 9 to 16.
+- **Kiosk config:** compositing off (`WEBKIT_DISABLE_DMABUF_RENDERER=1`),
+  `WEBKIT_FORCE_VBLANK_TIMER=1`, 1920x1080, firmware KMS. Full-open demonstration park data, as
+  Runs 8 to 16.
+- **Scripts deployed:** ONE-OFF [`p12_motion.js`](p12_motion.js), committed here. Raw capture
+  [`motion-baseline-raw.txt`](motion-baseline-raw.txt), read by
+  [`parse_motion.py`](parse_motion.py), whose both-outcome proof is
+  [`parse_motion_test.py`](parse_motion_test.py).
+- **Procedure:** one continuous **1630 s** capture — far longer than any prior run, because the
+  quantity being estimated is conditional on a state the page is in about a third of the time. Blocks
+  alternate T (transform read taken) and N (no read), and only T blocks contribute to the
+  during-motion figure. Block 0 is discarded as warmup.
+- **What this run discharges.** The finding "DERIVED, NOT MEASURED — the framerate *during* the
+  scroll's motion" quotes a 2.6–11.9 fps estimate built by arithmetic on two Run 16 means. This run
+  measures it directly at **7.86 fps**, inside that range and near its middle, and the estimate is
+  superseded by the measurement rather than corrected.
+- **Bound condition:** the marquee class is taken by rows whose own name overflows, so the roster of
+  animating rows drifts across the capture — `M5/20` at the payload's last read. The rows-moving
+  buckets are read as a within-run dose-response, not as a fixed configuration.
+
+### Run 18 — `steps()` quantisation, two step counts
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+  **Frontend bundle:** `index-dKJ9KDWL.js`. **Kiosk config:** as Run 17, 1080p.
+- **Scripts deployed:** ONE-OFF [`p13_steps.js`](p13_steps.js), committed here. Two captures, one per
+  step count: [`steps-k40-raw.txt`](steps-k40-raw.txt) (arm 18a, `steps(40)`) and
+  [`steps-k10-raw.txt`](steps-k10-raw.txt) (arm 18b, `steps(10)`), each read by
+  [`parse_steps.py`](parse_steps.py) with its both-outcome proof
+  [`parse_steps_test.py`](parse_steps_test.py).
+- **Procedure:** one 436 s palindrome capture per step count, arms W/A/B/A/B/A over 20 s / four 80 s
+  slots. Arm B writes `animation-timing-function: steps(k) !important` on every marquee row; arm A
+  removes it. Landing is read from the computed timing function on every row every frame.
+- **The two arms are separate captures and are never differenced against each other.** Each is scored
+  against its own interleaved baseline inside its own run.
+- **Bound condition, and it is why 18b is rejected rather than adopted.**
+  [`parse_steps.py`](parse_steps.py)'s SCORE line is the **overall** frame-weighted mean, which a
+  lever can win by making frames static rather than by making a moving frame cheaper. The number this
+  run is read on is the **MOVING** mean and the moving-frame fraction, both printed beside it.
+
+### Run 19 — the compositing A/B retaken on the motion metric
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+  **Frontend bundle:** `index-dKJ9KDWL.js`.
+- **Kiosk config:** 1920x1080, firmware KMS, and **accelerated compositing ON** —
+  `WEBKIT_DISABLE_DMABUF_RENDERER` removed from `/data/config/kiosk.conf`, the web process restarted
+  onto the dma-buf renderer against vc4/mesa, and the line restored afterwards.
+- **Scripts deployed:** ONE-OFF [`p12_motion.js`](p12_motion.js) — the identical probe Run 17 ran, so
+  the only variable is the renderer. Raw capture
+  [`motion-compositing-on-raw.txt`](motion-compositing-on-raw.txt), read by
+  [`parse_motion.py`](parse_motion.py).
+- **Procedure:** one continuous 437 s capture in the composited configuration, scored the same way as
+  Run 17's.
+- **Why this run exists at all.** Run 5 measured compositing off as 3.7x faster and the reading was
+  challenged as a confound — that the composited arm might be paying for motion the software arm was
+  not. This run answers it from inside the same probe: the **static** frames read 745 ms too, so the
+  penalty is not motion-specific and Run 5 is not a motion confound.
+- **Bound conditions.** Two sequential captures on a board with ~30% within-run drift; the effect is
+  5.2x, two orders outside it. And the capture is thin by construction — 641 frames in 437 s is what
+  1.5 fps yields — so the block-level figures are noisy while the aggregate is not.
+
+### Run 20 — per-row constant scroll velocity
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+  **Frontend bundle:** `index-dKJ9KDWL.js`. **Kiosk config:** as Run 17, 1080p.
+- **Scripts deployed:** ONE-OFF [`p16_duration.js`](p16_duration.js), committed here. Raw capture
+  [`duration-cv179-raw.txt`](duration-cv179-raw.txt), read by
+  [`parse_duration.py`](parse_duration.py).
+- **Procedure:** the Run 18 palindrome. Arm B sets each row's `animation-duration` to its own overflow
+  distance divided by a fixed 179 px/s, floored at a minimum, so every row scrolls at one velocity
+  instead of covering its own distance in a common 8 s cycle. The target is derived from the app's
+  published `--pwt-marquee-distance` and never from the duration already applied, so a row cannot
+  ratchet itself slower frame after frame.
+- **The score is px per moving frame, not frame time**, because the lever's claim is about the size
+  of the per-frame jump that reads as judder. The margins were fixed before the run: the jump must
+  fall at least 10% and frame time may rise at most 5%.
+- **Bound condition, and it is the finding.** The demonstration data's overflows are 1–108 px
+  (Run 25's payload reads the set directly). At those distances the flat cycle is already close to
+  the constant-velocity cycle for most rows, so the lever has almost nothing to move — the result
+  bounds this lever **on this data**, not on a roster with long names.
+
+### Run 21 — glyph rasterisation priced out
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+  **Frontend bundle:** `index-dKJ9KDWL.js`. **Kiosk config:** as Run 17, 1080p.
+- **Scripts deployed:** ONE-OFF [`p17_paintcost.js`](p17_paintcost.js), committed here. Raw capture
+  [`paintcost-raw.txt`](paintcost-raw.txt), read by [`parse_steps.py`](parse_steps.py) — reused
+  as-is, which is why its output labels arm B "STEPS" where this run's arm B is FILL.
+- **Procedure:** the Run 18 palindrome. Arm B writes `color: transparent !important` plus a solid
+  `background-color` on every marquee row: **no glyph is rasterised, and the same box over the same
+  area still paints under the same animation**. It is the cheap injectable stand-in for blitting a
+  pre-rendered bitmap of the row — same geometry, same motion, no text raster.
+- **Landing, in band over the whole row set.** Arm B clears the block's flag the instant any row's
+  computed colour is not fully transparent or its computed background is not the fill; arm A clears
+  it the instant any row's colour *is* transparent, which is what proves the revert restored the
+  stylesheet's colour rather than leaving the override on.
+- **The signal is the MOVING mean delta, not the SCORE line**, for the reason Run 18 records. What
+  this run decides is whether building a bitmap marquee is worth the work.
+
+### Run 22 — 1280x720
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+  **Frontend bundle:** `index-dKJ9KDWL.js`.
+- **Kiosk config:** compositing off, firmware KMS, and **1280x720** — `xrandr --output HDMI-1 --mode
+  1280x720` hand-edited into the launcher, so the mode is applied before surf maps its window and
+  WebKit renders at 720p rather than rendering 1080p and being clipped.
+- **This is the correction of Run 4's bound condition.** Run 4's 720p arm shrank the X screen and
+  scanout buffer only, leaving surf's override-redirect window at 1920x1080 and WebKit still
+  rendering 1080p; that arm measured the X and surf stages' pixel cost, not WebKit's. Setting the
+  mode in the launcher moves WebKit too, which is why this run's 1.94x is larger than Run 4's 1.38x.
+- **Scripts deployed:** ONE-OFF [`p12_motion.js`](p12_motion.js), the identical probe Run 17 ran. Raw
+  capture [`motion-720p-raw.txt`](motion-720p-raw.txt), read by
+  [`parse_motion.py`](parse_motion.py).
+- **Procedure:** one continuous 439 s capture, scored as Run 17's.
+- **Bound condition:** Run 17 and this run are **sequential captures, not interleaved arms** — a mode
+  change cannot be toggled inside one page load. The 1.94x on the during-motion mean is read against
+  the board's ~30% within-run drift, which it clears, and against a 2.25x pixel cut, which it does
+  not reach.
+
+### Run 23 — a constant-velocity marquee at 720p
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+- **Frontend bundle:** `index-Dqt17Jj2.js` — a deployed WiseKiosk build whose marquee moves at a
+  constant velocity with no hold phases, replacing the stylesheet's hold/move/hold/snap keyframes.
+- **Kiosk config:** as Run 22 — compositing off, 720p, firmware KMS.
+- **Scripts deployed:** ONE-OFF [`p12_motion.js`](p12_motion.js). Raw capture
+  [`motion-720p-cv-raw.txt`](motion-720p-cv-raw.txt), read by
+  [`parse_motion.py`](parse_motion.py).
+- **Procedure:** one continuous 228 s capture, scored as Run 22's.
+- **What it decides, and it is not the framerate.** During motion this build is *faster* than Run 22
+  — 20.19 fps against 15.26 — and the owner's report of stutter survived it. The per-frame step
+  histogram in the payload shows why the two can both be true: the chop being reported is the
+  distribution of per-frame jumps, not the rate. That is the reading that sends the next run at the
+  mechanism rather than at the framerate.
+- **Bound condition:** the comparison to Run 22 crosses a bundle change *and* a capture boundary.
+  Both figures are quoted with their own run attached and neither is differenced into a single
+  number.
+
+### Run 24 — linear timing with shrunken holds
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+- **Frontend bundle:** `index-Ci1lj58e.js` — a deployed build with linear timing and the hold phases
+  shortened, so the rows are in motion for nearly the whole cycle.
+- **Kiosk config:** as Run 23 — compositing off, 720p.
+- **Scripts deployed:** ONE-OFF [`p12_motion.js`](p12_motion.js). Raw capture
+  [`motion-linear-shrunk-raw.txt`](motion-linear-shrunk-raw.txt), read by
+  [`parse_motion.py`](parse_motion.py).
+- **Procedure:** one continuous 226 s capture, scored as Run 23's.
+- **The landing check is the result.** Three frames out of 3181 carry zero rows moving — the holds
+  really did shrink — and the window mean lands at 14.1 fps. Removing the rests does not spread the
+  work; it gangs every row's repaint into the same frames. **Reverted**, and the reversion is what
+  Run 25 measures against.
+
+### Run 25 — `scrollLeft` against `transform`, interleaved in one capture
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+- **Frontend bundle:** **not recorded.** This run follows Run 24's revert and no hash was captured
+  for the resulting build. The gap is real and is not papered over; what rescues the run is that both
+  arms live inside **one** capture, so whatever the bundle was, it was the same for both.
+- **Kiosk config:** compositing off, 720p, firmware KMS, demonstration data.
+- **Scripts deployed:** ONE-OFF [`p18_scroll.js`](p18_scroll.js), committed here. Raw capture
+  [`scroll-vs-transform-raw.txt`](scroll-vs-transform-raw.txt), read by
+  [`parse_scroll.py`](parse_scroll.py).
+- **Procedure:** one continuous 438 s palindrome, W/T/S/T/S/T on 20 s blocks — a 20 s warmup, then
+  four arms of four blocks each and a final T arm of five, which is why the last slot runs ~100 s.
+  - **arm T** leaves `ParkCard.svelte`'s `animation` in place, which drives
+    `transform: translateX(--pwt-marquee-distance)` on the text.
+  - **arm S** writes `animation-name: none !important` and `transform: none !important` on the text
+    and drives the clipping column's `scrollLeft` from the probe's own rAF loop.
+- **Arm S reproduces arm T's motion rather than inventing one.** The px/s, the move fraction, the
+  minimum cycle and the four keyframe phases are `ParkCard.svelte`'s own, so both arms move each row
+  the same distance at the same pixel velocity on the same cycle. A different speed would change the
+  repainted area per second and the arms would not be comparable at all.
+- **`animation-name`, not the `animation` shorthand.** The app publishes each row's cycle length as an
+  inline `animation-duration`; writing the shorthand would erase it, and removing the override on the
+  way back to arm T would leave the row on the stylesheet's flat 8 s cycle — arm T would then be
+  measuring a marquee the app never renders.
+- **Measurement is deliberately thin and identical across arms.** The frame loop counts rAF deltas
+  and nothing else, because a per-row computed-style flush scales with N and is exactly the cost this
+  probe is trying to attribute to the mechanism. Each arm's per-frame work is one `querySelectorAll`,
+  two style-**attribute** reads per row, and in arm S one `scrollLeft` write per row.
+- **Landing, and it is positive evidence in both directions:** the payload carries the maximum
+  `scrollLeft` reached in each block — **94–108 px in every S block and 0 in every T block**. One T
+  block reported land=0 and the parser dropped it.
+- **Bound condition:** the arms are n=1 each within the palindrome, and the worst frame in each arm
+  is the same size (491 ms against 496 ms). The mechanism swap buys **throughput**; it does not touch
+  the stall, and the runs that follow are about the stall.
+
+### The shipped-mechanism family — the harness Runs 26 to 36 share
+
+Runs 26 to 36 measure one deployed configuration and the levers and hypotheses tried against its
+residual; Runs 35 and 36 are the two that overturned the residual's identification. The
+configuration is the one the board runs: **720p, software rendering, and the marquee re-mechanised
+as `scrollLeft` on the clipping column** — one shared rAF clock, all cards flipping and all marquees
+starting on the same tick, a 2 s home hold, one constant-velocity scroll, a 2 s end hold, then home.
+That is an **8 s cycle**, and the phase of a stall against it is a load-bearing number in this family.
+
+Frame timing is [`p7_min.js`](p7_min.js)'s and nothing more — dt, mean, max, frames over 250 ms, a
+seven-bucket histogram and the timestamps of the last 14 big frames. Run 13 proved that loop carries
+no instrumentation cost of its own, which is why every probe in this family is built on it rather
+than on `p4_a.js`: a wrapped getter or a `MutationObserver` lands inside `WebKitWebProcess` and
+confounds the exact quantity these runs decide.
+
+Runs 26, 27, 32, 33 and 34 run that loop unmodified and are read straight off the `MP` payload:
+`f` frames and `av` mean over the window, `BT` frames over 250 ms, `H` the histogram, `B` the big
+frames as `t:dt`. Runs 28 to 31 each add **one** instrument and carry a parser that refuses a verdict
+when the instrument did not land — [`parse_profile.py`](parse_profile.py),
+[`parse_fullpaint.py`](parse_fullpaint.py), [`parse_contain.py`](parse_contain.py) and
+[`parse_freeze.py`](parse_freeze.py). One of them exercises that refusal for real; see Run 31.
+
+**Every added instrument's cost is attributed to the following frame**, because WebKit does the work
+a rAF callback requests after the callback returns. Run 29 relies on this to attribute a forced
+repaint, and Run 31 relies on it to *exclude* its own sampling frames from the stall count — at ~0.5
+sampling frames per second, charging them to the engine would have been enough to fake the very rate
+the run reads.
+
+Bound conditions across the family: **each run is n=1**, arms are captures rather than interleaved
+slots wherever the manipulation is a deploy or an environment variable, and the reference the later
+runs are scored against is **Run 26b's 0.045/s**, quoted with its run rather than treated as a
+property of the board. Device state touched is `~/.surf/script.js` and the WebKit cache, plus a
+`/data/config/kiosk.conf` line in Runs 33 and 34. No image rebuild, no `/boot` write, no OTA, no
+keyring touch.
+
+**A note on the big-frame lists, because it governs which runs can be read for phase.** The `MP`
+payload caps its big-frame list at 14 entries. Run 26b records `BT13` and its list is therefore
+complete, which is why the phase read is taken from 26b and from no other capture; Run 26a records
+`BT15` against 14 entries and is truncated, so a phase read from it would be a read of the first 14
+arrivals rather than of the window. Run 36's `AL` payload caps at 40 and records 236, so it is
+truncated in the same way and carries no phase either.
+
+### Run 26 — the shipped mechanism, throughput and phase
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+- **Frontend bundle:** `index-Mt2gvuKb.js` — the shipped scroll build with 2 s holds, served from the
+  mirror and **not baked into any image**.
+- **Kiosk config:** compositing off, 720p, firmware KMS, demonstration data.
+- **Scripts deployed:** ONE-OFF [`p7_min.js`](p7_min.js), already committed here for Run 13. Two
+  captures: [`hold2s-fps-169s-raw.txt`](hold2s-fps-169s-raw.txt) (arm 26a, 169 s) and
+  [`hold2s-phase-289s-raw.txt`](hold2s-phase-289s-raw.txt) (arm 26b, 289 s).
+- **Procedure:** two continuous captures of the same configuration, taken for different questions —
+  26a for the throughput distribution, 26b long enough that the phase of the steady stalls against
+  the 8 s cycle is readable. Neither is an arm of the other and the two are not averaged.
+- **Bound condition, and it is the honest headline of this investigation's result.** The two captures
+  of one configuration give **0.089/s and 0.045/s** — a factor of two apart. The stall is rare enough
+  that a three-minute window resolves it poorly, and any single figure quoted for "the shipped rate"
+  inherits that. The longer capture is used as the later runs' reference because it counts more
+  cycles, not because it is the better number.
+- **Phase, read from 26b's payload only.** Of the 13 recorded big frames, five arrive before t=6 s
+  and are startup; the remaining **eight all land at t mod 8 s = 1.8–2.0**, which is the scroll-start
+  of the cycle. The phase offset is against the probe's own t0, not the page's, so it is read as
+  *locked to a fixed point of the cycle*, never as a wall-clock phase comparable across runs.
+
+### Run 27 — a 200 ms stagger between the rows' starts
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+- **Frontend bundle:** the shipped `index-Mt2gvuKb.js` with a 200 ms per-row start offset added.
+- **Kiosk config:** as Run 26.
+- **Scripts deployed:** ONE-OFF [`p7_min.js`](p7_min.js). Raw capture
+  [`stagger-phase-288s-raw.txt`](stagger-phase-288s-raw.txt).
+- **Procedure:** one continuous 288 s capture, read against Run 26b's 289 s capture of the unstaggered
+  build.
+- **The hypothesis and its disposition.** If every row starting on the same tick is what gangs the
+  repaint into one frame, spreading the starts by 200 ms should break the stall up. It does not: the
+  rate is unchanged and **6 of 6** steady stalls still land at the same point of the cycle. **Reverted.**
+- **Bound condition:** two sequential captures, and the difference between 0.042/s and 0.045/s is far
+  inside the factor-of-two spread Run 26's own two captures show. The result is read from the
+  **phase**, which is categorical, not from the rate.
+
+### Run 28 — layout excluded
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+  **Frontend bundle:** `index-Mt2gvuKb.js`. **Kiosk config:** as Run 26.
+- **Scripts deployed:** ONE-OFF [`p20_profile.js`](p20_profile.js), committed here. Raw capture
+  [`layout-attribution-288s-raw.txt`](layout-attribution-288s-raw.txt), read by
+  [`parse_profile.py`](parse_profile.py).
+- **Procedure:** one continuous 288 s capture. Each frame runs the bare rAF loop plus **one timed
+  synchronous layout flush** — `offsetHeight` on the root — so `tForce` is the cost of flushing
+  whatever layout that frame had pending. Nothing else is read.
+- **Forcing layout every frame is a deliberate perturbation, and all three outcomes are findings.**
+  `tForce` large on the stall frame means a batched layout flush. `tForce` small means the frame is
+  paint, raster or compositing and a layout timer cannot see it. **No stall at all** would also have
+  been a layout result, because continuous flushing would have dissolved the batch. The run is
+  therefore not a neutral observation of the unperturbed page, and it is not quoted as one.
+- **Bound condition:** the `longtask` entry type is **absent on this WebKit build**, so the
+  cross-check from the engine's own side was unavailable. Its absence is recorded in the payload as
+  `NA` rather than faked.
+
+### Run 29 — the magnitude of one full-viewport repaint
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+  **Frontend bundle:** `index-Mt2gvuKb.js`. **Kiosk config:** as Run 26.
+- **Scripts deployed:** ONE-OFF [`p21_fullpaint.js`](p21_fullpaint.js), committed here. Raw capture
+  [`fullpaint-bench-115s-raw.txt`](fullpaint-bench-115s-raw.txt), read by
+  [`parse_fullpaint.py`](parse_fullpaint.py).
+- **Procedure:** one continuous 115 s capture. A fixed `pointer-events:none` overlay covers the
+  viewport; every twentieth frame its `background-color` is set to a **new** value, which invalidates
+  the whole rect and obliges WebKit to repaint the entire viewport. The two colours differ by one
+  blue unit at 3% alpha, so the price is paid and nothing visible changes. The repaint lands in the
+  **following** frame's dt, which is tagged FORCED; every other frame is BASELINE.
+- **This is a benchmark, not an observation of a stall.** It prices the hypothesised mechanism so the
+  stall's magnitude can be compared against it. It does not show that any particular stall *was* one.
+- **The price it measures is still correct; the identification it was recruited for is not.** Run 35
+  falsified the full-viewport-repaint reading of the residual, and this run's numbers are unaffected
+  by that — what changes is only what they are evidence *for*. The figures below stand as the cost of
+  one forced full-viewport repaint on this board.
+- **Bound conditions, and they are why this run never closed the question alone.** The FORCED
+  distribution is wide — p50 203 ms, p90 458 ms, max 530 ms — and the isolated cost, FORCED minus
+  BASELINE, is **183 ms at the median and 211 ms at the mean**. A stall frame that *was* one full
+  repaint should therefore have read about `34 + 183 = ~217 ms`; Run 26b's steady stalls read
+  **468–537 ms**, a mean near 490 ms. **That is ~2.3x, and it is a mismatch rather than a match.**
+  Reading the stall against the *un-subtracted* p90 of 458 ms is the only way the two meet, and the
+  subtraction and the comparison cannot both be taken. [`parse_fullpaint.py`](parse_fullpaint.py)
+  scores on the p50 and returns a **negative** verdict — "forced full repaint is cheaper than the
+  stall" — which is printed here rather than filtered out, and which was right. Run 21 closes the one
+  escape available to the benchmark: if a solid-fill repaint under-priced a glyph-heavy one, the gap
+  would be an artifact, but Run 21 measures the cost as content-independent to 1.2%, so the price is
+  fair and the 2.3x stands.
+- **Second bound condition, on the control arm.** The BASELINE row's max is **1477 ms**. The `FVP`
+  payload carries **no timestamps**, so *when* that frame arrived is not derivable from this capture;
+  1477 ms also sits squarely inside the startup cluster every other capture in this family shows in
+  its first ~5 s. Either way only that row's median and mean are usable, and no claim here rests on
+  the frame having fired mid-run.
+- **Where the mismatch pointed.** A stall 2.3x the mechanism named to explain it, unmoved by a pixel
+  cut (Run 35), is the trail that led off the paint path altogether and onto the collector. It is
+  recorded here as the reasoning, not as a live claim about repaint.
+
+### Run 30 — paint containment on the cards
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+  **Frontend bundle:** `index-Mt2gvuKb.js`. **Kiosk config:** as Run 26.
+- **Scripts deployed:** ONE-OFF [`p22_contain.js`](p22_contain.js), committed here. Raw capture
+  [`contain-paint-286s-raw.txt`](contain-paint-286s-raw.txt), read by
+  [`parse_contain.py`](parse_contain.py).
+- **Procedure:** one continuous 286 s capture with `contain: paint` written as an **inline style
+  property** on all four park cards — the page's `style-src 'self'` drops an injected `<style>`
+  element, as "Configuration under test" records, so the inline property is the only form that
+  survives. Cards re-render on a flip, so an ensure loop re-checks every current card each frame and
+  writes only on difference; the write count is exfiltrated, so a loop that rewrote rather than
+  settled would be visible.
+- **The prediction was fixed before the run.** If the stall is WebKit escalating to a whole-viewport
+  repaint, a paint-containment boundary per card bounds it to roughly a quarter of the viewport —
+  ~110 ms, under the 250 ms threshold — and the rate should fall toward zero.
+- **The landing read is what keeps this from being a dead instrument.** Once every ~2 s one card's
+  **computed** `contain` is read back: it reads `paint`, with support probed and confirmed and four
+  inline writes recorded. A flat rate under `land=0` would have said nothing about the hypothesis;
+  this one landed and the rate went **up**.
+- **Bound condition:** 0.084/s against Run 26b's 0.045/s is a 2.1x rise across sequential captures,
+  inside the factor-of-two spread Run 26's own pair shows. The conclusion drawn is the **null** —
+  containment does not bound the stall — and not that containment made things worse.
+- **What the null means under the corrected mechanism.** This run is a well-instrumented negative
+  against a paint hypothesis, and paint is not the mechanism (see "Root cause of the residual
+  stall"). A paint-containment boundary has nothing to say about a collector pause, so the null is
+  expected rather than informative about the cause. The run's value stands as an exclusion and as the
+  strongest landing check in this record.
+
+### Run 31 — the page frozen
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+  **Frontend bundle:** `index-Mt2gvuKb.js`. **Kiosk config:** as Run 26.
+- **Scripts deployed:** ONE-OFF [`p23_freeze.js`](p23_freeze.js), committed here. Raw capture
+  [`freeze-188s-raw.txt`](freeze-188s-raw.txt), read by [`parse_freeze.py`](parse_freeze.py).
+- **Procedure:** one continuous 188 s capture. Every live timer is cleared and `requestAnimationFrame`,
+  `setInterval` and `setTimeout` are replaced by no-ops, so no app callback can reschedule and the DOM
+  stops changing. The probe keeps measuring because it captures the **real** scheduler into a local
+  before the neuter and drives its own loop from it; `clearInterval` and `clearTimeout` are left
+  intact so the page's own teardown still works.
+- **The discriminator.** A stall that survives a frozen page is the engine repainting a page nothing
+  touched — beyond anything the frontend can reach. A stall that goes to zero is driven by the app's
+  own DOM updates.
+- **The frozen flag gates the verdict, and on this run it withheld it.** A content signature —
+  `document.body.innerText` length plus the clock's `.seconds` text — is sampled every ~2 s;
+  `frozen=1` requires that consecutive samples never differ. This capture reports **`frozen=0` with
+  one content change over 94 samples**, and [`parse_freeze.py`](parse_freeze.py) accordingly returns
+  **"INCONCLUSIVE: page did not freeze … the 0.016/s rate is not attributable either way."** That
+  verdict stands as written. What the capture still shows, as observation rather than verdict, is
+  that its only three frames over 250 ms are at t = 1.6, 3.1 and 3.9 s and **nothing** over 250 ms
+  arrives in the remaining 184 s, at a 59.6 fps mean.
+- **Bound condition on the number itself:** 93 signature-sampling frames are excluded from the count
+  and the histogram, two of them over 250 ms, because `innerText` forces layout and WebKit charges
+  that to the following frame. Charging them to the engine would have manufactured most of a rate.
+
+### Run 32 — a marquee that never rests
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+- **Frontend bundle:** `index-B8gPvD4g.js` — a diagnostic build whose marquee ping-pongs
+  continuously, with no hold phase at either end.
+- **Kiosk config:** as Run 26.
+- **Scripts deployed:** ONE-OFF [`p7_min.js`](p7_min.js). Raw capture
+  [`continuous-pingpong-292s-raw.txt`](continuous-pingpong-292s-raw.txt).
+- **Procedure:** one continuous 292 s capture, read against Run 26b's.
+- **The hypothesis and what the capture supports.** Run 26b puts the steady stalls at the scroll-start,
+  so the rest→scroll transition is the suspect. Removing the rest entirely takes the rate to
+  **0.017/s**, 2.6x fewer than Run 26b, at a **worse** mean frame time (33 ms against 24 ms) because
+  nothing is ever static. The build is a **diagnostic, reverted**.
+- **Bound condition, and it is the whole of what this run establishes.** The comparison crosses a
+  bundle change and a capture boundary, and the 2.6x sits at the edge of the factor-of-two spread
+  Run 26's own pair shows. Post-startup the capture holds **two** frames over 250 ms, at t = 25.6 s
+  and t = 114.1 s, and it records **no ping-pong period and no direction-change timestamps** — the
+  diagnostic build's flip interval is not stated anywhere in this record, so `t mod` cannot be
+  computed as it is for Runs 26b, 27 and 30. **No phase claim is available from this run**, and none
+  is made: what it reports is the rate, at n=2 on the surviving stalls. It is not offered as support
+  for any leg of the root cause.
+
+### Run 33 — tiled software compositing with painting threads
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+  **Frontend bundle:** `index-Mt2gvuKb.js`.
+- **Kiosk config:** 720p, firmware KMS, and accelerated compositing **on** with the shared-memory
+  path forced and four painting threads — `WEBKIT_DISABLE_DMABUF_RENDERER` removed,
+  `WEBKIT_FORCE_SHM=1` and `NICOSIA_PAINTING_THREADS=4` added to `/data/config/kiosk.conf`. Reverted
+  afterwards.
+- **Scripts deployed:** ONE-OFF [`p7_min.js`](p7_min.js). Raw capture
+  [`tiled-shm-292s-raw.txt`](tiled-shm-292s-raw.txt).
+- **Procedure:** one continuous 292 s capture.
+- **The hypothesis and its disposition.** WebKit's tiled compositor repaints dirty tiles rather than
+  a whole surface, and painting threads rasterise those tiles off the main thread — on paper, exactly
+  the bound the stall needs. On this SoC it is the **worst configuration measured**: 14.3 fps,
+  0.507/s, and only 73.8% of frames under 50 ms against the shipped 96.3%. The tile upload and the
+  extra threads cost more on a saturated single core than the damage-rect saving returns.
+- **Bound condition:** three variables move together — compositing on, SHM forced, four painting
+  threads — so this run scores **the configuration**, not any one of them. Run 34 separates the
+  painting threads from it.
+
+### Run 34 — painting threads alone
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+  **Frontend bundle:** `index-Mt2gvuKb.js`.
+- **Kiosk config:** as Run 26 — compositing **off**, 720p — plus `NICOSIA_PAINTING_THREADS=4` alone
+  in `/data/config/kiosk.conf`. Reverted afterwards.
+- **Scripts deployed:** ONE-OFF [`p7_min.js`](p7_min.js). Raw capture
+  [`painting-threads-294s-raw.txt`](painting-threads-294s-raw.txt).
+- **Procedure:** one continuous 294 s capture, read against Run 26b's.
+- **This is the separation Run 33 owes.** With compositing off there is no tiled backing store for a
+  painting thread to rasterise into, and the numbers say the variable does nothing: 41.3 fps and
+  0.041/s against the shipped 41.9 fps and 0.045/s, with a histogram within **0.12 percentage point**
+  of the shipped one at every bucket.
+- **Bound condition:** this is a null on a sequential capture, and a null of this size cannot be
+  distinguished from a small real effect. What it excludes is a *large* one, which is what the
+  hypothesis required.
+
+### Run 35 — a third display mode, below 720p
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+  **Frontend bundle:** the shipped `index-Mt2gvuKb.js`.
+- **Kiosk config:** as Run 26 — compositing off, firmware KMS, demonstration data — with the launcher's
+  `xrandr` line set to **640x480** instead of 1280x720. Returned to 1280x720 afterwards.
+- **Scripts deployed:** ONE-OFF [`p7_min.js`](p7_min.js). Raw capture
+  [`res640x480-194s-raw.txt`](res640x480-194s-raw.txt), read by [`parse_min.py`](parse_min.py).
+- **Procedure:** one continuous 194 s capture, read against Run 26b's 289 s capture of the same
+  bundle and mechanism at 720p. The only variable moved is the display mode.
+- **The prediction was fixed before the run, and it came from this record's own model.** 640x480 is
+  **307200 px against 720p's 921600 — exactly 3.0x fewer**. If the residual were a full-viewport
+  software repaint, its magnitude is pixel-bound and a 3x cut takes Run 26b's ~490 ms steady stall to
+  roughly 165 ms, under the 250 ms deadline entirely, and the rate toward zero. Either outcome is
+  informative: closing the gap would settle the deadline inside the current stack, and failing to
+  close it falsifies the pixel-area leg.
+- **It failed to close it, and by a wide margin.** The rate is **0.036/s** (7 frames over 250 ms in
+  194 s) against Run 26b's 0.045/s — inside the factor-of-two spread Run 26's own pair shows, so no
+  change. Four of those seven are startup, at t = 1.0, 2.3, 3.2 and 3.4 s, and the capture's maximum
+  of **1290 ms is one of them**. The three steady stalls are **324, 324 and 378 ms** at t = 40.4,
+  80.4 and 120.5 s, against Run 26b's seven arrivals past t=40 s at **468–537 ms** (its eighth, at
+  t=9.8 s, is 278 ms and is excluded from both sides of this comparison): a **1.4x** reduction where
+  3.0x was owed. Mean
+  frame time moves 24 → 22 ms and throughput 41.9 → 44.8 fps, so the pixel cut is doing real work on
+  the *mean* and almost none on the *stall*.
+- **The arrival cadence is untouched, which is the sharper half of the result.** The three steady
+  stalls arrive **40.0 s and 40.1 s** apart. Run 26b's arrive 40.0, 40.1, 39.9, 40.0, 40.1 and 40.0 s
+  apart. Three times fewer pixels changes neither the size of the stall by more than 1.4x nor its
+  period at all — and a ~40 s period is five turns of the marquee's 8 s cycle, so it is not a
+  per-cycle event in the first place.
+- **What this falsifies.** The residual is **not pixel-area-bound**, and the full-viewport software
+  repaint named as its mechanism does not survive. Run 22's 1080p → 720p result is unaffected: that
+  one measures during-motion *throughput*, which is pixel-bound, and this one measures the *stall*,
+  which is not. The two were read as the same quantity, and they are not.
+- **Bound conditions.** Two sequential captures, n=1 each, 194 s against 289 s; three steady stalls is
+  a small sample and the 1.4x magnitude ratio is quoted as such. The phase offset is against the
+  probe's own `t0` and is not compared across runs — only the *interval* is, which is invariant to
+  where the clock started. Legibility at 640x480 on a wall-mounted panel was not assessed; this run
+  was taken for the mechanism, not as a proposal.
+
+### Run 36 — allocation pressure, interleaved against a baseline arm
+
+- **Board:** prod, Raspberry Pi Zero W, slot A. **Image commit:** `100-gpu-compositing:7ce44ba`.
+  **Frontend bundle:** the shipped `index-Mt2gvuKb.js`. **Kiosk config:** as Run 26, back at 1280x720.
+- **Scripts deployed:** ONE-OFF [`p24_alloc.js`](p24_alloc.js), committed here. Raw capture
+  [`alloc-pressure-raw.txt`](alloc-pressure-raw.txt).
+- **Procedure:** one continuous 433 s capture, arms **interleaved inside it** rather than run as
+  separate captures — a `W,B,A,B,A,B` palindrome on 80 s blocks after a 20 s warmup, where **B
+  allocates** ~25000 short-lived objects per frame and drops them and **A allocates nothing beyond the
+  probe's own bookkeeping**. Frame timing is [`p7_min.js`](p7_min.js)'s bare rAF loop in both arms.
+  Board drift cannot masquerade as the effect, and the warmup block quarantines the startup stalls by
+  construction — the six frames over 250 ms before t=10 s are tagged `W` and score in neither arm.
+- **The discriminator, fixed before the run.** A JavaScriptCore collection is driven by allocation. If
+  the residual is a GC pause, arm B must show a markedly higher rate of frames over 250 ms and a
+  larger maximum than arm A. If the two arms read alike, GC is refuted and what remains is a periodic
+  engine task.
+- **The landing check is in band.** Each arm carries its own allocation counter, exfiltrated with its
+  frame statistics: **arm A reads `alloc=0` across 6730 frames and arm B reads `alloc=219` across 219
+  frames** — every B frame allocated, no A frame did. An arm that silently failed to allocate would
+  have read `alloc=0` and been unscoreable rather than a null.
+- **The arms do not overlap, and the separation is not subtle.** Arm B misses the deadline on **216 of
+  its 219 frames**, at a **1147 ms mean and a 2020 ms maximum**. Arm A misses on **14 of its 6730**,
+  at a 24 ms mean. As a fraction of frames that is **98.6% against 0.21% — a 474x ratio** — and as a
+  mean frame time it is **1147 ms against 24 ms, 48x**.
+- **Arm A's own maximum is the residual, seen outside startup.** Arm A reads a 1488 ms maximum while
+  excluding the warmup block by construction, so the heavy tail this record has treated as a startup
+  artifact also fires mid-run on the shipped page. Arm A's 14 misses over its 160 s of wall time are
+  0.088/s, the same order as Runs 26a and 26b.
+- **Bound conditions.** Mean frame time is **not** the score: building the objects costs real
+  milliseconds, so arm B's mean sits above arm A's whether or not a collector ran. The verdict is read
+  from the rate of frames over 250 ms and from the maximum, which are an order of magnitude larger
+  than the allocation's own cost. The per-second form of arm B's rate is not quoted, because arm B's
+  frames are so slow that fewer of them fit in the same wall time — the per-frame fraction is the
+  arm-comparable score and is what is used. This run shows allocation **drives** the stall; it does
+  not show that the shipped page's own allocation is the *only* thing that can trigger one, and the
+  magnitude of the injected pressure is far above anything the frontend does.
+- **The big-frame list is truncated** — 40 entries recorded against 236 misses — so it carries no
+  phase and none is read from it. Of the 40, six are warmup and the remaining 34 are all arm B.
+
 ### Delivery and board
 
 Run 2 is on prod, the wall-mounted Pi Zero W. `local/device-identity.md` is unchanged; the guard
@@ -576,15 +1252,18 @@ The tree facts the runs rest on; each cited to its source.
   `mesa-24.0.7/src/egl/main/eglglobals.c`), swaps `xf86-video-fbdev` for `xf86-video-modesetting`
   and adds `xserver-xorg-extension-glx` (`rpi-base.inc:13-14`).
   `meta-wisekiosk/recipes-core/kiosk-session/files/kiosk-launch` exports no `GDK_GL`.
-- Full KMS is a hard set, not a default taken: `VC4DTBO` is `?=` in
+- The image these runs ran, `7ce44ba`, was built from a `graphics` block setting
+  `VC4DTBO = "vc4-kms-v3d"` — full KMS as a hard set, not a default taken: `VC4DTBO` is `?=` in
   `sources/meta-raspberrypi/recipes-bsp/bootfiles/rpi-config_git.bb:28`, and several of
-  meta-raspberrypi's machine configs override it to `vc4-fkms-v3d`.
-  `kiosk-zero-w.yaml`'s `graphics` block sets `VC4DTBO = "vc4-kms-v3d"`.
+  meta-raspberrypi's machine configs override it to `vc4-fkms-v3d`. **Deleting the block does not
+  reach firmware KMS**; only an affirmative `VC4DTBO = "vc4-fkms-v3d"` does, which is what the
+  reconcile diff under "Durable image delivery — pending owner decision" carries.
 - The firmware HDMI keys in `meta-wisekiosk/recipes-bsp/bootfiles/rpi-config_%.bbappend` are inert
-  under KMS. `kiosk-zero-w.yaml`'s `graphics` block carries
+  under full KMS, and `7ce44ba`'s `graphics` block carries
   `CMDLINE:append = " video=HDMI-A-1:1920x1080@60D"` in their place; the
   trailing `D` forces the connector enabled and digital, which is what `hdmi_force_hotplug` did
-  (`Documentation/fb/modedb.rst:49-50` in the pinned kernel source).
+  (`Documentation/fb/modedb.rst:49-50` in the pinned kernel source). Under firmware KMS the keys are
+  the live mechanism again and the `video=` line has no place, which is the other half of that diff.
 - mesa is pinned to poky's 24.0.7 by `PREFERRED_VERSION_mesa` and `PREFERRED_VERSION_mesa-gl` in
   `kiosk-zero-w.yaml`'s `graphics` block. meta-raspberrypi ships
   `mesa_25.1.6.bb`, which `inherit`s the `rust` class where poky's `mesa.inc` does not, and ships no
@@ -621,8 +1300,13 @@ The tree facts the runs rest on; each cited to its source.
   'important')` is the one injection form that survives. This is not a footnote — it produced a false
   "the cost is content-independent" result in an earlier pass, because every manipulation in that
   pass was discarded before it applied.
-- Cost: the `MACHINE_FEATURES` change invalidates WebKit and costs a full rebuild (~4.5 h), per
-  [`../../../README.md`](../../../README.md) §"Quick start".
+- Cost, and it is specific to what is touched. A `DISTRO_FEATURES`, `MACHINE_FEATURES` or webkit
+  `PACKAGECONFIG` change invalidates WebKit and costs a full rebuild (~4.5 h), per
+  [`../../../README.md`](../../../README.md) §"Quick start". The `graphics` block touches none of
+  those: `vc4graphics` enters `MACHINE_FEATURES` from upstream `rpi-base.inc:125` and
+  `kiosk-zero-w.yaml` sets no `DISABLE_VC4GRAPHICS` either way, so changing `VC4DTBO` or the
+  `CMDLINE:append` re-deploys `config.txt` and the kernel command line and reassembles the image
+  without the WebKit invalidation.
 
 ## Metrics
 
@@ -1005,6 +1689,286 @@ marquee rows present in every one. All five arms landed.*
 
 Drift-centred across the palindrome: **ON 1.08/s at 76.6 ms · OFF 1.10/s at 36.5 ms.**
 
+*Run 17 (`7ce44ba`, prod, compositing off, 1080p, bundle `index-dKJ9KDWL.js`, demonstration data).
+One continuous 1630 s capture, 20337 frames, `M5/20` at the last read.
+[`motion-baseline-raw.txt`](motion-baseline-raw.txt) → [`parse_motion.py`](parse_motion.py).*
+
+| | value |
+|---|---|
+| window mean · max | 80 ms · 2013 ms |
+| window fps | 12.5 |
+| **during motion** (2211 frames, T blocks, block 0 dropped) | **127 ms · 7.86 fps** |
+
+| rows moving that frame | frames | mean | fps |
+|---|---|---|---|
+| 0 | 9658 | 44 ms | **22.7** |
+| 1 | 2200 | 94 ms | 10.6 |
+| 2 | 714 | 143 ms | 7.0 |
+| 3 | 1711 | 157 ms | 6.4 |
+| 4 | 765 | 177 ms | 5.6 |
+| 5 | 374 | 197 ms | **5.1** |
+| 6 | 65 | 216 ms | 4.6 |
+| 7 | 3 | 327 ms | 3.1 |
+
+*Run 18a (`7ce44ba`, prod, compositing off, 1080p, bundle `index-dKJ9KDWL.js`). One 436 s palindrome,
+5836 frames, `steps(40)`. [`steps-k40-raw.txt`](steps-k40-raw.txt) →
+[`parse_steps.py`](parse_steps.py).*
+
+| arm | blocks | frames | overall mean | fps | moving frames | **MOVING mean** | static mean |
+|---|---|---|---|---|---|---|---|
+| A baseline | 13 | 3407 | 75.0 ms | 13.33 | 35.8% | **132.3 ms** | 42.9 ms |
+| B `steps(40)` | 8 | 2240 | 71.3 ms | 14.02 | 32.3% | **121.1 ms** | 47.9 ms |
+
+*Run 18b (`7ce44ba`, prod, compositing off, 1080p, bundle `index-dKJ9KDWL.js`). A separate 436 s
+palindrome, 7089 frames, `steps(10)`. Never differenced against Run 18a.
+[`steps-k10-raw.txt`](steps-k10-raw.txt) → [`parse_steps.py`](parse_steps.py).*
+
+| arm | blocks | frames | overall mean | fps | moving frames | **MOVING mean** | static mean |
+|---|---|---|---|---|---|---|---|
+| A baseline | 13 | 3614 | 70.8 ms | 14.12 | 34.6% | **131.5 ms** | 38.7 ms |
+| B `steps(10)` | 8 | 3290 | **48.6 ms** | 20.56 | **11.1%** | **153.2 ms** | 35.6 ms |
+
+The overall mean falls 22.2 ms and the **moving** frame gets 21.7 ms slower. The lever buys the
+average by converting moving frames into static ones, which is the opposite of what a person watching
+the motion is paying for. Rejected on that line, not on the score.
+
+*Run 19 (`7ce44ba`, prod, **compositing ON**, 1080p, bundle `index-dKJ9KDWL.js`). One continuous
+437 s capture, 641 frames, `M4/20`. [`motion-compositing-on-raw.txt`](motion-compositing-on-raw.txt)
+→ [`parse_motion.py`](parse_motion.py).*
+
+| | value |
+|---|---|
+| window mean · max | 680 ms · 4722 ms |
+| window fps | 1.5 |
+| **during motion** (391 frames) | **667 ms · 1.50 fps** |
+| frames with **no** row moving (89) | 745 ms · 1.3 fps |
+
+*Run 20 (`7ce44ba`, prod, compositing off, 1080p, bundle `index-dKJ9KDWL.js`). One 436 s palindrome.
+[`duration-cv179-raw.txt`](duration-cv179-raw.txt) → [`parse_duration.py`](parse_duration.py).*
+
+| arm | blocks | frames | overall mean | fps | MOVING mean | **px per moving frame** |
+|---|---|---|---|---|---|---|
+| A flat 8 s cycle | 13 | 3541 | 72.2 ms | 13.85 | 127.2 ms | **20.80** (26127 px / 1256 frames) |
+| B constant 179 px/s | 8 | 2109 | 75.7 ms | 13.22 | 137.7 ms | **21.94** (15377 px / 701 frames) |
+
+The jump was required to fall at least 10% and frame time to rise at most 5%. The jump **rose** 5.5%
+and frame time rose 4.8%: the lever does not work on this data.
+
+*Run 21 (`7ce44ba`, prod, compositing off, 1080p, bundle `index-dKJ9KDWL.js`). One 436 s palindrome,
+glyphs against a solid fill over the same box. [`paintcost-raw.txt`](paintcost-raw.txt) →
+[`parse_steps.py`](parse_steps.py), which labels arm B "STEPS" where this run's arm B is FILL.*
+
+| arm | blocks | frames | overall mean | fps | moving frames | **MOVING mean** | static mean |
+|---|---|---|---|---|---|---|---|
+| A glyphs | 13 | 3375 | 75.4 ms | 13.26 | 35.1% | **140.0 ms** | 40.5 ms |
+| B solid fill | 8 | 2072 | 77.1 ms | 12.97 | 34.8% | **141.7 ms** | 42.6 ms |
+
+A 1.3% difference on the MOVING mean, in the direction of the fill being *dearer*. Removing every
+glyph from the moving box changes nothing measurable.
+
+*Run 22 (`7ce44ba`, prod, compositing off, **1280x720**, bundle `index-dKJ9KDWL.js`). One continuous
+439 s capture, 10760 frames, `M6/19`. [`motion-720p-raw.txt`](motion-720p-raw.txt) →
+[`parse_motion.py`](parse_motion.py).*
+
+| | value |
+|---|---|
+| window mean · max | 41 ms · 1595 ms |
+| window fps | 24.4 |
+| **during motion** (2273 frames) | **66 ms · 15.26 fps** |
+
+| rows moving that frame | frames | mean | fps |
+|---|---|---|---|
+| 0 | 5983 | 31 ms | **32.3** |
+| 1 | 707 | 51 ms | 19.6 |
+| 2 | 41 | 57 ms | 17.5 |
+| 3 | 814 | 61 ms | 16.4 |
+| 4 | 608 | 77 ms | 13.0 |
+| 5 | 117 | 96 ms | **10.4** |
+| 6 | 94 | 95 ms | 10.5 |
+
+*Run 23 (`7ce44ba`, prod, compositing off, 720p, bundle `index-Dqt17Jj2.js`, constant-velocity
+marquee). One continuous 228 s capture, 5800 frames, `M3/20`.
+[`motion-720p-cv-raw.txt`](motion-720p-cv-raw.txt) → [`parse_motion.py`](parse_motion.py).*
+
+| | value |
+|---|---|
+| window mean · max | 39 ms · 1508 ms |
+| window fps | 25.6 |
+| **during motion** (2645 frames) | **50 ms · 20.19 fps** |
+| frames carrying a read with at least one row moving | **65.7%** (2893 of 4404) |
+
+*Run 24 (`7ce44ba`, prod, compositing off, 720p, bundle `index-Ci1lj58e.js`, linear timing with
+shrunken holds). One continuous 226 s capture, 3181 frames, `M3/20`.
+[`motion-linear-shrunk-raw.txt`](motion-linear-shrunk-raw.txt) →
+[`parse_motion.py`](parse_motion.py).*
+
+| | value |
+|---|---|
+| window mean · max | 71 ms · 1413 ms |
+| window fps | 14.1 |
+| **during motion** (2234 frames) | **72 ms · 13.94 fps** |
+| frames with **no** row moving | **3 of 3181** — the holds really did shrink |
+
+*Run 25 (`7ce44ba`, prod, compositing off, 720p, bundle not recorded). One continuous 438 s
+palindrome, 9859 frames, `M5/20`, row overflow distances 59 · 18 · 20 · 1 · 108 px.
+[`scroll-vs-transform-raw.txt`](scroll-vs-transform-raw.txt) → [`parse_scroll.py`](parse_scroll.py).*
+
+| arm | blocks | frames | **mean frame** | **fps** | worst frame | landing (max `scrollLeft`) |
+|---|---|---|---|---|---|---|
+| T `transform` | 12 | 3328 | **71.5 ms** | **13.99** | 491 ms | 0 px in every block |
+| S `scrollLeft` | 8 | 6037 | **26.5 ms** | **37.80** | 496 ms | 94–108 px in every block |
+
+**45.0 ms per frame, a 2.70x ratio, inside one capture with both arms moving the same rows the same
+distance at the same px/s.** One T block reported `land=0` and was dropped. The worst frame is the
+same size in both arms — the mechanism buys throughput and does not touch the stall.
+
+*Runs 26 to 35 (`7ce44ba`, prod, firmware KMS, demonstration data; 720p except Run 35, which is
+640x480). Each is one continuous capture of the bare [`p7_min.js`](p7_min.js) loop or a probe built on
+it, and every row is produced by running [`parse_min.py`](parse_min.py) on the named file except
+Runs 28, 30 and 31, which name their own parser. **Run 29 is absent by design** — it is a two-arm
+benchmark rather than a single window and has its own table below. **Run 36 is absent** because its
+payload is the `AL` record, also its own table below. **The rows are not a series**: each names its
+own configuration and its own capture, and no two are differenced into a single number without saying
+so.*
+
+| Run | capture | s | frames | mean | fps | max | **>250 ms** | **per second** | `<50 ms` |
+|---|---|---|---|---|---|---|---|---|---|
+| 26a | [`hold2s-fps-169s-raw.txt`](hold2s-fps-169s-raw.txt) | 169 | 6978 | 24 ms | 41.3 | 1549 ms | 15 | **0.089** | 96.4% |
+| 26b | [`hold2s-phase-289s-raw.txt`](hold2s-phase-289s-raw.txt) | 289 | 12096 | 24 ms | 41.9 | 1518 ms | 13 | **0.045** | 96.3% |
+| 27 | [`stagger-phase-288s-raw.txt`](stagger-phase-288s-raw.txt) | 288 | 11866 | 24 ms | 41.2 | 1493 ms | 12 | **0.042** | 96.4% |
+| 28 | [`layout-attribution-288s-raw.txt`](layout-attribution-288s-raw.txt) | 288 | 11829 | 24 ms | 41.1 | 1494 ms | 14 | **0.049** | — |
+| 30 | [`contain-paint-286s-raw.txt`](contain-paint-286s-raw.txt) | 286 | 11168 | 26 ms | 39.0 | 1454 ms | 24 | **0.084** | 94.7% |
+| 31 | [`freeze-188s-raw.txt`](freeze-188s-raw.txt) | 188 | 11209 | 17 ms | 59.6 | 1348 ms | 3 | **0.016** | 100.0% |
+| 32 | [`continuous-pingpong-292s-raw.txt`](continuous-pingpong-292s-raw.txt) | 292 | 8951 | 33 ms | 30.7 | 1564 ms | 5 | **0.017** | 95.5% |
+| 33 | [`tiled-shm-292s-raw.txt`](tiled-shm-292s-raw.txt) | 292 | 4183 | 70 ms | 14.3 | 2613 ms | 148 | **0.507** | 73.8% |
+| 34 | [`painting-threads-294s-raw.txt`](painting-threads-294s-raw.txt) | 294 | 12143 | 24 ms | 41.3 | 1487 ms | 12 | **0.041** | 96.3% |
+| **35** | [`res640x480-194s-raw.txt`](res640x480-194s-raw.txt) · **640x480** | 194 | 8692 | 22 ms | 44.8 | 1290 ms | 7 | **0.036** | 97.1% |
+
+Three rows carry a qualifier that the number alone does not. **Run 28's** rate is measured on a page
+being deliberately perturbed by a forced layout flush every frame, so it is not the unperturbed rate.
+**Run 31's** 0.016/s is scored INCONCLUSIVE by its own parser because the page did not fully freeze;
+its three stalls are all before t=3.9 s, and it excludes 93 signature-sampling frames, two of them
+over 250 ms, from both the count and the histogram. **Run 35's** 1290 ms maximum is a startup frame
+(t=2.3 s), not a steady stall — the steady stalls in that capture are 324, 324 and 378 ms, and the
+`max` column is not the quantity Run 35 is read for.
+
+*Run 35 against Run 26b, the only pair in this record that differs in display mode alone at the same
+bundle, mechanism and probe. Read as a cross-run comparison with the capture boundary stated, never
+merged.*
+
+| | Run 26b · 1280x720 | Run 35 · 640x480 | ratio |
+|---|---|---|---|
+| pixels | 921600 | 307200 | **3.0x fewer** |
+| steady stalls past t=40 s | 474 · 468 · 537 · 478 · 473 · 478 · 520 ms | 324 · 324 · 378 ms | **1.4x smaller** |
+| earliest steady stall (t≈10 s), listed not compared | 278 ms at t=9.8 | — | — |
+| arrival interval of those stalls | 40.0 · 40.1 · 39.9 · 40.0 · 40.1 · 40.0 s | 40.0 · 40.1 s | **unchanged** |
+| frames >250 ms per second | 0.045 | 0.036 | inside the run-to-run spread |
+| mean frame · fps | 24 ms · 41.9 | 22 ms · 44.8 | 1.1x · 1.07x |
+
+**Three times fewer pixels buys 1.4x on the stall and nothing on its period.** A pixel-bound cost owed
+3x. This is the measurement that falsifies the pixel-area leg and, with it, the full-viewport-repaint
+identification; the mean and the framerate do improve, which is the separate, real, pixel-bound win.
+
+*Run 36 (`7ce44ba`, prod, 720p, bundle `index-Mt2gvuKb.js`). One continuous 433 s capture, 7564
+frames, arms interleaved inside it. [`alloc-pressure-raw.txt`](alloc-pressure-raw.txt), read from the
+`AL` record's own per-arm fields as written by [`p24_alloc.js`](p24_alloc.js).*
+
+| arm | frames | **>250 ms** | **as a fraction** | mean frame | max frame | **`alloc` counter** |
+|---|---|---|---|---|---|---|
+| A — BASELINE | 6730 | 14 | **0.21%** | 24 ms | 1488 ms | **0** |
+| B — ALLOC | 219 | 216 | **98.6%** | **1147 ms** | **2020 ms** | **219** |
+
+**474x** on the fraction of frames that miss the deadline, **48x** on the mean frame time, with the
+landing check reading `alloc=0` in the arm that must not allocate and `alloc=219` — every frame — in
+the arm that must. Window totals: 236 frames over 250 ms, 57 ms mean, 2020 ms max, histogram
+7068 · 167 · 93 · 11 · 39 · 185 · 1 across the seven buckets. The six warmup stalls (t = 1.6, 2.6,
+4.1, 5.2, 5.5 and 9.8 s) score in neither arm.
+
+**Arm B's rate is deliberately not quoted per second.** Its frames are slow enough that fewer fit in
+the same wall time, so a per-second rate under-reports the effect; the per-frame fraction is the
+arm-comparable score. Arm A's own 14 misses across its 160 s of wall time are 0.088/s, the same order
+as Runs 26a and 26b, and its 1488 ms maximum fires **outside** the warmup block — the heavy tail is
+not only a startup artifact.
+
+*Run 26b, the phase of the steady stalls against the marquee's 8 s cycle. Read from that capture's
+own big-frame list and from no other run's.*
+
+| t (s) | dt (ms) | t mod 8 s |
+|---|---|---|
+| 1.5 · 2.5 · 4.0 · 5.1 · 5.4 | 1518 · 978 · 1506 · 1081 · 301 | startup, not scored |
+| 9.8 | 278 | 1.8 |
+| 41.9 | 474 | 1.9 |
+| 81.9 | 468 | 1.9 |
+| 122.0 | 537 | 2.0 |
+| 161.9 | 478 | 1.9 |
+| 201.9 | 473 | 1.9 |
+| 242.0 | 478 | 2.0 |
+| 282.0 | 520 | 2.0 |
+
+**Eight of eight**, in a 0.2 s window, on a cycle 8 s long. Run 27's stagger leaves it at **six of
+six** between 1.8 and 2.1. The offset is against the probe's `t0`, not the page's, so it is read as
+locked to a fixed point of the cycle and never compared across runs.
+
+*Run 28 (`7ce44ba`, prod, 720p, bundle `index-Mt2gvuKb.js`). One 288 s capture with one timed
+synchronous layout flush per frame. [`layout-attribution-288s-raw.txt`](layout-attribution-288s-raw.txt)
+→ [`parse_profile.py`](parse_profile.py).*
+
+| | value |
+|---|---|
+| stall frames (>250 ms) | 14 |
+| forced layout on the **worst** stall frame (1494 ms) | **0 ms — 0.0%** |
+| largest forced layout on any stall frame | **1 ms — 0.3%** of that frame |
+| forced layout across all 14, frame-weighted | **0.0%** |
+| `longtask` entry type | **absent on this build** — recorded, not faked |
+
+*Run 29 (`7ce44ba`, prod, 720p, bundle `index-Mt2gvuKb.js`). One 115 s capture, 2560 frames, 22.3 fps.
+A full-viewport repaint forced every 20th frame and attributed to the following frame.
+[`fullpaint-bench-115s-raw.txt`](fullpaint-bench-115s-raw.txt) →
+[`parse_fullpaint.py`](parse_fullpaint.py).*
+
+| | n | mean | p50 | **p90** | **max** |
+|---|---|---|---|---|---|
+| FORCED — one full-viewport repaint | 127 | 245 ms | 203 ms | **458 ms** | **530 ms** |
+| BASELINE — the page's ordinary frames | 2432 | 34 ms | 20 ms | 50 ms | 1477 ms |
+
+Top forced frames: 530 · 528 · 512 · 508 · 508 · 504 · 495 · 486 · 476 · 474 ms. Isolated cost of one
+full-viewport repaint, FORCED minus BASELINE: **183 ms at the median, 211 ms at the mean.**
+
+**The parser's verdict is negative and is printed as it stands:** scored on the p50, a forced full
+repaint is **0.45x** the reference stall (0.54x on the mean). That reference is **450 ms hardcoded in
+[`parse_fullpaint.py`](parse_fullpaint.py)** with no provenance stated in the parser itself; it is
+consistent with Run 26b's steady stalls, whose mean is 490 ms over the seven at t>40 s and 463 ms
+over all eight, and it is recorded here as a chosen constant rather than a derived one.
+
+Run 26b's steady stalls span **278–537 ms**, with seven of the eight in 468–537 and the 278 ms member
+the earliest arrival. Against the **isolated** repaint cost — FORCED minus BASELINE, 183 ms at the
+median — a stall that was one full repaint should read about `34 + 183 = ~217 ms`, and the measured
+~490 ms is **2.3x** that. The only reading on which the two meet is the un-subtracted FORCED p90 of
+458 ms, and the subtraction and that comparison cannot both be taken. **The magnitude leg is
+therefore negative, not marginal**, which is what the parser said and what Run 35 later confirmed
+from the other direction.
+
+The BASELINE row's 1477 ms max is not attributable in time: the `FVP` payload carries **no
+timestamps**, and 1477 ms sits inside the startup cluster every capture in this family shows. Only
+that row's median and mean are usable, and nothing here rests on when the frame arrived.
+
+*Run 30 (`7ce44ba`, prod, 720p, bundle `index-Mt2gvuKb.js`, `contain: paint` inline on all four
+cards). One 286 s capture. [`contain-paint-286s-raw.txt`](contain-paint-286s-raw.txt) →
+[`parse_contain.py`](parse_contain.py).*
+
+| | value |
+|---|---|
+| requested · cards · inline writes | `paint` · 4 · 4 |
+| **landing: computed `contain` read back** | **`paint`**, support probed and confirmed |
+| frames >250 ms | 24 in 286 s = **0.084/s** |
+| worst frame | 1454 ms |
+| against Run 26b's 0.045/s | **2.10x — the wrong direction** |
+
+Read **within this capture only**, because a phase offset is against the probe's own `t0` and does
+not carry between runs: the stalls still cluster — nine of the 14 at t mod 8 s = 0.8–1.6 — but four
+more arrive at 6.7–7.3 and five follow another within 0.2–0.5 s. Containment landed, and the
+escalation is neither removed nor bounded by a card.
+
 ## Off-board measurements
 
 These designed and verified the fix. They are not board runs and carry no board or image commit, so
@@ -1048,6 +2012,201 @@ two builds in twelve-hour form, and in twenty-four-hour form — the case the sl
 `.annotations` measures 53 x 172.8 px in both, so the column does not collapse where there is no
 meridiem. A pixel comparison of the annotations column gives **AE = 0**. The suites pass: 24
 Playwright clock tests across three viewports, 2 vitest unit tests.
+
+## Root cause of the residual stall
+
+**The residual is a JavaScriptCore garbage-collection pause.** A long-lived page that allocates on a
+schedule — a clock tick every second, a data poll, reactive objects re-created, DOM churn — walks its
+heap up to the collector's threshold, and the full collection that follows runs on the board's single
+ARM11 core and stops the main thread for roughly half a second at the steady arrival and up to ~1.5 s
+in the tail. The allocation sources named there are the shape of the mechanism and are **not
+measured on this page**; what is measured is that allocation drives the stall. Four legs carry the
+identification, and the second of them is also the test the withdrawn one failed.
+
+- **Allocation drives it, measured directly and by a wide margin (Run 36).** Inside one capture,
+  with arms interleaved so board drift cannot masquerade as the effect, an arm allocating and
+  dropping short-lived objects every frame misses the 250 ms deadline on **216 of 219 frames** at a
+  **1147 ms mean and a 2020 ms maximum**; the baseline arm of the same capture misses on **14 of
+  6730** at a 24 ms mean. That is **98.6% against 0.21% — a 474x change in the fraction of frames
+  that miss** — and each arm's allocation counter is read back in band, `alloc=219` and `alloc=0`, so
+  the manipulation is verified to have landed on the arm it was meant to and on no other. This is the
+  only manipulation in this investigation that reproduces the stall at will.
+- **It is not pixel-area-bound (Run 35).** Cutting the panel from 1280x720 to 640x480 — **exactly
+  3.0x fewer pixels** — leaves the rate at 0.036/s against 0.045/s, leaves the ~40 s arrival interval
+  untouched, and shrinks the steady stall only **1.4x** — 468–537 ms to 324–378 ms, comparing each
+  capture's arrivals past t=40 s — where a pixel-bound cost owes 3x. Mean frame time and framerate
+  *do* improve, 24 → 22 ms and 41.9 → 44.8 fps, which is the separate pixel-bound win and not this
+  quantity.
+- **It is not layout (Run 28).** A synchronous layout flush timed inside every frame reads **0–1 ms
+  on all 14 stall frames** — 0.0% of the worst one, 0.0% frame-weighted. Forcing layout continuously
+  would also have dissolved a batched-layout stall, and it did not: the stalls survived the
+  perturbation unchanged. Layout is excluded twice over.
+- **Stopping the page's own work stops it (Run 31), and that is now read as stopping allocation.**
+  With every timer and `requestAnimationFrame` neutered, the capture runs 188 s at 59.6 fps with its
+  only three frames over 250 ms at t = 1.6, 3.1 and 3.9 s and **nothing over 250 ms in the remaining
+  184 s**. At the shipped 0.045/s a 184 s window expects about eight; seeing none is a strong
+  observation, not a weak one. The run's own content signature caught **one change** across 94
+  samples, so `frozen=0` and [`parse_freeze.py`](parse_freeze.py) returns **INCONCLUSIVE: "the
+  0.016/s rate is not attributable either way."** That verdict is not overridden here. What the run
+  cannot separate is *which* kind of work stopping mattered — a page whose callbacks are neutered
+  both allocates far less and renders far less — and Run 36 is what separates them, by holding
+  rendering constant and moving allocation alone.
+
+**The arrival cadence is what a threshold-driven collector looks like, and it is not what a
+per-cycle rendering event looks like.** Run 26b's seven arrivals past t=40 s are 40.0, 40.1, 39.9,
+40.0, 40.1 and 40.0 s apart; Run 27's fall on the same beat with two turns skipped (40.0, 40.0, 80.0,
+80.1); Run 34's carry it with one extra arrival between; and Run 35's are 40.0 and 40.1 s apart at a
+third of the pixels. That period is **five turns of the marquee's 8 s cycle**, so
+nothing in the cycle explains why one turn in five costs half a second. A steady allocation rate
+crossing a fixed heap threshold explains the period directly. The phase lock Run 26b reads — eight of
+eight steady stalls at t mod 8 s = 1.8–2.0, the scroll-start — then says only *which* frame of the
+cycle is the one that carries the collection when the threshold is due: the busiest frame in the
+cycle, the one that allocates and works most.
+
+**WITHDRAWN: the full-viewport software repaint.** This record carried, for most of its length, the
+identification that the residual was an occasional full-viewport software repaint, content-triggered
+and pixel-bound. **Run 35 falsified it** — a 3.0x pixel cut is the test that mechanism owed, and the
+stall did not follow the pixels down. Two things had already pointed the same way and are recorded
+here as the reasoning trail rather than as live claims:
+
+- **The magnitude never matched.** Run 29 prices an isolated full-viewport repaint at **183 ms at the
+  median, 211 ms at the mean** (FORCED minus BASELINE). One repaint on top of a 34 ms frame is
+  ~217 ms; the measured steady stall is ~490 ms. That is **2.3x**, and the only way the two met was by
+  comparing the stall against the *un-subtracted* FORCED p90 of 458 ms — taking the subtraction and
+  the comparison at once. [`parse_fullpaint.py`](parse_fullpaint.py) printed the negative verdict all
+  along, and Run 21 closes the escape: cost is content-independent to 1.2%, so a solid-fill benchmark
+  is a fair price for a glyph-heavy repaint and the gap is real rather than an artifact of the probe.
+- **The probes could never see the component the claim named.** Every stall-family probe measures rAF
+  deltas from inside the page, which bundle the whole produce-to-next-callback interval. Run 4
+  measures that interval as **WebKit 53% / X 25% / surf 19%**, so ~44% of a frame is not WebKit
+  rasterising at all, and no run in this family attributes a stall frame across the three processes.
+  "Software repaint" named a component the instrument could not resolve.
+
+**What the withdrawal does not touch.** Run 29's benchmark is still a correct measurement of what a
+full-viewport repaint costs on this board; it simply is not measuring the stall. Run 21's
+content-independence and Run 30's inert, verifiably-landed `contain: paint` stand as measured. Run
+22's 1080p → 720p result stands: it measures during-motion **throughput**, which is pixel-bound, and
+the error was reading it as the same quantity as the stall. The engine levers in "Engine levers,
+measured and exhausted" are still measured and still negative — they were aimed at paint, which is
+the wrong target, so their nullity is expected rather than informative about the collector.
+
+**The honest gaps, named rather than glossed.**
+
+- **No collector instrument was read.** No GC-event trace, no heap-size series and no
+  `performance.memory`-equivalent reading is in this record; the identification rests on an
+  allocation manipulation with a verified landing (Run 36), a falsified alternative (Run 35) and the
+  arrival cadence. A direct read of collection events would convert it from convergent inference to
+  observation, and that read has not been taken.
+- **Run 36 shows allocation is sufficient to produce the stall, not that the frontend's own
+  allocation is the only trigger.** The injected pressure is far above anything the page does, and
+  the shipped page's per-second allocation has not been measured.
+- **The Paint rect was never read either.** WebKit's remote-inspector Timeline, which records a
+  `Paint` record carrying the repainted rectangle, is **unavailable on this build**: the inspector
+  server accepts the socket and returns nothing, and there is no repaint-region debug environment
+  variable to fall back on — consistent with "Configuration under test", which records that
+  `WEBKIT_DEBUG` is compiled out of this release build. Run 28 independently records that the
+  `longtask` entry type is absent, so the engine-side cross-check was gone too. **Both missing
+  instruments are build-time conditions with a build-time answer** — see "Real-time framing".
+
+## Engine levers, measured and exhausted
+
+Every **runtime** configuration lever WebKit and the display stack expose on this SoC, each measured
+on the board and each scored against the run that measured it. The build-time surface —
+`PACKAGECONFIG` on the webkit recipe — is a separate class and is **not** enumerated here; see
+"Real-time framing".
+
+**These rows are not a series and must not be differenced against each other.** Each is one run's own
+number against its own reference, across different resolutions, bundles and mechanisms. The column
+says what that run's verdict was, not where a lever sits in a ranking.
+
+**Every lever in this table was aimed at paint**, and paint is not the residual's mechanism — see
+"Root cause of the residual stall". The rows are still correct as measurements and still correct as
+verdicts on their own levers; what they are not is evidence that the residual is unbounded, because
+none of them was ever pointed at the collector.
+
+| Lever | Run | Measured | Verdict |
+|---|---|---|---|
+| **GPU / accelerated compositing** (dma-buf, vc4 + mesa) | 19 | during-motion **1.50 fps** against Run 17's 7.86 at the same resolution and bundle; static frames 745 ms | **5.2x worse.** The investigation's opening premise, measured backwards for the second time |
+| **Tiled software compositing** + shared-memory path + 4 painting threads | 33 | **14.3 fps, 0.507/s**, 73.8% of frames under 50 ms | **11x more deadline misses** than the shipped 0.045/s. Tile upload costs more on a saturated single core than the damage-rect saving returns |
+| **Painting threads alone** (`NICOSIA_PAINTING_THREADS=4`, compositing off) | 34 | **41.3 fps, 0.041/s** against the shipped 41.9 fps and 0.045/s | **Null.** With no tiled backing store there is nothing for a painting thread to rasterise into |
+| **`contain: paint` on the park cards** | 30 | **0.084/s**, max 1454 ms, computed `contain` read back as `paint` | **Inert, and landed.** A containment boundary does not bound the stall — which follows, since a collector pause is not a paint the boundary could contain |
+| **Full KMS** (`vc4-kms-v3d`) | 2 | A content-black scanout on a live signal, owner-confirmed, persisting across forced 1080p and 720p, `disable_fw_kms_setup=1`, an `xrandr` kick, and compositing on and off | **Blacks the panel.** Not a performance lever at all on this display |
+| **1280x720** (`xrandr` in the launcher, firmware KMS) | 22 | during-motion **7.86 → 15.26 fps**, window mean 12.5 → 24.4 fps | **The one lever here that works, and only on throughput.** It is not an engine lever — it is fewer pixels, and it buys the mean, not the stall |
+| **640x480** — a third display mode, 3.0x below 720p | 35 | **0.036/s** against 0.045/s, steady stalls past t=40 s 324–378 ms against 468–537 ms, arrival interval unchanged at ~40 s | **Does not reach the stall, and that is the point of the run.** 3x fewer pixels buys 1.4x on the stall and nothing on its period. The falsifier of the pixel-area leg |
+| `steps()` quantisation of the marquee | 18a, 18b | `steps(40)` 75.0 → 71.3 ms overall; `steps(10)` 70.8 → 48.6 ms overall but **131.5 → 153.2 ms** on the moving frame | **Rejected.** Wins the average by converting moving frames to static ones |
+| Per-row constant scroll velocity | 20 | 20.80 → **21.94** px per moving frame, frame time +4.8% | **Does not engage** on overflows of 1–108 px |
+| Shrinking the hold phases | 24 | 3 static frames in 3181; window mean 14.1 fps | **Worse.** Removing the rests gangs the repaints instead of spreading them |
+| A 200 ms stagger between row starts | 27 | 0.042/s, and **6 of 6** steady stalls still at one phase | **Null.** Reverted |
+
+What is left after the ledger is not an engine lever, and the two things that moved a number moved
+**mean frame time**: **fewer pixels** (Run 22) and **a different mechanism in the app** (Run 25,
+`scrollLeft` at 26.5 ms against `transform` at 71.5 ms in one interleaved capture). Both live outside
+WebKit's runtime configuration, and neither touches the stall — Run 25's two arms have the same worst
+frame, 491 ms and 496 ms, and Run 35 takes the pixels down 3x more for 1.4x on the stall. **The
+lever that does reach the stall is in the app too, and it is not a rendering lever**: the frontend's
+per-second allocation churn, which Run 36 shows drives the stall by 474x when pushed in the wrong
+direction. It has not been pushed in the right one; see "Real-time framing".
+
+## Real-time framing
+
+The owner's standard for this panel is a hard one: a ~450 ms frame is not a slow frame, it is a
+**missed deadline**, and a display that misses one is broken for the interval it misses it in. That
+framing is the right one for a wall-mounted appliance, and this investigation was run against it
+rather than against an average.
+
+The measured answer is that **no runtime configuration of this stack bounds the deadline, and the
+lever that reaches the mechanism is in the application rather than in the stack at all.**
+
+A browser engine is a soft-real-time system by construction: it decides when to repaint, how much of
+the surface to repaint, on which thread, and when to collect its heap, from heuristics that optimise
+the common case and carry no upper bound. The **rendering** heuristics have all been tried on the
+board and are in "Engine levers, measured and exhausted" — compositing, tiled compositing, painting
+threads, containment, two resolution cuts. Containment was the sharpest of them because it addresses
+the damage rect directly, and Run 30 applied it, verified it landed by reading the computed value
+back, and watched the rate go through it. **That whole ledger is aimed at the wrong subsystem.** The
+residual is a collector pause, not a repaint (see "Root cause of the residual stall"), and none of
+those levers was ever pointed at it.
+
+What the work did buy is large and is not a guarantee: **1.07/s deadline misses at 1080p with the
+transform marquee (Run 9) against 0.045/s over 289 s and 0.089/s over 169 s on the shipped
+configuration (Runs 26b and 26a)** — a 12x to 24x reduction, read across runs that differ in
+resolution, mechanism and bundle at once, and quoted as a range because two captures of the *same*
+shipped configuration differ by a factor of two. Rare is not bounded. A miss every twenty-odd seconds
+is a miss. And on Run 36's reading, that reduction was bought by the frontend **allocating less** —
+the remount gone, the per-frame style writes gone, the transform churn gone — rather than by
+rendering more cheaply. The mechanism that produced the win is the same mechanism that still has
+headroom.
+
+**The lever that follows is reducing the WiseKiosk frontend's per-second allocation churn**, and it
+is un-run. Run 36 shows the relationship is steep in the wrong direction — 474x on the miss fraction
+for injected pressure — and nothing here measures what the page's own allocation rate is or what
+removing it would buy. The audit that opens it is a frontend one: the clock tick, the data poll, the
+reactive objects re-created per update, and the per-frame object churn in the marquee's shared rAF
+loop. **This investigation does not take it, size it, or promise what it returns.** It records that
+this is the thread #100 gpu-compositing is now open on, and that it is the owner's to pick up in the
+WiseKiosk repository.
+
+**Two levers sit outside what was surveyed, and naming them is part of the honesty of the
+conclusion.**
+
+- **Build-time WebKit configuration was never enumerated.** Everything above is *runtime* — an
+  environment variable, a `/data/config/kiosk.conf` line, an `xrandr` mode. `PACKAGECONFIG` on the
+  webkit recipe is a different class, and it is a budgeted operation in this tree rather than an
+  exotic one: a webkit `PACKAGECONFIG` change invalidates WebKit and costs a full rebuild, ~4.5 h,
+  per [`../../../README.md`](../../../README.md) §"Quick start". Two things sit in that class and both
+  bear on this record. **Whether a concurrent or incremental collector is available to this build at
+  all** is unknown, because the surface was not surveyed — and JavaScriptCore's own options are
+  compiled out of this release build, so there is no runtime way to ask. **And the instruments this
+  record says it lacks are build-time conditions**: `WEBKIT_DEBUG` is compiled out and the remote
+  inspector returns nothing, so a developer- or inspector-enabled WebKit build is what would turn
+  both the collector read and the Paint rect from inference into observation. Costing that is an
+  owner decision; **not naming it** would be a defect in this section, which is why it is named.
+- **A renderer that owns its own frame budget** remains the architectural answer to a *hard* bound,
+  whatever the current mechanism is — one that decides what to do from the application's own model of
+  what changed, and whose worst case is computable rather than observed. That is a different
+  architecture, not a different configuration. **This investigation does not propose it, cost it, or
+  take it**, and on the corrected mechanism it is not the *next* step either: the allocation lever is
+  cheap, in-application and untried, and it comes first.
 
 ## Findings
 
@@ -1391,9 +2550,16 @@ Each finding names the run that decided it. **OBSERVATION** is something read of
   this repository, in `.claude/hooks/guard.sh` or on the device was in the way. **No during-motion
   number exists, and none is to be inferred from the table above.**
 
-- **OPEN — what sets the ~1/s floor. It is WebKit's own rendering of this render tree, and that is as
-  far as the evidence reaches.** Everything else reachable has been excluded. Each intervention is
-  verified to have landed except the one marked:
+- **SUPERSEDED as to mechanism — what sets the ~1/s floor. Runs 8 to 16 bound it to the app's own
+  render tree being present; Run 36 names what about its presence costs.** The bound below is
+  correct and the exclusions below all still hold. What has changed is the reading of the one
+  manipulation that moved it: Run 14 took the app's rendered DOM out of the page and the floor
+  collapsed ~100x, which this record read as "the engine's rendering of this tree". Removing that
+  tree also removes what re-rendering it **allocates** — reactive objects, DOM nodes, the churn of
+  every update — and Run 36 shows allocation is what drives the stall. Run 14 is consistent with both
+  readings and discriminates neither; Run 36 discriminates, by holding rendering constant and moving
+  allocation alone. See "Root cause of the residual stall". Each intervention below is verified to
+  have landed except the one marked:
 
   | intervention | run | >250 ms/s |
   |---|---|---|
@@ -1408,20 +2574,21 @@ Each finding names the run that decided it. **OBSERVATION** is something read of
   | every animation in the page off, computed value verified | 16 | 1.10 *(1.08 on the ON arms)* |
   | **the app's rendered DOM taken out, its JS still running** | **14** | **0.01–0.02** |
 
-  INFERENCE, and the bound it supports: it is not the app's JavaScript — Run 14 removed the rendering
-  and left every timer running, and the floor went with the rendering. It is not the display server —
-  X's own stalls are 5–6x too rare. It is not the instrument — Runs 11 and 13 exclude both halves of
-  that. It is not a periodic cost below the page — Runs 14 and 15 measure a static page on this
-  hardware at 0.01–0.03/s. And it is not the animations — Run 16. What is left is the engine
-  rendering **this** tree, which is what the frame attribution said from the first capture: these
-  frames are `engine` 294–476 ms with `js` and `lay` near zero.
+  INFERENCE, and the bound it supports: it is not the app's JavaScript *as executed work* — Run 14
+  removed the rendering and left every timer running, and the floor went with the rendering. It is
+  not the display server — X's own stalls are 5–6x too rare. It is not the instrument — Runs 11 and
+  13 exclude both halves of that. It is not a periodic cost below the page — Runs 14 and 15 measure a
+  static page on this hardware at 0.01–0.03/s. And it is not the animations — Run 16. What is left is
+  the engine's own work on **this** tree, which is what the frame attribution said from the first
+  capture: these frames are `engine` 294–476 ms with `js` and `lay` near zero. **A collector pause
+  wears exactly that signature** — it is engine time, not app JS time and not layout time — which is
+  why the attribution never separated it from rendering.
 
-  **What is not decided is which property of the render tree costs** — its depth, its box structure,
-  its layer count, or one subtree inside it. The discriminating test is the same in-place technique
-  Runs 14 to 16 use and carries no device risk beyond the usual user-script swap: hide one region at
-  a time, palindrome-interleaved with the rest of the page visible, and find which subtree carries
-  the rate. Run 6 already bisects the page by region and by element **against fps**; no bisection has
-  been run against the `>250 ms/s` rate, and that is the open dimension.
+  **What Runs 8 to 16 could not decide is which property of the tree costs**, and the subtree
+  bisection they point at is superseded as the next test: Run 36 moves the question off the tree's
+  shape and onto what maintaining it allocates. The bisection is still runnable and carries no device
+  risk beyond the usual user-script swap, but a read of the frontend's per-second allocation comes
+  first; see "Real-time framing".
 
   **The direction of any fix is not full KMS.** The frontend levers against the *floor* are exhausted
   and measured; the frontend lever against the *sustained framerate* is not, and it is the marquee's
@@ -1436,6 +2603,58 @@ Each finding names the run that decided it. **OBSERVATION** is something read of
   a capture long enough to hold several of the frontend's 5-minute module polls, to settle whether
   the one observed 1063 ms **js**-dominated frame (Run 8, arm A, t=308.3 s, `js=813 ms`) is a real
   recurring second event with a different signature from the floor. That observation is n=1.
+
+- **WITHDRAWN — the residual stall is not a full-viewport software repaint (Run 35 falsifies it).**
+  This record carried that identification through Runs 28 to 34 and reasoned from it in three
+  sections. OBSERVATION: at 640x480, **3.0x fewer pixels than 720p**, the stall's rate is 0.036/s
+  against 0.045/s, its arrival interval is 40.0 and 40.1 s against 40.0–40.1 s, and its magnitude
+  falls only **1.4x** — 324–378 ms against 468–537 ms, each capture's arrivals past t=40 s — where a
+  pixel-bound cost owes 3x. The
+  pixel-area leg is the leg the identification rested on and it does not survive the test it named.
+
+  Two things had already pointed away from repaint and are recorded as the trail rather than
+  rediscovered. OBSERVATION: Run 29's isolated full-viewport repaint costs **183 ms at the median,
+  211 ms at the mean**, so one repaint on a 34 ms frame is ~217 ms against a measured ~490 ms steady
+  stall — **2.3x**, reachable as a "match" only by comparing against the *un-subtracted* FORCED p90
+  of 458 ms, which is the subtraction and the comparison taken at once. `parse_fullpaint.py` printed
+  that negative verdict throughout. INFERENCE: Run 21's content-independence (141.7 against 140.0 ms)
+  closes the escape that a solid-fill benchmark under-prices a glyph repaint, so the gap is real.
+  OBSERVATION: every stall-family probe reads rAF deltas from inside the page, and Run 4 measures that
+  interval as WebKit 53% / X 25% / surf 19% — so "software repaint" named a component these probes
+  cannot resolve, and no run in Runs 26 to 36 attributes a stall frame across the three processes.
+
+  **What the withdrawal does not touch:** Run 29 still correctly prices a full-viewport repaint on
+  this board; Run 21, Run 28 and Run 30 stand as measured; Run 22's 1080p → 720p result stands as a
+  **throughput** result, which is pixel-bound. The error was reading throughput and stall as one
+  quantity. **This entry is kept rather than deleted** — an overturned conclusion is part of the
+  record here, the same way "the marquee is not the driver" is kept under the finding that withdrew it.
+
+- **ROOT CAUSE, corrected — the residual stall is a JavaScriptCore garbage-collection pause (Run 36,
+  with Run 35).** OBSERVATION: inside one capture with arms interleaved, an arm allocating and
+  dropping short-lived objects every frame misses the 250 ms deadline on **216 of its 219 frames** at
+  a **1147 ms mean and 2020 ms max**, against **14 of 6730** at a 24 ms mean in the baseline arm —
+  **98.6% against 0.21%, a 474x change in miss fraction** — with each arm's allocation counter read
+  back in band as 219 and 0. OBSERVATION: the stall is resolution-independent (Run 35), not layout
+  (Run 28, 0–1 ms of forced layout on all 14 stall frames), and absent from a page whose scripts have
+  been stopped (Run 31, nothing over 250 ms in 184 s where ~8 were expected).
+
+  INFERENCE: the page allocates continuously — a clock tick every second, a data poll, reactive
+  objects re-created, DOM churn — and periodically crosses the collector's heap threshold, so a full
+  collection runs on the single ARM11 core and stops the main thread. The **~40 s** arrival interval,
+  invariant across Runs 26b, 27, 34 and 35, is what a steady allocation rate against a fixed threshold
+  produces; it is **five turns** of the marquee's 8 s cycle, which nothing in the cycle explains. The
+  phase lock Run 26b reads then says only which frame of the cycle carries the collection when it is
+  due.
+
+  INFERENCE, and it re-reads this investigation's own headline: the deadline-miss rate fell from
+  1.07/s to ~0.045/s because the frontend work **removed allocation** — the park-card remount, the
+  per-frame style writes, the transform churn — and not because rendering got cheaper. 720p and
+  `scrollLeft` are a real and separate win on the **mean**, and Run 25's own arms show they do not
+  touch the stall: worst frames 491 ms and 496 ms. **The lever that follows is reducing the frontend's
+  per-second allocation churn**, and it is un-run; see "Real-time framing". **The gaps:** no collector
+  instrument was read on this board, the page's own allocation rate is unmeasured, and Run 36's
+  injected pressure is far above anything the page does — it shows allocation is sufficient to produce
+  the stall, not that the frontend's allocation is its only trigger.
 
 - **A standing deploy hazard, demonstrated rather than argued (Runs 6 and 7).** OBSERVATION: the
   mirror serves `index.html` with **no `Cache-Control` and no `ETag`, only `Last-Modified`**, so
@@ -1602,6 +2821,88 @@ uniform-region branch also fired for real. **rc0 has never been observed end-to-
 board** — prod was frozen and the bench board was unreachable — so that gap stands and is the first
 thing to close when bench is back.
 
+## Durable image delivery — pending owner decision
+
+**The reconcile diff is written and independently reviewed. Nothing has been delivered.** No image
+was built, no bundle was created, no board was flashed and no OTA was pushed against any of it. The
+section states the gap, what is staged against it, and the decisions that close it, so the owner
+decides against a written position rather than against a session's memory.
+
+**The gap.** The image these runs ran, `7ce44ba`, bakes the hypothesis this investigation disproved.
+Its `graphics` block sets `VC4DTBO = "vc4-kms-v3d"` — full KMS, which Run 2 found blacks this panel —
+and `CMDLINE:append = " video=HDMI-A-1:1920x1080@60D"`, which pins the mode Run 22 measures as 1.94x
+more expensive on throughput than 720p. The configuration the board actually runs is none of that:
+**firmware KMS (`vc4-fkms-v3d`), a plain `cmdline.txt` with no `video=`, 1280x720 set by `xrandr` in
+the launcher, and software rendering.** Three of those four reached the board as a hand-edit and one
+lives in `/data/config/kiosk.conf`.
+
+**What is staged against it.** A reconcile diff across five files —
+[`../../../kiosk-zero-w.yaml`](../../../kiosk-zero-w.yaml), the `kiosk-launch` launcher, the
+`kiosk-session` recipe, the `rpi-config` bbappend and [`../../../README.md`](../../../README.md) —
+moves the tree to **firmware KMS, no `video=` on the kernel command line, software rendering as the
+launcher's default, and 720p set in the launcher**, and **keeps mesa and `libgles2-mesa`**. The GLES
+package is not a compositing switch: WebKit `dlopen`s `libGLESv2.so.2`, so removing the package makes
+the web process segfault the instant compositing is attempted rather than turning compositing off,
+and the runtime switch is the launcher default plus the `/data/config/kiosk.conf` line. The diff has
+been **independently reviewed**. It has **not** been built and **not** been flashed.
+
+**Delivery is deferred, and the reason is in this record rather than in scheduling.** The corrected
+root cause reopens #100 gpu-compositing on the allocation lever — see "Real-time framing" — and
+flashing now would bake a display configuration ahead of a thread that could change what the board
+should run. The staged diff is the inspectable form; taking it is the owner's call.
+
+**Standing risk, stated as a risk and not as a plan.** An OTA or a reflash of `7ce44ba` blacks the
+wall panel — "Changes configured as a result" already records this and it is unchanged. The running
+configuration is a set of manual edits that no build reproduces, so a reflash loses the display mode.
+`/data` surviving a reflash is what preserves the renderer setting rather than anything in the image
+— and **a re-provision does not preserve it either**, because `tools/provision.sh` writes a fresh
+two-line `kiosk.conf`. That is a second failure mode on the same axis and it is not covered by the
+reflash argument.
+
+**An operator tool is now aimed at the wrong verdict.**
+[`kiosk-gpu-check.sh`](../../../tools/kiosk-gpu-check.sh)'s default mode passes when a web process
+holds `/dev/dri` open with a `vc4`/`v3d` driver mapped. That was the right proxy when the GPU path
+was the goal. On the configuration this investigation measured as **correct** — compositing off, no
+accelerated backing store, so no DRM node held — it reports `NO GPU path` and exits non-zero: **a
+correctly configured board reads as broken.** Whether the tool is retired, re-aimed at the software
+path, or kept as a guard on a state the fleet does not want is an owner decision that has not been
+taken. It is flagged here because the tool is operator-facing — `justfiles/device.just` drives it in
+both modes, and its self-test runs in `tools/ci-guards.sh` — so the mis-aimed verdict reaches a
+person at a prompt, not just a file.
+
+**The decisions the owner holds, none of them taken here:**
+
+- **Take the staged reconcile, or not.** The diff is written and reviewed; what remains is a build
+  and a delivery. Cost is image reassembly plus a `config.txt` and cmdline re-deploy — **not** the
+  ~4.5 h WebKit invalidation, which arrives only from `DISTRO_FEATURES`, `MACHINE_FEATURES` or webkit
+  `PACKAGECONFIG`, none of which the diff touches.
+- **Where the 720p mode should live.** The board's copy is a hand-edit of the launcher's `xrandr`
+  line, and the staged diff puts that line into the launcher the `kiosk-session` recipe installs. The alternative is
+  `/data/config/kiosk.conf` beside the renderer setting. These are not equivalent: the recipe route
+  reproduces on a reflash and needs a build to change; the `/data` route changes over the wire and
+  does **not** reproduce on a reflash. Run 35 also shows the mode is a **throughput** decision rather
+  than a stall one, which changes what the choice is being made for.
+- **Whether the renderer setting belongs in the image at all.**
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1` reaches the board as a `/data/config/kiosk.conf` line, which is
+  why it survives an OTA and is **not** reproduced by a reflash or a re-provision. That asymmetry is
+  already recorded under "Changes configured as a result" as an untaken owner decision, and the 720p
+  mode sits in exactly the same position beside it.
+- **Which board, and by which route.** Bench is the OTA, reboot and rollback target; prod is
+  wall-mounted and carries the live soak. Nothing here proposes a prod delivery. The boot half of any
+  such change cannot ride an OTA at all — `/boot` is the shared FAT partition RAUC does not write, as
+  "Delivery and board" sets out, with no A/B protection and a recovery path that ends in a physical
+  trip.
+- **Whether the WiseKiosk frontend should be baked into the image**, given that the shipped scroll
+  mechanism is a mirror-served bundle (`index-Mt2gvuKb.js`) and every measurement in Runs 26 to 36
+  depends on it. It is a separate decision with its own consequences, and this investigation neither
+  makes it nor assumes it.
+
+**The frontend half of the fix is not in this repository and is not closed.** The `scrollLeft`
+mechanism Run 25 measures, the 2 s holds, the shared rAF clock and the clock's `.seconds` fix are all
+WiseKiosk frontend changes running on the board from the dev mirror. They carry no commit, branch or
+pull request here, and that traceability gap is the owner's to close in that repository — the same
+gap "Changes configured as a result" records for the `.seconds` fix.
+
 ## Changes configured as a result
 
 - **The stutter's fix is a WiseKiosk frontend change, not a meta-wisekiosk one.** `.seconds` out of
@@ -1614,14 +2915,34 @@ thing to close when bench is back.
   It ships or not on its own merits — less DOM churn, and the marquee class reconciled in both
   directions — and the record must not describe it as the answer to the hang.
 
-- **Not resolved — the residual ~1/s engine frame stall.** Open. It is real, owner-observed and
-  measured; Runs 8 to 16 bound it to WebKit's rendering of the app's own render tree — it needs that
-  tree present (Run 14) and survives every other manipulation, animations included (Run 16) — and
-  **which property of the tree costs is undecided**. **#100 gpu-compositing stays open on it**, and
-  the next discriminating step is a region bisection of the render tree against the `>250 ms/s` rate,
-  not full KMS, which blacks this panel.
+- **Root-caused, not fixed, and the root cause was corrected once — the residual engine frame
+  stall.** Runs 8 to 16 bound it to the app's own render tree being present (Run 14), surviving every
+  other manipulation, animations included (Run 16). Runs 28 to 34 named it a **full-viewport software
+  repaint**; **Run 35 falsified that** — 3.0x fewer pixels buys 1.4x on the stall and nothing on its
+  ~40 s period — and **Run 36 named the mechanism that holds**: a **JavaScriptCore
+  garbage-collection pause**, driven by allocation at 474x on the miss fraction with the arms'
+  allocation counters read back. The withdrawn identification is kept visible rather than deleted.
+  The evidence, the withdrawal and the gaps are in "Root cause of the residual stall"; the levers
+  tried — all of them aimed at paint — are in "Engine levers, measured and exhausted"; the lever that
+  follows is in "Real-time framing". **The next step is not another engine lever and not yet an
+  architecture decision** — it is a frontend allocation audit, it is un-run, and it is the owner's.
+  #100 gpu-compositing stays open on it.
 
-- **OPEN, OWNER DECISION — the motion tradeoff the marquee is owed.** Run 16 measures the marquee's
+- **The motion cost is settled by re-mechanising, not by trading legibility away — a WiseKiosk
+  frontend change.** Run 25 drives the clipping column's `scrollLeft` instead of translating the text
+  inside it and the same motion — same rows, same distance, same px/s, interleaved in one capture —
+  costs **26.5 ms against 71.5 ms per frame, 2.7x cheaper**. Run 22's 720p mode buys a further 1.94x
+  on the during-motion rate. Together they take the shipped configuration to ~42 fps at a 24 ms mean
+  (Run 26). This is where the tradeoff below lands: the marquee keeps its motion and its legibility,
+  and the cost comes out of the mechanism instead. **It carries no commit, branch or pull request** —
+  it runs on the board as a mirror-served bundle, which is the same traceability gap the `.seconds`
+  fix carries.
+
+- **Superseded in part — the motion tradeoff the marquee was owed.** The lever the bullet above
+  supplies is cheaper than any of the ones enumerated here, so the tradeoff that follows is a smaller
+  one than this entry describes. The estimate it points at is also replaced: Run 17 **measures** the
+  during-motion framerate at 7.86 fps, inside the 2.6–11.9 fps range the derivation bounded. The rest
+  of the entry stands as written. Run 16 measures the marquee's
   motion at roughly **2x per-frame cost** (76.6 → 36.5 ms, ~13 → ~27 fps), and Run 8's arm D reaches
   the same lever by capping the rows that animate. This is the largest frontend lever on the record
   for the *sustained* framerate the owner sees as chop, and every form of it — fewer rows in motion,
@@ -1646,9 +2967,13 @@ thing to close when bench is back.
   `kiosk-gpu-check.sh`'s self-test does run — that wiring is an owner decision that has not been
   taken, and the tool is usable by path in the meantime.
 
-- **The `probe4` harness and its raw captures, committed beside this README** — the R2 obligation for
-  Runs 8 to 16, discharged. The equivalent obligation for Runs 3 to 7 is still outstanding; see
-  "Test runs" for the inventory of what is missing.
+- **The `probe4` harness, the motion probe family, the shipped-mechanism probes, the allocation probe
+  and every raw capture they produced, committed beside this README** — the R2 obligation for Runs 8
+  to 36, discharged on the artefacts. Every number in "Metrics" is reproduced from the named file by
+  the parser that row names, or from the `AL` record's own fields for Run 36. Two obligations remain
+  outstanding and are named in "Test runs": the scripts Runs 3 to 7 put on the board are not committed
+  here, and [`parse_alloc.py`](parse_alloc.py) reads an earlier revision of Run 36's payload than the
+  committed probe emits.
 
 - **Must not merge as committed — the branch bakes full KMS, which blacks this panel.** `7ce44ba`
   sets `VC4DTBO = "vc4-kms-v3d"`; the running board was hand-edited back to firmware KMS, and

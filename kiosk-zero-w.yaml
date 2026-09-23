@@ -53,15 +53,16 @@ local_conf_header:
 
   # vc4graphics is in MACHINE_FEATURES (rpi-base.inc gates it on
   # DISABLE_VC4GRAPHICS, which this file does not set), so the image takes the
-  # vc4 KMS path: mesa for virtual/egl, xf86-video-modesetting instead of
+  # vc4 path: mesa for virtual/egl, xf86-video-modesetting instead of
   # xf86-video-fbdev, and xserver-xorg-extension-glx in the X server. That is
-  # the precondition for WebKit compositing on the GPU rather than repainting
-  # every frame on the single armv6 core -- a precondition, not the result:
-  # mesa can still fall back to its software rasteriser, which
-  # tools/kiosk-gpu-check.sh exists to catch. Whether the GPU path is actually
-  # reached is measured, not assumed -- see
-  # docs/issue_investigation/gpu_compositing/README.md. The `graphics` block
-  # carries the overlay, the mode and the mesa pin that go with it.
+  # what gives the X server glamor -- GPU-accelerated 2D for the display path,
+  # confirmed enabled on the board with no software rasteriser mapped. It is
+  # load-bearing for the throughput the panel reaches, and it is the display
+  # path only: WebKit paints above it in software, because accelerated
+  # compositing measures worse on this SoC. See
+  # docs/issue_investigation/gpu_compositing/README.md under "Engine levers,
+  # measured and exhausted". The `graphics` block carries the overlay and the
+  # mesa pin that go with it; kiosk-launch carries the renderer and the mode.
   display: |
     # console=tty1 ONLY. The kiosk panel is the console (owner, 2026-08-12) --
     # this unit IS a display, so kernel output always has a screen, and there is
@@ -79,29 +80,32 @@ local_conf_header:
     # untested change.
     CMDLINE_SERIAL = "console=tty1"
 
-  # HALF OF THIS BLOCK CANNOT TRAVEL BY OTA. VC4DTBO reaches a board only as the
-  # `dtoverlay=` line rpi-config_git.bb writes into config.txt, and CMDLINE only
-  # through cmdline.txt; both files are on the shared FAT partition, and
-  # RAUC_BUNDLE_SLOTS = "rootfs" means RAUC never writes them. The two
-  # PREFERRED_VERSION lines DO ride the bundle. So an OTA alone lands a
-  # mesa/modesetting userland on fbdev boot files -- the delivery that covers
-  # both halves is in docs/issue_investigation/gpu_compositing/README.md under
-  # "Delivery and board".
+  # VC4DTBO CANNOT TRAVEL BY OTA. It reaches a board only as the `dtoverlay=`
+  # line rpi-config_git.bb writes into config.txt, which is on the shared FAT
+  # partition, and RAUC_BUNDLE_SLOTS = "rootfs" means RAUC never writes it. The
+  # two PREFERRED_VERSION lines DO ride the bundle. So an OTA alone lands a mesa
+  # userland on whatever overlay the card was flashed with -- the delivery that
+  # covers both halves is in
+  # docs/issue_investigation/gpu_compositing/README.md under "Delivery and board".
   #
-  # Full KMS, not fkms. vc4-kms-v3d is already rpi-config_git.bb's `?=` default
-  # and raspberrypi0-wifi.conf overrides nothing, so this hard set changes no
-  # behaviour today. It is protection against a machine-config change: sibling
-  # machine configs (raspberrypi3, raspberrypi-armv8) do override to
-  # vc4-fkms-v3d, and fkms would not give the dma-buf renderer what it needs.
-  # Deleting this line does not flip the board to fkms; it removes the guarantee.
+  # Firmware KMS, not full KMS. Full KMS presents a content-black scanout on
+  # this panel, measured across forced 1080p and 720p, `disable_fw_kms_setup=1`,
+  # an xrandr kick, and compositing both on and off -- it is not a performance
+  # lever on this display, it is a blank one. See
+  # docs/issue_investigation/gpu_compositing/README.md under "Engine levers,
+  # measured and exhausted". A hard set rather than a default taken:
+  # rpi-config_git.bb spells VC4DTBO `?=`, raspberrypi0-wifi.conf overrides
+  # nothing, and sibling machine configs (raspberrypi3, raspberrypi-armv8) do
+  # override it.
   #
-  # video= is the KMS replacement for the firmware HDMI keys, which the KMS
-  # driver ignores -- see
-  # meta-wisekiosk/recipes-bsp/bootfiles/rpi-config_%.bbappend. The trailing D
-  # forces the connector enabled and digital
-  # (Documentation/fb/modedb.rst), which is hdmi_force_hotplug's job: the panel
-  # behind the glass is switched on after the Pi, so a connector left to
-  # detection comes up blank.
+  # No `video=` on the kernel command line. Firmware KMS leaves the mode to the
+  # firmware, so the HDMI keys in
+  # meta-wisekiosk/recipes-bsp/bootfiles/rpi-config_%.bbappend are the live
+  # mechanism: hdmi_force_hotplug asserts a connector the panel behind the glass
+  # is too slow to answer for, and hdmi_group/hdmi_mode name the mode. The kiosk
+  # then runs at 1280x720, set by xrandr in kiosk-launch -- 2.25x fewer pixels is
+  # the one display-stack lever that moves the during-motion framerate, per the
+  # same section.
   #
   # mesa is pinned to poky's 24.0.7. meta-raspberrypi ships mesa 25.1.6, which
   # inherits the rust class -- a rust toolchain build on armv6 nothing else in
@@ -112,14 +116,15 @@ local_conf_header:
   # preferred-version` reports this pin as behind by design; this comment is
   # the reason it is not a bump to take. See docs/layer-currency.md.
   graphics: |
-    VC4DTBO = "vc4-kms-v3d"
-    CMDLINE:append = " video=HDMI-A-1:1920x1080@60D"
+    VC4DTBO = "vc4-fkms-v3d"
     PREFERRED_VERSION_mesa = "24.0.7"
     PREFERRED_VERSION_mesa-gl = "24.0.7"
-    # WebKit dlopens libGLESv2.so.2 for accelerated compositing. A runtime dlopen
+    # WebKit dlopens libGLESv2.so.2 on its accelerated path, and a runtime dlopen
     # is invisible to build-time RDEPENDS, so mesa's GLESv2 package ships only if
     # named here -- without it the web process segfaults the instant compositing
-    # is attempted.
+    # is attempted. kiosk-launch defaults the renderer to software and
+    # /data/config/kiosk.conf can switch it back over the wire, so this package
+    # is what keeps that switch from crashing the browser instead of answering.
     IMAGE_INSTALL:append = " libgles2-mesa"
 
   kiosk: |
