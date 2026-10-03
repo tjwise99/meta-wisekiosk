@@ -110,7 +110,7 @@ activation is needed, and nothing requires the venv: without one both fall back 
 is what CI uses.
 
 ```sh
-curl -L -o ~/bin/kas-container https://raw.githubusercontent.com/siemens/kas/5.4/kas-container
+curl -L -o ~/bin/kas-container https://raw.githubusercontent.com/siemens/kas/5.5/kas-container
 chmod +x ~/bin/kas-container
 
 mkdir -p ~/.config/wisekiosk
